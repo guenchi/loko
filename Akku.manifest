@@ -1,0 +1,14 @@
+#!r6rs ; -*- mode: scheme; coding: utf-8 -*-
+(import (akku format manifest))
+
+(akku-package ("loko-scheme" "0.1.0")
+  (synopsis "R6RS Scheme compiler for Linux and PCs")
+  (authors "Göran Weinholt")
+  (license "AGPL-3.0-or-later")
+  (depends ("machine-code" "^2.1.0")
+           ("struct-pack" "^1.1.1")
+           ("text-mode"
+            (version "1.1.0")
+            (location (git "https://gitlab.com/weinholt/text-mode"))
+            (revision "e4a5482c861852681373036872613f28add00928")))
+)

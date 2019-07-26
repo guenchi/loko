@@ -1,0 +1,44 @@
+image: "akkuscm/akku"
+
+variables:
+  XDG_CACHE_HOME: "$CI_PROJECT_DIR/.cache"
+  AKKU_CACHE_DIR: "$CI_PROJECT_DIR/.cache/akku"
+
+cache:
+  key: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
+  paths:
+    - .akku/src
+    - .cache/akku
+
+stages:
+  - bootstrap
+  - build
+  - test
+
+bootbuild:
+  stage: bootstrap
+  script:
+    - akku install
+    - ./build.sh
+  artifacts:
+    paths:
+      - loko
+
+build:
+  stage: build
+  script:
+    - akku install
+    - .akku/env ./loko --program compile-loko.sps
+    - chmod +x loko.out
+  artifacts:
+    paths:
+      - loko.out
+
+test:
+  stage: test
+  script:
+    - akku install
+    - echo '(exit 0)' | ./loko.out
+  artifacts:
+    paths:
+      - loko.out

@@ -1,0 +1,236 @@
+;; -*- mode: scheme; coding: utf-8 -*-
+;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; Loko Scheme - an R6RS Scheme compiler
+;; Copyright © 2019 Göran Weinholt
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU Affero General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU Affero General Public License for more details.
+
+;; You should have received a copy of the GNU Affero General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#!r6rs
+
+;;; Standard library control operators
+
+(library (loko libs control)
+  (export
+    procedure?
+    apply values call-with-values
+    call/cc (rename (call/cc call-with-current-continuation)) call/1cc
+    dynamic-wind
+    with-exception-handler raise raise-continuable
+    assertion-violation error
+
+    ;; Internal
+    implementation-restriction
+    register-error-invoker)
+  (import
+    (except (rnrs)
+            procedure?
+            apply values call-with-values
+            call/cc call-with-current-continuation
+            dynamic-wind
+            with-exception-handler raise raise-continuable
+            assertion-violation error)
+    (loko system $boxes)
+    (loko system $host)
+    (only (loko system $repl) print-condition stack-trace)
+    (prefix (rnrs) sys:)
+    (prefix (loko system $processes) sys:)
+    (only (loko libs context)
+          CPU-VECTOR:PROCESS-VECTOR
+          PROCESS-VECTOR:ERROR-INVOKER))
+
+(define (procedure? x) (sys:procedure? x))
+
+(define apply
+  (case-lambda
+    ((f rest) (sys:apply f rest))
+    ((f a rest) (sys:apply f a rest))
+    ((f a b rest) (sys:apply f a b rest))
+    ((f a b c rest) (sys:apply f a b c rest))
+    ((f a b c d rest) (sys:apply f a b c d rest))
+    ((f a b c d e rest) (sys:apply f a b c d e rest))
+    ((f a b c d e . rest)
+     (sys:apply f a b c d e
+                (let lp ((rest rest))
+                  (cond ((pair? (cdr rest))
+                         ;; Move this element into the rest list. It
+                         ;; was cons'd up by consargs.
+                         (cons (car rest) (lp (cdr rest))))
+                        (else
+                         ;; The last element that was actually
+                         ;; provided sent to apply and not constructed
+                         ;; by consargs.
+                         (car rest))))))))
+
+;; Terrible temporary hack. Note that this should work:
+;; (define (values . things)
+;;    (call/cc (lambda (cont) (apply cont things))))
+(define magic '#(mv))
+(define values
+  (case-lambda
+    (() (if #f #f))
+    ((x) x)
+    (xs (cons magic xs))))
+(define (call-with-values producer consumer)
+  (let ((x (producer)))
+    (if (and (pair? x) (eq? magic (car x)))
+        (apply consumer (cdr x))
+        (consumer x))))
+
+;;; Continuations, dynamic-wind, exceptions.
+
+(define *winders* '())
+
+;; TODO: look at june-92-meeting.ps.gz
+
+(define (call/cc proc)
+  (let ((k ($copy-stack)))
+    ;; The interesting thing about $copy-stack is that it will
+    ;; return multiple times. The first time it returns a copy of
+    ;; the stack. The following times it returns the values passed
+    ;; to the continuation.
+    (cond ((and ($box? k) (eq? ($box-type k) 'stack))
+           ;; Based on code from SLIB's dynwind.scm.
+           ;;
+           ;; Copyright (c) 1992, 1993 Aubrey Jaffer
+           ;;
+           ;; Permission to copy this software, to modify it, to redistribute it,
+           ;; to distribute modified versions, and to use it for any purpose is
+           ;; granted, subject to the following restrictions and understandings.
+           ;;
+           ;; 1.  Any copy made of this software must include this copyright notice
+           ;; in full.
+           ;;
+           ;; 2.  I have made no warranty or representation that the operation of
+           ;; this software will be error-free, and I am under no obligation to
+           ;; provide any services, by way of maintenance, update, or otherwise.
+           ;;
+           ;; 3.  In conjunction with products arising from the use of this
+           ;; material, there shall be no use of my name in any advertising,
+           ;; promotional, or sales literature without prior written consent in
+           ;; each case.
+           (letrec ((old-winders *winders*)
+                    (do-winds
+                     (lambda (to delta)
+                       (cond ((eq? *winders* to))
+                             ((fxnegative? delta)
+                              (do-winds (cdr to) (fx+ delta 1))
+                              ((caar to))
+                              (set! *winders* to))
+                             (else
+                              (let ((from (cdar *winders*)))
+                                (set! *winders* (cdr *winders*))
+                                (from)
+                                (do-winds to (fx- delta 1)))))))
+                    (continuation
+                     (lambda (v)
+                       ;; TODO: multiple values. mvcall etc.
+                       (do-winds old-winders
+                                 (fx- (length *winders*)
+                                      (length old-winders)))
+                       ($restore-stack k v))))
+             (proc continuation)))
+          (else
+           ;; TODO: multiple values
+           k))))
+
+(define call/1cc call/cc)
+
+(define (dynamic-wind before thunk after)
+  (before)
+  (set! *winders* (cons (cons before after)
+                        *winders*))
+  (let-values ((v (thunk)))
+    (set! *winders* (cdr *winders*))
+    (after)
+    (apply values v)))
+
+(define (with-exception-handler handler thunk)
+  (let ((old handler))
+    (define (swap-handler!)
+      (let ((temp old))
+        (set! old *exception-handler*)
+        (set! *exception-handler* temp)))
+    ;; (pcb-handling-error?-set! (self) #f)
+    (dynamic-wind swap-handler! thunk swap-handler!)))
+
+(define (raise obj)
+  ;; TODO: raise "pops" a handler and calls it.
+  ;; (stack-trace)
+  (*exception-handler* obj)
+  (raise (condition
+          (make-non-continuable-violation))))
+
+(define (raise-continuable obj)
+  ;; TODO: raise "pops" a handler and calls it.
+  (*exception-handler* obj))
+
+(define (error who msg . irritants)
+  (raise (condition
+          (make-error)
+          (make-who-condition who)
+          (make-message-condition msg)
+          (make-irritants-condition irritants))))
+
+(define (assertion-violation who msg . irritants)
+  (define EX_SOFTWARE 70)            ;Linux: internal software error
+  (cond
+    ((not (procedure? condition))
+     (string-for-each (lambda (c) ($debug-display c))
+                      "Early assertion violation: ")
+     (string-for-each (lambda (c) ($debug-display c))
+                      msg)
+     ($debug-display #\newline)
+     ($debug-display who)
+     ($debug-display #\newline)
+     ($debug-display irritants)
+     ($debug-display #\newline)
+     (exit EX_SOFTWARE))             ;XXX: exit might not work
+    (who
+     (raise (condition
+             (make-assertion-violation)
+             (make-who-condition who)
+             (make-message-condition msg)
+             (make-irritants-condition irritants))))
+    (else
+     (raise (condition
+             (make-assertion-violation)
+             (make-message-condition msg)
+             (make-irritants-condition irritants))))))
+
+(define (implementation-restriction who msg . irritants)
+  (raise (condition
+          (make-implementation-restriction-violation)
+          (make-who-condition who)
+          (make-message-condition msg)
+          (make-irritants-condition irritants))))
+
+(define (default-exception-handler x)
+  (define EX_SOFTWARE 70)            ;Linux: internal software error
+  (define p (current-error-port))
+  ;; TODO: this should do a call/cc to the top of the stack. the
+  ;; after winders have to be run.
+  (flush-output-port (current-output-port))
+  (display "An exception has been raised, but no exception handler is installed.\n" p)
+  (print-condition x p)
+  (exit EX_SOFTWARE))
+
+(define *exception-handler* default-exception-handler)
+
+;;; Handler for hardware traps and explicit traps in generated code
+
+;; The error invoker is supposed to be called when there's a trap.
+;; Any errors trapped before this is useable results in double
+;; traps. Any errors trapped before this runs result in a panic.
+(define (register-error-invoker x)
+  (vector-set! ($processor-data-ref CPU-VECTOR:PROCESS-VECTOR)
+               PROCESS-VECTOR:ERROR-INVOKER x)))
