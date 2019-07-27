@@ -6,9 +6,52 @@ hardware.
 
 ## Current status
 
-* Giant hack.
-* Fun to look at.
-* Self-hosting.
+* Most of R6RS Scheme is present and accounted for.
+* No SRFIs apart from SRFI 98 are implemented.
+* Memory management is limited. On Linux at most 1 GB is usable (hard
+  coded limit).
+* Very few Linux system calls are implemented. Basic I/O works, but
+  may have horrible bugs and is fully blocking.
+* There is no test suite.
+
+## Building
+
+Install the package manager [Akku.scm](https://akkuscm.org) and run
+`akku install` in a checked out copy of the repository, followed by
+`./build.sh`.
+
+Alternatively get the pre-compiled `loko` binary from GitLab CI or use
+the Docker base image [weinholt/loko:base][docker]: `docker run --rm
+-it weinholt/loko:base`. The image akkuscm/akku:loko is also available
+and comes with Akku pre-installed.
+
+ [docker]: https://cloud.docker.com/u/weinholt/repository/docker/weinholt/loko
+
+## Running on Linux
+
+Loko uses the environment variable `LOKO_LIBRARY_PATH` to find
+libraries. This is a colon-separated list of directories. It uses the
+file extensions `.loko.sls` and `.sls`.
+
+R6RS top-level programs can be run from the command line with `loko
+--program program.sps`. If Loko is installed as `scheme-script` then
+it will work with programs that use the line `#!/usr/bin/env
+scheme-script`.
+
+## Running on KVM
+
+To get a REPL on the serial port:
+
+```
+qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
+```
+
+Or to get a basic REPL on the VGA text console and on the serial port
+(Ctrl+Alt+3):
+
+```
+qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -append '-- --ide'
+```
 
 ## Contact
 
