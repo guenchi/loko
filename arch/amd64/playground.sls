@@ -23,22 +23,19 @@
 
 (library (loko arch amd64 playground)
   (export
-    syscall
     time-it time-it*
     garbage-collection-count
     disassemble
     stack-trace
     valgrind)
   (import
-    (except (rnrs))
-    (only (loko system $asm-amd64) $syscall rdtsc
-          ;; Stack traces
-          $get-mem-u8 $get-mem-u32)
+    (rnrs)
+    (loko system unsafe)
+    (only (loko system $asm-amd64) rdtsc)
     (only (loko system $procedures) $procedure-info)
     (only (loko system $boxes) $box-ref)
     (only (loko system $bytevectors) $bytevector-location)
     (loko match)
-    (prefix (rnrs) sys:)
     (only (loko system $host)
           $processor-data-ref
           $heap-remaining
@@ -64,28 +61,6 @@
   (fx* (vector-ref ($processor-data-ref CPU-VECTOR:PROCESS-VECTOR)
                    PROCESS-VECTOR:STACK-TOP)
        8))
-
-;; Btw: doing syscalls directly from the REPL stands a good chance
-;; of not working every now and then. To use $bytevector-location it
-;; is necessary that there's no chance of a GC run between that and
-;; the syscall. This will work better when the compiler is up and
-;; running.
-(define syscall
-  (case-lambda
-    ((n)
-     ($syscall n))
-    ((n a)
-     ($syscall n a))
-    ((n a b)
-     ($syscall n a b))
-    ((n a b c)
-     ($syscall n a b c))
-    ((n a b c d)
-     ($syscall n a b c d))
-    ((n a b c d e)
-     ($syscall n a b c d e))
-    ((n a b c d e f)
-     ($syscall n a b c d e f))))
 
 (define (time-it what thunk)
   (define (print . x) (for-each display x) (newline))
@@ -207,7 +182,7 @@
            (addr label (fx+ addr 1))
            (i 0 (fx+ i 1)))
           ((fx=? i size) bv)
-        (bytevector-u8-set! bv i ($get-mem-u8 addr)))))
+        (bytevector-u8-set! bv i (get-mem-u8 addr)))))
   (define (get-instructions p)
     (let lp ((rip- 0))
       (let ((bytes '()))
@@ -375,11 +350,11 @@
   ;; *very* unreliably if interpreted by a tree code interpreter.
   (define (print . x) (for-each (lambda (x) (display x p)) x) (newline p))
   (define (get-mem64 addr)
-    (bitwise-ior (bitwise-arithmetic-shift-left ($get-mem-u32 (fx+ addr 4)) 32)
-                 ($get-mem-u32 addr)))
+    (bitwise-ior (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ addr 4)) 32)
+                 (get-mem-u32 addr)))
   (define (get-mem64/unaligned addr)
-    (bitwise-ior (bitwise-arithmetic-shift-left ($get-mem-u32 (fx+ addr 4)) 32)
-                 ($get-mem-u32 addr)))
+    (bitwise-ior (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ addr 4)) 32)
+                 (get-mem-u32 addr)))
   (define (get-mem-uint addr size)
     ;; XXX: this clearly shows that the encoding is too complex for
     ;; an assembler decoder. Always using two bytes for the size
@@ -390,15 +365,15 @@
           (lp (fx+ addr 1)
               (fx- size 1)
               (fxior (fxarithmetic-shift-left ret 8)
-                     ($get-mem-u8 addr))))))
+                     (get-mem-u8 addr))))))
   (define (get-livemask addr size1)
     ;; The first nop instruction has size1 bytes of live mask. The
     ;; following ones (if they exist) have five bytes each.
     (let lp ((mask (get-mem-uint addr size1))
              (addr (fx+ addr size1)))
-      (let ((op0 ($get-mem-u8 addr))
-            (op1 ($get-mem-u8 (fx+ addr 1)))
-            (modr/m ($get-mem-u8 (fx+ addr 2)))
+      (let ((op0 (get-mem-u8 addr))
+            (op1 (get-mem-u8 (fx+ addr 1)))
+            (modr/m (get-mem-u8 (fx+ addr 2)))
             (addr (fx+ addr 3)))
         (if (and (fx=? op0 #x0F)
                  (fx=? op1 #x1F)
@@ -423,9 +398,9 @@
                (print " Frame " frame " has return address #x" (number->string rip 16) ".")
                (when (<= #x200000 rip #xffffffff) ;XXX: should probably just catch #PF
                  (let ((frame (fx+ frame 1))
-                       (op0 ($get-mem-u8 rip))
-                       (op1 ($get-mem-u8 (fx+ rip 1)))
-                       (modr/m ($get-mem-u8 (fx+ rip 2))))
+                       (op0 (get-mem-u8 rip))
+                       (op1 (get-mem-u8 (fx+ rip 1)))
+                       (modr/m (get-mem-u8 (fx+ rip 2))))
                    (let ((size-bytes (fxbit-field modr/m 3 7)))
                      (cond ((or (not (fx=? op0 #x0F))
                                 (not (fx=? op1 #x1F))

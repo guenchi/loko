@@ -35,6 +35,7 @@
     (rnrs)
     (rnrs mutable-pairs)
     (srfi :98 os-environment-variables)
+    (loko system unsafe)
     (loko arch amd64 pc-ap-boot)
     (only (loko system $repl) print-condition)
     (loko system $asm-amd64)
@@ -52,26 +53,26 @@
 (define *modules* '())
 
 ;; Loko syscalls
-(define (sys_hlt) ($syscall -1))
+(define (sys_hlt) (syscall -1))
 
 (define (read-msr reg)
   (let ((bv (make-bytevector 8)))
-    ($syscall -2 reg ($bytevector-location bv))
+    (syscall -2 reg ($bytevector-location bv))
     (bytevector-u64-native-ref bv 0)))
 
 (define (write-msr reg v)
-  ($syscall -3 reg (bitwise-and v #xffffffff)
-            (bitwise-arithmetic-shift-right v 32)))
+  (syscall -3 reg (bitwise-and v #xffffffff)
+           (bitwise-arithmetic-shift-right v 32)))
 
 (define (copy-utf8z addr)
   (do ((end addr (fx+ end 1))
        (len 0 (fx+ len 1)))
-      ((fxzero? ($get-mem-u8 end))
+      ((fxzero? (get-mem-u8 end))
        (do ((ret (make-bytevector len))
             (i (fx- end 1) (fx- i 1))
             (len (fx- len 1) (fx- len 1)))
            ((fx<=? len -1) ret)
-         (bytevector-u8-set! ret len ($get-mem-u8 i))))))
+         (bytevector-u8-set! ret len (get-mem-u8 i))))))
 
 ;; Custom ports for reading from memory
 (define (open-memory-input-port fn base size)
@@ -83,7 +84,7 @@
          (set! base (fx+ base n))
          (set! size (fx- size n))
          n)
-      (bytevector-u8-set! bv i ($get-mem-u8 addr))))
+      (bytevector-u8-set! bv i (get-mem-u8 addr))))
   (define (close)
     #f)
   (transcoded-port (make-custom-binary-input-port fn read! #f #f close)
@@ -93,8 +94,8 @@
   (do ((top (fx+ &page 4096))
        (addr &page (fx+ addr 16)))
       ((fx=? addr top))
-    ($put-mem-s61 addr 0)
-    ($put-mem-s61 (fx+ addr 8) 0)))
+    (put-mem-s61 addr 0)
+    (put-mem-s61 (fx+ addr 8) 0)))
 
 ;; Parse the multiboot command line. Environment variables are
 ;; key=value before "--" and anything after is parsed as command line
@@ -162,9 +163,9 @@
   (define lsr (+ com0 5))
   (define (serial-put-u8 b)
     (let lp ()
-      (when (fxzero? (fxand ($get-i/o-u8 lsr) #b100000))
+      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
         (lp)))
-    ($put-i/o-u8 thb b))
+    (put-i/o-u8 thb b))
   (define (serial-put bv start count)
     (do ((end (fx+ start count))
          (i start (fx+ i 1)))
@@ -172,9 +173,9 @@
       (serial-put-u8 (bytevector-u8-ref bv i))))
   ($init-standard-ports (lambda (bv start count)
                           (let lp ()
-                            (when (fxzero? (fxand ($get-i/o-u8 lsr) #b1))
+                            (when (fxzero? (fxand (get-i/o-u8 lsr) #b1))
                               (lp)))
-                          (bytevector-u8-set! bv start ($get-i/o-u8 rbr))
+                          (bytevector-u8-set! bv start (get-i/o-u8 rbr))
                           1)
                         serial-put serial-put
                         (eol-style crlf)))
@@ -196,25 +197,25 @@
   (define icw3 (if (fx=? base picm)
                    #b100          ;IRQ2 has a slave
                    2))            ;slave ID
-  ($put-i/o-u8 cmd #b10001)       ;ICW1: ICW4 needed
-  ($put-i/o-u8 data idt-offset)   ;ICW2: vector address
-  ($put-i/o-u8 data icw3)         ;ICW3
-  ($put-i/o-u8 data #b1))         ;ICW4: Intel Architecture
+  (put-i/o-u8 cmd #b10001)       ;ICW1: ICW4 needed
+  (put-i/o-u8 data idt-offset)   ;ICW2: vector address
+  (put-i/o-u8 data icw3)         ;ICW3
+  (put-i/o-u8 data #b1))         ;ICW4: Intel Architecture
 
 (define (OCW1 base m)
   ;; Used to mask IRQs
-  ($put-i/o-u8 (fx+ base 1) m))
+  (put-i/o-u8 (fx+ base 1) m))
 
 (define (OCW2 base rotate? specific? eoi? level)
   ;; Used to acknowledge IRQs
-  ($put-i/o-u8 base (fxior (if rotate?   #b10000000 0)
+  (put-i/o-u8 base (fxior (if rotate?   #b10000000 0)
                            (if specific? #b1000000 0)
                            (if eoi?      #b100000 0)
                            (fxand level #b111))))
 
 (define (OCW3 base special-mask-mode poll? reg)
   ;; Used to read IRR/ISR
-  ($put-i/o-u8 base (fxior (if poll?   #b100 0)
+  (put-i/o-u8 base (fxior (if poll?   #b100 0)
                            (case reg
                              ((ir) #b10)
                              ((is) #b11)
@@ -285,15 +286,15 @@
 (define (write-spurious-int enable? spurious-vector)
   (define ASE (expt 2 8))     ;APIC Software Enable
   (define FCC (expt 2 9))     ;Focus CPU Core Checking
-  ($put-mem-u32 APIC:spurious-vector
-                (fxior (fxand spurious-vector #xff)
-                       (if enable? ASE 0))))
+  (put-mem-u32 APIC:spurious-vector
+               (fxior (fxand spurious-vector #xff)
+                      (if enable? ASE 0))))
 
 (define (write-timer-initial-count value)
-  ($put-mem-u32 (fx+ ABA #x380) value))
+  (put-mem-u32 (fx+ ABA #x380) value))
 
 (define (read-timer-current-count)
-  ($get-mem-u32 (fx+ ABA #x390)))
+  (get-mem-u32 (fx+ ABA #x390)))
 
 (define (write-timer-divide divisor)
   ;; The CPU core clock divisor for the timer.
@@ -309,18 +310,18 @@
            ((128) #b110)
            (else
             (error 'write-timer-divide "Invalid divisor" divisor)))))
-    ($put-mem-u32 (fx+ ABA #x3E0)
+    (put-mem-u32 (fx+ ABA #x3E0)
                   (fxior
                    (fxarithmetic-shift-left (fxand value #b100) 1)
                    (fxand value #b11)))))
 
 (define (write-timer-vector x)
-  ($put-mem-u32 (fx+ ABA #x320) x))
+  (put-mem-u32 (fx+ ABA #x320) x))
 
 (define (apic-EOI)
   ;; End of interrupt. It acknowledges one interrupt.
   ;; Whichever one it was, I can't recall.
-  ($put-mem-u32 (fx+ ABA #xB0) 0))
+  (put-mem-u32 (fx+ ABA #xB0) 0))
 
 (define LVT-MASK (expt 2 16))
 (define LVT-TMM (expt 2 17))  ;timer mode (1 = periodic)
@@ -366,24 +367,24 @@
   (define TIM-CNT2-EN    #b000001) ;Timer Counter 2 Enable
   ;; Disable the spaker and enable the timer counter 2
   ;; output bit. Then start the PIT timer.
-  ($put-i/o-u8 NMI-S&C
-               (fxand (fxior ($get-i/o-u8 #x61)
+  (put-i/o-u8 NMI-S&C
+               (fxand (fxior (get-i/o-u8 #x61)
                              TIM-CNT2-EN)
                       (fxnot NMI-MBZ)
                       (fxnot SPKR-DAT-EN)))
-  ($put-i/o-u8 CONTROL
+  (put-i/o-u8 CONTROL
                (fxior COUNT-BINARY
                       MODE-INTERRUPT-ON-TERMINAL-COUNT
                       COUNTER-WORD
                       SELECT-2))
-  ($put-i/o-u8 COUNTER-2 (fxand PIT-count #xff))
-  ($put-i/o-u8 COUNTER-2 (fxarithmetic-shift-right PIT-count 8))
+  (put-i/o-u8 COUNTER-2 (fxand PIT-count #xff))
+  (put-i/o-u8 COUNTER-2 (fxarithmetic-shift-right PIT-count 8))
   (write-timer-vector APIC-vector-timer)
   (write-timer-initial-count #xffffffff) ;Start APIC counting
   (let ((initial-tsc (rdtsc)))
     ;; Wait for PIT to finish. No GC runs, please.
     (let lp ()
-      (when (fxzero? (fxand ($get-i/o-u8 NMI-S&C) TMR2-OUT-STS))
+      (when (fxzero? (fxand (get-i/o-u8 NMI-S&C) TMR2-OUT-STS))
         (lp)))
     ;; Stop the timer
     (write-timer-vector LVT-MASK)
@@ -745,8 +746,8 @@
   (define (print . x) (for-each display x) (newline))
   (define (mem64 a)
     ;; Read a u64 from memory
-    (bitwise-ior ($get-mem-u32 a)
-                 (bitwise-arithmetic-shift-left ($get-mem-u32 (fx+ a 4)) 32)))
+    (bitwise-ior (get-mem-u32 a)
+                 (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ a 4)) 32)))
   (define (fmt-quantums x)
     ;; Converts x (bytes) into quantums, with a suffix. A quantum is
     ;; Lisp data, such as a fixnum or a pointer to something.
@@ -796,7 +797,7 @@
   (define mbi-loc ($boot-loader-data))
   (define (mbi-ref i)
     (assert (fx<=? i 21))
-    ($get-mem-u32 (fx+ (fx* i 4) mbi-loc)))
+    (get-mem-u32 (fx+ (fx* i 4) mbi-loc)))
   (define flags (mbi-ref field-flags))
   (define (set? flag) (not (fxzero? (fxand flag flags))))
 
@@ -1091,8 +1092,8 @@
     ;; TODO: identity mappings should be 1GB or 2MB pages.
     (define (print . _) #f)
     (define (set-mem64! a v)
-      ($put-mem-u32 a (bitwise-and v #xffffffff))
-      ($put-mem-u32 (fx+ a 4) (bitwise-arithmetic-shift-right v 32)))
+      (put-mem-u32 a (bitwise-and v #xffffffff))
+      (put-mem-u32 (fx+ a 4) (bitwise-arithmetic-shift-right v 32)))
     (define (page-align-down x) (fxand x -4096))
     (define (page-align-up x) (fxand (fx+ x 4095) -4096))
     (define start (page-align-down start*))
@@ -1117,13 +1118,13 @@
           (let ((pml4e@ (fx+ (get-pml4t)
                              (fx* pml4 8))))
             ;; Add a PML4E
-            (when (not (entry-present? ($get-mem-u32 pml4e@)))
+            (when (not (entry-present? (get-mem-u32 pml4e@)))
               (print "Adding a page to PML4T")
               (set-mem64! pml4e@ (bitwise-ior (get-4K-zero-page) attributes)))
             (let ((pdpe@ (fx+ (pml4e-address (mem64 pml4e@))
                               (fx* pdp 8))))
               ;; Add a PDPE
-              (when (not (entry-present? ($get-mem-u32 pdpe@)))
+              (when (not (entry-present? (get-mem-u32 pdpe@)))
                 (print "Adding a page to PDPT")
                 (set-mem64! pdpe@ (bitwise-ior (get-4K-zero-page) attributes)))
               (let ((pdpe (mem64 pdpe@)))
@@ -1131,7 +1132,7 @@
                   (let ((pde@ (fx+ (pdpe-address pdpe)
                                    (fx* pd 8))))
                     ;; Add a PDE
-                    (when (not (entry-present? ($get-mem-u32 pde@)))
+                    (when (not (entry-present? (get-mem-u32 pde@)))
                       (print "Adding a page to PDT")
                       (set-mem64! pde@ (bitwise-ior (get-4K-zero-page)
                                                     attributes)))
@@ -1140,7 +1141,7 @@
                         (let ((pte@ (fx+ (pde-4K-address pde)
                                          (fx* pt 8))))
                           ;; Add a PTE
-                          (when (not (entry-present? ($get-mem-u32 pte@)))
+                          (when (not (entry-present? (get-mem-u32 pte@)))
                             (print "Adding a PTE")
                             (let ((address
                                    (if (eq? type 'identity)
@@ -1204,7 +1205,7 @@
 
   ;; Check that #AC works
   (guard (exn (else #f))
-    ($get-mem-u32 #x200001)           ;safe way to trigger #AC
+    (get-mem-u32 #x200001)           ;safe way to trigger #AC
     (display "Fatal: Loko can't run because the system does not support #AC.\n")
     (exit 70))
 
@@ -1216,7 +1217,7 @@
   ;;      (set! *modules*
   ;;            (cons (cons 'bios-data (open-bytevector-input-port bv))
   ;;                  *modules*)))
-  ;;   (bytevector-u32-native-set! bv i ($get-mem-u32 addr)))
+  ;;   (bytevector-u32-native-set! bv i (get-mem-u32 addr)))
 
   (when (set? flag-cmdline)
     (let-values ([(env cmdline) (pc-init-parse-command-line
@@ -1235,15 +1236,15 @@
   (let* ((len (mbi-ref field-mmap-length))
          (start (mbi-ref field-mmap-addr))
          (end (fx+ start len)))
-    (define (size addr) ($get-mem-u32 addr))
+    (define (size addr) (get-mem-u32 addr))
     (define (base addr)
       ;; XXX: maybe bitwise-operators instead.
-      (fxior ($get-mem-u32 addr)
-             (fxarithmetic-shift-left ($get-mem-u32 (fx+ addr 4)) 32)))
+      (fxior (get-mem-u32 addr)
+             (fxarithmetic-shift-left (get-mem-u32 (fx+ addr 4)) 32)))
     (define (len addr)
-      (fxior ($get-mem-u32 (fx+ addr 8))
-             (fxarithmetic-shift-left ($get-mem-u32 (fx+ addr 12)) 32)))
-    (define (type addr) ($get-mem-u32 (fx+ addr 16)))
+      (fxior (get-mem-u32 (fx+ addr 8))
+             (fxarithmetic-shift-left (get-mem-u32 (fx+ addr 12)) 32)))
+    (define (type addr) (get-mem-u32 (fx+ addr 16)))
     (do ((addr start (fx+ addr (fx+ (size addr) 4))))
         ((fx>=? addr end))
       (let* ((saddr (fx+ addr 4))
@@ -1265,9 +1266,9 @@
          (addr (mbi-ref field-mods-addr) (fx+ addr 16))
          (i 0 (fx+ i 1)))
         ((fx=? i mods))
-      (let ((start ($get-mem-u32 addr))
-            (end ($get-mem-u32 (fx+ addr 4)))
-            (str (utf8->string (copy-utf8z ($get-mem-u32 (fx+ addr 8))))))
+      (let ((start (get-mem-u32 addr))
+            (end (get-mem-u32 (fx+ addr 4)))
+            (str (utf8->string (copy-utf8z (get-mem-u32 (fx+ addr 8))))))
         (mark-area start (fx- end start) (cons 'module str))
         ;; TODO: free the pages used by the modules after using them
         (set! *modules*
@@ -1321,16 +1322,16 @@
   ;; Initialize APIC
   (calibrate-APIC&CPU-against-PIT)
   (write-timer-initial-count 0) ;stop timer
-  ($put-mem-u32 APIC:task-priority 32)
-  ($put-mem-u32 APIC:logical-destination 0)
-  ($put-mem-u32 APIC:destination-format #xf0000000)
+  (put-mem-u32 APIC:task-priority 32)
+  (put-mem-u32 APIC:logical-destination 0)
+  (put-mem-u32 APIC:destination-format #xf0000000)
   (write-timer-vector LVT-MASK)
-  ($put-mem-u32 APIC:thermal-vector LVT-MASK)
-  ($put-mem-u32 APIC:performance-vector LVT-MASK)
-  ($put-mem-u32 APIC:LINT0-vector (fxior LVT-MT-EXTERNAL LVT-TGM))
-  ($put-mem-u32 APIC:LINT1-vector LVT-MT-NMI)
-  ($put-mem-u32 APIC:error-vector LVT-MASK)
-  ($put-mem-u32 APIC:ICR-high 0)
+  (put-mem-u32 APIC:thermal-vector LVT-MASK)
+  (put-mem-u32 APIC:performance-vector LVT-MASK)
+  (put-mem-u32 APIC:LINT0-vector (fxior LVT-MT-EXTERNAL LVT-TGM))
+  (put-mem-u32 APIC:LINT1-vector LVT-MT-NMI)
+  (put-mem-u32 APIC:error-vector LVT-MASK)
+  (put-mem-u32 APIC:ICR-high 0)
   (write-timer-divide apic-divisor)
 
   ;; Enable the APIC and disable anything not supported.

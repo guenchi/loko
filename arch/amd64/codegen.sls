@@ -498,7 +498,7 @@
       (cg-void ctxt)))
 
   (define (cg-get-mem mem+ movzx/sx reg operand* ctxt env)
-    ;; ($get-mem-uNN addr). addr must be aligned. TODO: make sure
+    ;; (get-mem-uNN addr). addr must be aligned. XXX: make sure
     ;; that the optimizer never removes these loads.
     (let ((addr (car operand*)))
       (cond ((and (constant? addr) (< (constant-value addr) #x7fffffff))
@@ -2042,26 +2042,29 @@
          ret))
 
       ;; ((apply) (cg-apply operand* ctxt env tail?))
+
+      ;; (loko system unsafe)
+      ((syscall) (cg-syscall operand* ctxt env))
+      ((get-i/o-u8) (cg-get-i/o 'al operand* ctxt env))
+      ((put-i/o-u8) (cg-put-i/o 'al operand* ctxt env))
+      ((get-i/o-u8-n!) (cg-get-i/o-n! 'mem8+ operand* ctxt env))
+      ((get-i/o-u16) (cg-get-i/o 'ax operand* ctxt env))
+      ((put-i/o-u16) (cg-put-i/o 'ax operand* ctxt env))
+      ((get-i/o-u16-n!) (cg-get-i/o-n! 'mem16+ operand* ctxt env))
+      ((get-i/o-u32) (cg-get-i/o 'eax operand* ctxt env))
+      ((put-i/o-u32) (cg-put-i/o 'eax operand* ctxt env))
+      ((get-i/o-u32-n!) (cg-get-i/o-n! 'mem32+ operand* ctxt env))
+      ;; TODO: put-i/o-uNN-n
+      ((get-mem-u8) (cg-get-mem 'mem8+ 'movzx 'eax operand* ctxt env))
+      ((get-mem-u16) (cg-get-mem 'mem16+ 'movzx 'eax operand* ctxt env))
+      ((get-mem-u32) (cg-get-mem 'mem32+ 'mov 'eax operand* ctxt env))
+      ((get-mem-s61) (cg-get-mem 'mem64+ 'mov 'rax operand* ctxt env))
+      ((put-mem-u8) (cg-put-mem 'mem8+ 'al operand* ctxt env))
+      ((put-mem-u16) (cg-put-mem 'mem16+ 'ax operand* ctxt env))
+      ((put-mem-u32) (cg-put-mem 'mem32+ 'eax operand* ctxt env))
+      ((put-mem-s61) (cg-put-mem 'mem64+ 'rax operand* ctxt env))
+
       ;; loko system $amd64. These are ALL unsafe.
-      (($get-i/o-u8) (cg-get-i/o 'al operand* ctxt env))
-      (($put-i/o-u8) (cg-put-i/o 'al operand* ctxt env))
-      (($get-i/o-u8-n!) (cg-get-i/o-n! 'mem8+ operand* ctxt env))
-      (($get-i/o-u16) (cg-get-i/o 'ax operand* ctxt env))
-      (($put-i/o-u16) (cg-put-i/o 'ax operand* ctxt env))
-      (($get-i/o-u16-n!) (cg-get-i/o-n! 'mem16+ operand* ctxt env))
-      (($get-i/o-u32) (cg-get-i/o 'eax operand* ctxt env))
-      (($put-i/o-u32) (cg-put-i/o 'eax operand* ctxt env))
-      (($get-i/o-u32-n!) (cg-get-i/o-n! 'mem32+ operand* ctxt env))
-      ;; TODO: $put-i/o-uNN-n
-      (($get-mem-u8) (cg-get-mem 'mem8+ 'movzx 'eax operand* ctxt env))
-      (($get-mem-u16) (cg-get-mem 'mem16+ 'movzx 'eax operand* ctxt env))
-      (($get-mem-u32) (cg-get-mem 'mem32+ 'mov 'eax operand* ctxt env))
-      (($get-mem-s61) (cg-get-mem 'mem64+ 'mov 'rax operand* ctxt env))
-      (($put-mem-u8) (cg-put-mem 'mem8+ 'al operand* ctxt env))
-      (($put-mem-u16) (cg-put-mem 'mem16+ 'ax operand* ctxt env))
-      (($put-mem-u32) (cg-put-mem 'mem32+ 'eax operand* ctxt env))
-      (($put-mem-s61) (cg-put-mem 'mem64+ 'rax operand* ctxt env))
-      (($syscall) (cg-syscall operand* ctxt env))
       (($disable-interrupts)
        ;; TODO: it would be nice to be able to actually use CLI/STI, since
        ;; they are permitted at CPL=3 (but not under Linux).

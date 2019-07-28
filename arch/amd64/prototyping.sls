@@ -24,16 +24,6 @@
 (library (loko arch amd64 prototyping)
   (export
     cpuid rdtsc
-    $get-i/o-u8 $put-i/o-u8
-    $get-i/o-u16 $put-i/o-u16
-    $get-i/o-u32 $put-i/o-u32
-
-    $get-i/o-u8-n!
-    $get-i/o-u16-n!
-    $get-i/o-u32-n!
-
-    $get-mem-u8 $get-mem-u16 $get-mem-u32
-    $put-mem-u8 $put-mem-u16 $put-mem-u32
 
     $bytevector-location
     $switch-stack
@@ -64,60 +54,6 @@
 
 (define (rdtsc)
   (sys:rdtsc))
-
-(define ($get-i/o-u8 port)
-  (assert (fx<=? 0 port #xffff))
-  (sys:$get-i/o-u8 port))
-
-(define ($put-i/o-u8 port v)
-  (assert (fx<=? 0 port #xffff))
-  (assert (fx<=? 0 v #xff))
-  (sys:$put-i/o-u8 port v))
-
-(define ($get-i/o-u16 port)
-  (assert (fx<=? 0 port #xffff))
-  (sys:$get-i/o-u16 port))
-
-(define ($put-i/o-u16 port v)
-  (assert (fx<=? 0 port #xffff))
-  (assert (fx<=? 0 v #xffff))
-  (sys:$put-i/o-u16 port v))
-
-(define ($get-i/o-u32 port)
-  (assert (fx<=? 0 port #xffff))
-  (sys:$get-i/o-u32 port))
-
-(define ($put-i/o-u32 port v)
-  (assert (fx<=? 0 port #xffff))
-  (assert (fx<=? 0 v #xffffffff))
-  (sys:$put-i/o-u32 port v))
-
-(define ($get-i/o-u8-n! port address count)
-  (assert (fx<=? 0 port #xffff))
-  (assert (not (fxnegative? count)))
-  (sys:$get-i/o-u8-n! port address count))
-
-(define ($get-i/o-u16-n! port address count)
-  (assert (fx<=? 0 port #xffff))
-  (assert (not (fxnegative? count)))
-  (sys:$get-i/o-u16-n! port address count))
-
-(define ($get-i/o-u32-n! port address count)
-  (assert (fx<=? 0 port #xffff))
-  (assert (not (fxnegative? count)))
-  (sys:$get-i/o-u32-n! port address count))
-
-(define ($get-mem-u8 addr) (sys:$get-mem-u8 addr))
-
-(define ($get-mem-u16 addr) (sys:$get-mem-u16 addr))
-
-(define ($get-mem-u32 addr) (sys:$get-mem-u32 addr))
-
-(define ($put-mem-u8 addr v) (sys:$put-mem-u8 addr v))
-
-(define ($put-mem-u16 addr v) (sys:$put-mem-u16 addr v))
-
-(define ($put-mem-u32 addr v) (sys:$put-mem-u32 addr v))
 
 ;; maybe not strictly part of this library...?
 (define ($bytevector-location bv)

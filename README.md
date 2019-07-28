@@ -1,33 +1,41 @@
 # Loko Scheme
 
 Loko Scheme is an implementation of the algorithmic programming
-language R6RS Scheme. It runs on Linux amd64 and on bare amd64
-hardware.
+language R6RS Scheme. It runs on the Linux kernel (amd64) and on bare
+amd64 hardware.
 
 ## Current status
 
 * Most of R6RS Scheme is present and accounted for.
 * No SRFIs apart from SRFI 98 are implemented.
-* Memory management is limited. On Linux at most 1 GB is usable (hard
-  coded limit).
+* Memory management is limited. The Linux target makes at most 1 GB
+  available (hard coded limit, will be fixed some day).
 * Very few Linux system calls are implemented. Basic I/O works, but
   may have horrible bugs and is fully blocking.
 * There is no test suite.
 
-## Building
+## Building on GNU/Linux
 
 Install the package manager [Akku.scm](https://akkuscm.org) and run
 `akku install` in a checked out copy of the repository, followed by
 `./build.sh`.
 
-Alternatively get the pre-compiled `loko` binary from GitLab CI or use
-the Docker base image [weinholt/loko:base][docker]: `docker run --rm
--it weinholt/loko:base`. The image akkuscm/akku:loko is also available
-and comes with Akku pre-installed.
+Alternatively get the pre-compiled `loko` binary from the CI system or
+use the Docker base image [weinholt/loko:base][docker]: `docker run
+--rm -it weinholt/loko:base`. The image akkuscm/akku:loko is also
+available and comes with Debian GNU/Linux and Akku pre-installed.
 
  [docker]: https://cloud.docker.com/u/weinholt/repository/docker/weinholt/loko
 
-## Running on Linux
+## Building with Loko
+
+Loko can compile itself:
+
+```
+.akku/env ./loko --program compile-loko.sps
+```
+
+## Running on the Linux kernel
 
 Loko uses the environment variable `LOKO_LIBRARY_PATH` to find
 libraries. This is a colon-separated list of directories. It uses the

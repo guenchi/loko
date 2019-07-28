@@ -43,7 +43,7 @@
     )
   (import
     (rnrs)
-    (loko system $asm-amd64)
+    (loko system unsafe)
     (only (loko system $bytevectors) $bytevector-location)
     (loko arch amd64 linux-numbers))
 
@@ -76,20 +76,20 @@
                [(arg ...)
                 ;; Default: raise errors automatically
                 (let ((tmp arg) ...)
-                  (let ((v ($syscall __NR tmp ...)))
+                  (let ((v (syscall __NR tmp ...)))
                     (if (fx<=? -4095 v -1)
                         (raise (condition (make-syscall-error 'name (fx- v))
                                           (make-irritants-condition (list tmp ...))))
                         v)))]
                [(arg ... k-failure)
                 ;; Let the caller handle errors
-                (let ((v ($syscall __NR arg ...)))
+                (let ((v (syscall __NR arg ...)))
                   (if (fx<=? -4095 v -1)
                       (k-failure (fx- v))
                       v))]
                #;
                [(arg ... k-failure k-success)
-                (let ((v ($syscall __NR arg ...)))
+                (let ((v (syscall __NR arg ...)))
                   (if (fx<=? -4095 v -1)
                       (k-failure (fx- v))
                       (k-success v)))])))))))

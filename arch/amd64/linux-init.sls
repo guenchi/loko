@@ -26,7 +26,7 @@
   (export)
   (import
     (rnrs (6))
-    (loko system $asm-amd64)
+    (loko system unsafe)
     (loko arch amd64 linux-numbers)
     (loko arch amd64 linux-syscalls)
     (loko system $host)
@@ -157,7 +157,7 @@
 ;; Verify that #AC is working and triggers SIGBUG
 (define (linux-init-check-alignment)
   (guard (exn (else #f))
-    ($get-mem-u32 #x200001)           ;safe way to trigger #AC
+    (get-mem-u32 #x200001)              ;safe way to trigger #AC
     (cond
       ((eqv? (valgrind #x1001) 0)
        (display "Fatal: Loko can't run because the system does not support #AC.\n"
@@ -175,19 +175,19 @@
   (define (copy-utf8z addr)
     (do ((end addr (fx+ end 1))
          (len 0 (fx+ len 1)))
-        ((fxzero? ($get-mem-u8 end))
+        ((fxzero? (get-mem-u8 end))
          (do ((ret (make-bytevector len))
               (i (fx- end 1) (fx- i 1))
               (len (fx- len 1) (fx- len 1)))
              ((fx<=? len -1) ret)
-           (bytevector-u8-set! ret len ($get-mem-u8 i))))))
+           (bytevector-u8-set! ret len (get-mem-u8 i))))))
   (define (string-index s c)
     (let lp ((i 0))
       (and (not (fx=? i (string-length s)))
            (if (eqv? c (string-ref s i))
                i
                (lp (fx+ i 1))))))
-  (define (stk-ref i) ($get-mem-s61 (fx+ stk-loc (fx* i 8))))
+  (define (stk-ref i) (get-mem-s61 (fx+ stk-loc (fx* i 8))))
   (let ((argc (stk-ref field-argc)))
     ;; Parse command line
     (do ((i (fx- argc 1) (fx- i 1))
@@ -242,7 +242,7 @@
           (let ((pid (sys_fork)))
             (cond ((eqv? pid 0)
                    ;; Child.
-                   ($put-mem-s61 ($linker-address 'afl-location) 0)
+                   (put-mem-s61 ($linker-address 'afl-location) 0)
                    (sys_close FORKSRV_FD)
                    (sys_close (+ FORKSRV_FD 1)))
                   (else

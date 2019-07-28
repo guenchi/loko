@@ -25,9 +25,9 @@
   (import
     (rnrs (6))
     (machine-code assembler x86)
+    (loko system unsafe)
     (only (loko system $host) $linker-address)
-    (loko arch amd64 registers)
-    (loko system $asm-amd64))
+    (loko arch amd64 registers))
 
 (define (ap-init-code ap-start)
   ;; This code is run by the application processors, i.e. all the
@@ -102,7 +102,7 @@
     ;; Copy the code to code-page
     (do ((i 0 (fx+ i 1)))
         ((fx=? i (bytevector-length code)))
-      ($put-mem-u8 (fx+ &code-page i) (bytevector-u8-ref code i)))
+      (put-mem-u8 (fx+ &code-page i) (bytevector-u8-ref code i)))
     ;; Do the INIT-SIPI-SIPI dance.
     (let ((INIT (fxior (APIC-ICR-DSH #b11) ;To all excluding self
                        (APIC-ICR-MT #b101) ;Delivery mode: INIT
@@ -111,11 +111,11 @@
                               (APIC-ICR-MT #b110) ;Delivery mode: Start Up
                               (APIC-ICR L))        ;Level: assert
                        (APIC-ICR-VEC &code-page))))
-      ($put-mem-u32 &APIC:ICR INIT)
+      (put-mem-u32 &APIC:ICR INIT)
       (sleep #e0.01)
-      ($put-mem-u32 &APIC:ICR SIPI)
+      (put-mem-u32 &APIC:ICR SIPI)
       (sleep #e0.0002)
-      ($put-mem-u32 &APIC:ICR SIPI)
+      (put-mem-u32 &APIC:ICR SIPI)
 
       #;(sleep #e0.0002)
 

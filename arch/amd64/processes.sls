@@ -29,11 +29,10 @@
     (rnrs (6))
     (only (loko) machine-type)
     (loko arch amd64 memory)
+    (loko system unsafe)
     (loko system $boxes)
     (loko system $host)
-    (only (loko system $asm-amd64)
-          $put-mem-u32
-          $enable-interrupts)
+    (only (loko system $asm-amd64) $enable-interrupts)
     (only (loko libs context) CPU-VECTOR:SCHEDULER-RUNNING?
           CPU-VECTOR:SCHEDULER-SP))
 
@@ -74,8 +73,8 @@
         (error 'heap-area "There is no heap area with this number" n))
       start))
   (define (put-mem-u64 a v)
-    ($put-mem-u32 a (bitwise-and v #xffffffff))
-    ($put-mem-u32 (fx+ a 4) (bitwise-arithmetic-shift-right v 32)))
+    (put-mem-u32 a (bitwise-and v #xffffffff))
+    (put-mem-u32 (fx+ a 4) (bitwise-arithmetic-shift-right v 32)))
   (define (print . x) (for-each display x) (newline))
   (define PROCESS-SAVE-SIZE 4096)
   (let ((start-current-heap (heap-area area))

@@ -86,6 +86,7 @@
     "loko/tui"
     "loko/repl"
     "loko/main"
+    "loko/libs/unsafe"
     ;; Target-specific stuff. Only code in (loko arch ...) should
     ;; import these.
     ,@(case (config-target-cpu)

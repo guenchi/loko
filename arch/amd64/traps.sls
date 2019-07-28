@@ -24,6 +24,7 @@
   (import
     (rnrs)
     (loko match)
+    (only (loko system unsafe) get-mem-u8)
     (loko system $boxes)
     (loko system $symbols)
     (loko system $strings)
@@ -32,8 +33,7 @@
     (only (loko system $control)
           register-error-invoker
           make-program-counter-condition)
-    (only (loko system $disassembler) disassemble1)
-    (only (loko system $asm-amd64) $get-mem-u8))
+    (only (loko system $disassembler) disassemble1))
 
 (define (recover-explicit-condition live-data code-window)
   ;; Look at a few of the AMD64 instructions at the restart point of
@@ -139,7 +139,7 @@
               (i 0 (fx+ i 1)))
              ((fx=? i (bytevector-length ret))
               ret)
-           (bytevector-u8-set! ret i ($get-mem-u8 (fx+ addr i))))))
+           (bytevector-u8-set! ret i (get-mem-u8 (fx+ addr i))))))
   (define (get-instruction)
     ;; Disassembles the instruction at disasm-rip and increments
     ;; disasm-rip to point past that instruction.

@@ -145,22 +145,20 @@
                               ;; (lower . 0)
                               ;; (upper . ,(target-greatest-fixnum))
                               )))
-                 ((bytevector-u8-ref $get-mem-u8 $get-i/o-u8)
+                 ((bytevector-u8-ref get-mem-u8 get-i/o-u8)
                   (infer x^ `((type . fixnum)
                               ;; (lower . 0) (upper . 255)
                               )))
-                 ((bytevector-u16-ref bytevector-u16-native-ref
-                                      $get-mem-u16 $get-i/o-u16)
+                 ((bytevector-u16-ref bytevector-u16-native-ref get-mem-u16 get-i/o-u16)
                   (infer x^ `((type . fixnum)
                               ;; (lower . 0) (upper . 65535)
                               )))
-                 ((bytevector-u32-ref bytevector-u32-native-ref
-                                      $get-mem-u32 $get-i/o-u32)
+                 ((bytevector-u32-ref bytevector-u32-native-ref get-mem-u32 get-i/o-u32)
                   (assert (target-fixnum? (- (expt 2 32) 1)))
                   (infer x^ `((type . fixnum)
                               ;; (lower . 0) (upper . ,(- (expt 2 32) 1))
                               )))
-                 (($get-mem-s61 rdtsc)
+                 ((get-mem-s61 rdtsc)
                   (assert (= (target-greatest-fixnum)
                              (- (expt 2 60) 1)))
                   (infer x^ `((type . fixnum)
@@ -213,10 +211,10 @@
                       (infer x^ '((type . fixnum)))
                       x^))
                  ;; Loko stuff.
-                 (($syscall syscall $bytevector-location
-                            $fxquotient $fxremainder $fxlength
-                            $fxfirst-bit-set $immsym->fixnum
-                            $void->fixnum)
+                 ((syscall $bytevector-location
+                           $fxquotient $fxremainder $fxlength
+                           $fxfirst-bit-set $immsym->fixnum
+                           $void->fixnum)
                   (infer x^ '((type . fixnum))))
                  ;; Alternative calling conventions, higher order stuff.
                  ((apply fold-left fold-right)

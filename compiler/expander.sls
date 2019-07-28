@@ -219,6 +219,8 @@
     (srfi98      (srfi :98 os-environment-variables)   #t    #t)
     (s98         (srfi :98)                            #t    #t)
 
+    (lsu         (loko system unsafe)                  #f    #t)
+
     ($amd64      (loko system $asm-amd64)              #f    #t)
     ($arithmetic (loko system $arithmetic)             #f    #t)
     ($boxes      (loko system $boxes)                  #f    #t)
@@ -1088,6 +1090,14 @@
     (disassemble           ^)
     (machine-type          ^)
 
+    ;; The (loko system unsafe) library
+    (get-i/o-u8    lsu) (get-i/o-u16    lsu) (get-i/o-u32    lsu)
+    (put-i/o-u8    lsu) (put-i/o-u16    lsu) (put-i/o-u32    lsu)
+    (get-i/o-u8-n! lsu) (get-i/o-u16-n! lsu) (get-i/o-u32-n! lsu)
+    (get-mem-u8    lsu) (get-mem-u16    lsu) (get-mem-u32    lsu) (get-mem-s61 lsu)
+    (put-mem-u8    lsu) (put-mem-u16    lsu) (put-mem-u32    lsu) (put-mem-s61 lsu)
+    (syscall       lsu)
+
     (implementation-restriction $control)
     (make-program-counter-condition $control)
     (register-error-invoker $control)
@@ -1100,14 +1110,6 @@
     (compiler-passes     compiler)
     (assemble-text-file  compiler)
 
-    ;; TODO: fewer of these should be specific to amd64
-    ($get-i/o-u8    $amd64) ($get-i/o-u16    $amd64) ($get-i/o-u32    $amd64)
-    ($put-i/o-u8    $amd64) ($put-i/o-u16    $amd64) ($put-i/o-u32    $amd64)
-    ($get-i/o-u8-n! $amd64) ($get-i/o-u16-n! $amd64) ($get-i/o-u32-n! $amd64)
-    ($put-i/o-vu8   $amd64) ($put-i/o-vu16   $amd64) ($put-i/o-vu32   $amd64)
-    ($get-mem-u8    $amd64) ($get-mem-u16    $amd64) ($get-mem-u32    $amd64) ($get-mem-s61 $amd64)
-    ($put-mem-u8    $amd64) ($put-mem-u16    $amd64) ($put-mem-u32    $amd64) ($put-mem-s61 $amd64)
-    ($syscall                 $amd64)
     ($cpuid!                  $amd64)
     (cpuid                    $amd64)
     (rdtsc                    $amd64)
@@ -1120,7 +1122,6 @@
     ($processor-data-ref      $host)
     ($boot-loader-data        $host)     ;XXX:remove
     ($boot-loader-type        $host)     ;XXX:remove
-    (syscall                  $host)
     ($copy-stack              $host)
     ($restore-stack           $host)
     ($switch-stack            $host)
