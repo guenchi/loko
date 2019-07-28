@@ -90,12 +90,6 @@
     $port-buffer-mode-set!        ;for various open-file-stuff
     $init-standard-ports)
   (import
-    (only (loko system $arithmetic) $display-number)
-    (only (loko system $host) $debug-put-u8 $void? $void->fixnum)
-    (loko system $boxes)
-    (loko system $symbols)
-    (loko system $strings)
-    (loko system $procedures)
     (except (rnrs)
             buffer-mode? latin-1-codec utf-8-codec utf-16-codec
             native-eol-style
@@ -130,7 +124,10 @@
             close-input-port close-output-port read-char peek-char read
             write-char newline display write)
     (only (rnrs mutable-strings) string-set!)
-    (prefix (rnrs) sys:))
+    (prefix (only (rnrs) eof-object eof-object?) sys:)
+    (only (loko libs arithmetic) $display-number)
+    (only (loko libs symbols) $gensym-generate-names!)
+    (loko system $primitives))
 
 ;; Tracing this only works when $debug-put-u8 is used directly.
 (define-syntax trace

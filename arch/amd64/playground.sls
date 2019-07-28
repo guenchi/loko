@@ -29,25 +29,19 @@
     stack-trace
     valgrind)
   (import
-    (rnrs)
+    (rnrs (6))
     (loko system unsafe)
-    (only (loko system $asm-amd64) rdtsc)
-    (only (loko system $procedures) $procedure-info)
-    (only (loko system $boxes) $box-ref)
-    (only (loko system $bytevectors) $bytevector-location)
-    (loko match)
-    (only (loko system $host)
-          $processor-data-ref
+    (only (loko system $x86) rdtsc)
+    (only (loko system $primitives) $box-ref $bytevector-location
+          $procedure-info $processor-data-ref
           $heap-remaining
-          current-processor-time
           $valgrind
           ;; Stack traces
           $stack-pointer
           $get-mem-object)
-    ;; Disassemble
-    (only (loko system $disassembler)
-          disassemble1)
-    (loko system $procedures)
+    (loko match)
+    (only (loko system $host) current-processor-time)
+    (loko arch amd64 disassembler)
     (only (loko libs context)
           CPU-VECTOR:PROCESS-VECTOR
           PROCESS-VECTOR:STACK-TOP

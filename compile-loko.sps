@@ -83,8 +83,8 @@
     "text-mode/platform"
     "text-mode/unicode"
     "text-mode/console"
-    "loko/tui"
     "loko/repl"
+    "loko/tui"
     "loko/main"
     "loko/libs/unsafe"
     ;; Target-specific stuff. Only code in (loko arch ...) should
@@ -95,12 +95,12 @@
            ;; FIXME: use instead of (loko arch amd64 disassembler)
            ;; "machine-code/disassembler/private"
            ;; "machine-code/disassembler/x86"
+           "loko/arch/amd64/disassembler"
            "loko/arch/amd64/traps"
            "loko/arch/amd64/memory"
            "loko/arch/amd64/objects"
            "loko/arch/amd64/codegen"
            "loko/arch/amd64/analyzer"
-           "loko/arch/amd64/disassembler"
            "loko/arch/amd64/processes"
            "loko/arch/amd64/playground"
            "loko/arch/amd64/prototyping"

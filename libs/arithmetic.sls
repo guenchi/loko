@@ -67,12 +67,7 @@
     $display-number                     ;for the printer
     bitwise-lsr)
   (import
-    (loko system $boxes)
-    (only (loko system $fixnums)
-          $fxquotient $fxremainder ;for display
-          $fx+/false $fx-/false $fx*/false
-          $fxasr/false $fxasl/false
-          $fxfirst-bit-set)
+
     (except (rnrs)
             number? complex? real? rational? integer?
             real-valued? rational-valued? integer-valued?
@@ -103,7 +98,8 @@
     (only (rename (rnrs)
                   (fxarithmetic-shift-left fxasl)
                   (fxarithmetic-shift-right fxasr))
-          fxasl fxasr))           ;for convenience
+          fxasl fxasr)                  ;for convenience
+    (loko system $primitives))
 
 (define (ratnum? obj)
   (and ($box? obj)

@@ -25,15 +25,10 @@
     (rnrs)
     (loko match)
     (only (loko system unsafe) get-mem-u8)
-    (loko system $boxes)
-    (loko system $symbols)
-    (loko system $strings)
-    (loko system $procedures)
-    (loko system $host)
-    (only (loko system $control)
-          register-error-invoker
-          make-program-counter-condition)
-    (only (loko system $disassembler) disassemble1))
+    (only (loko libs control) register-error-invoker)
+    (only (loko libs conditions) make-program-counter-condition)
+    (loko arch amd64 disassembler)
+    (loko system $primitives))
 
 (define (recover-explicit-condition live-data code-window)
   ;; Look at a few of the AMD64 instructions at the restart point of

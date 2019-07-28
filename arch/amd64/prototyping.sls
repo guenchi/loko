@@ -26,7 +26,6 @@
     cpuid rdtsc
 
     $bytevector-location
-    $switch-stack
     $processor-data-ref $processor-data-set!
     $object->fixnum
 
@@ -35,10 +34,9 @@
     $box-set!)
   (import
     (rnrs)
-    (prefix (loko system $asm-amd64) sys:)
-    (prefix (loko system $bytevectors) sys:)
-    (prefix (loko system $host) sys:)
-    (prefix (loko system $boxes) sys:))
+    (prefix (loko system $x86) sys:)
+    (prefix (loko system $primitives) sys:)
+    (prefix (loko system $host) sys:))
 
 (define cpuid
   (case-lambda
@@ -60,11 +58,9 @@
   (bytevector-length bv)
   (sys:$bytevector-location bv))
 
-;; this should absolutely not be here
-(define ($switch-stack rsp ret)
-  (sys:$switch-stack rsp ret))
 (define ($processor-data-ref idx)
   (sys:$processor-data-ref idx))
+
 (define ($processor-data-set! idx v)
   (sys:$processor-data-set! idx v))
 

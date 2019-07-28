@@ -30,7 +30,8 @@
 
     ;; Internal
     implementation-restriction
-    register-error-invoker)
+    register-error-invoker
+    print-condition)
   (import
     (except (rnrs)
             procedure?
@@ -39,11 +40,9 @@
             dynamic-wind
             with-exception-handler raise raise-continuable
             assertion-violation error)
-    (loko system $boxes)
+    (prefix (only (rnrs) procedure? apply) sys:)
+    (loko system $primitives)
     (loko system $host)
-    (only (loko system $repl) print-condition stack-trace)
-    (prefix (rnrs) sys:)
-    (prefix (loko system $processes) sys:)
     (only (loko libs context)
           CPU-VECTOR:PROCESS-VECTOR
           PROCESS-VECTOR:ERROR-INVOKER))
@@ -213,6 +212,54 @@
           (make-who-condition who)
           (make-message-condition msg)
           (make-irritants-condition irritants))))
+
+(define (print-condition exn p)
+  (cond ((condition? exn)
+         ;; TODO: does this have to consider sealed
+         ;; or opaque condition types?
+         (let ((c* (simple-conditions exn)))
+           (display "The condition has " p)
+           (display (length c*) p)
+           (display " components:\n" p)
+           (do ((i 1 (fx+ i 1))
+                (c* c* (cdr c*)))
+               ((null? c*))
+             (let* ((c (car c*))
+                    (rtd (record-rtd c)))
+               (display " " p) (display i p) (display ". " p)
+               (let loop ((rtd rtd))
+                 (display (record-type-name rtd) p)
+                 (cond ((record-type-parent rtd) =>
+                        (lambda (rtd)
+                          (unless (eq? rtd (record-type-descriptor &condition))
+                            (display #\space p)
+                            (loop rtd))))))
+               (let loop ((rtd rtd))
+                 (do ((f* (record-type-field-names rtd))
+                      (i 0 (fx+ i 1)))
+                     ((fx=? i (vector-length f*))
+                      (cond ((record-type-parent rtd) => loop)))
+                   (display "\n     " p)
+                   (display (vector-ref f* i) p)
+                   (display ": " p)
+                   (let ((x ((record-accessor rtd i) c)))
+                     (cond ((and (eq? rtd (record-type-descriptor &irritants))
+                                 (pair? x) (list? x))
+                            (display #\( p)
+                            (write (car x) p)
+                            (for-each (lambda (x)
+                                        (display "\n                 " p)
+                                        (write x p))
+                                      (cdr x))
+                            (display #\) p))
+                           (else
+                            (write x p)))))))
+             (newline p)))
+         (display "End of condition components.\n" p))
+        (else
+         (display "A non-condition object was raised:\n" p)
+         (write exn p)
+         (newline p))))
 
 (define (default-exception-handler x)
   (define EX_SOFTWARE 70)            ;Linux: internal software error

@@ -36,12 +36,12 @@
     flasin flacos flatan flsqrt flexpt
     fixnum->flonum)
   (import
-    (loko system $flonums)
     (rnrs base)
     (rnrs control)
     (rnrs lists)
     (rnrs syntax-case)
-    (prefix (rnrs) sys:))
+    (prefix (rnrs) sys:)
+    (loko system $primitives))
 
 (define (flonum? obj) (sys:flonum? obj))
 

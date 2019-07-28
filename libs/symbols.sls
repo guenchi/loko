@@ -23,15 +23,17 @@
   (export
     symbol? symbol->string #;symbol=? string->symbol
 
-    gensym? gensym->unique-string gensym-prefix
-    #;$gensym-generate-names!)
+    gensym gensym? gensym->unique-string gensym-prefix
+    *unbound-hack*
+    symbol-value set-symbol-value!
+    $gensym-generate-names!)
   (import
-    (loko system $boxes)
-    (except (loko system $symbols)
-            gensym? gensym->unique-string gensym-prefix)
-    (except (rnrs)
-            symbol? symbol->string symbol=? string->symbol)
-    (prefix (rnrs) sys:))
+    (except (rnrs) symbol? symbol->string symbol=? string->symbol)
+    (prefix (rnrs) sys:)
+    (loko libs context)
+    (loko system $primitives))
+
+(define *unbound-hack* (vector 'unbound))
 
 (define (symbol? x)
   (or ($immsym? x)
@@ -137,4 +139,63 @@
   (assert (gensym? v))
   (when (not ($box-ref v 0))
     ($gensym-generate-names! v))
-  (utf8->string ($box-ref v 0))))
+  (utf8->string ($box-ref v 0)))
+
+(define gensym
+  (case-lambda
+    (()
+     (gensym *unbound-hack*))
+    ((prefix)
+     (let ((p (cond ((eq? prefix *unbound-hack*) #f)
+                    ((symbol? prefix) (string->utf8 (symbol->string prefix)))
+                    ((string? prefix) (string->utf8 prefix))
+                    (else
+                     (error 'gensym "This procedure needs a string or a symbol"
+                            prefix)))))
+       (let ((ret ($make-box ($make-box-header 'symbol #t 0 3) 3)))
+         ($box-set! ret 0 p)
+         ($box-set! ret 1 #f)         ;generated later
+         ($box-set! ret 2 *unbound-hack*)
+         ret)))))
+
+(define (gensym-from-bootstrap? symbol)
+  (eqv? ($box-header-value ($box-type symbol)) 1))
+
+;; Unique strings for gensyms generated lazily.
+(define $gensym-generate-names!
+  (let ((g-count -1)
+        (id-count -1))            ;TODO: should be some kind of UUID
+    (lambda (g)
+      (assert (gensym? g))
+      (unless ($box-ref g 0)
+        (set! g-count (+ g-count 1))
+        ($box-set! g 0 (string->utf8 (string-append "g" (number->string g-count)))))
+      (unless ($box-ref g 1)
+        (set! id-count (+ id-count 1))
+        ($box-set! g 1 (string->utf8 (string-append "bs-" (number->string id-count))))))))
+
+(define (set-symbol-value! symbol value)
+  (cond ((and (gensym? symbol) (not (gensym-from-bootstrap? symbol)))
+         ($box-set! symbol 2 value))
+        (else
+         (error 'set-symbol-value! "TODO: Set a bootstrap symbol" symbol value))))
+
+(define (symbol-value symbol)
+  (cond ((gensym? symbol)
+         (cond ((gensym-from-bootstrap? symbol)
+                ;; A bootstrap gensym contains an index into the
+                ;; process vector where the symbol's value is
+                ;; stored. This is because they are shared between
+                ;; all processes.
+                (let ((idx ($box-ref symbol 2)))
+                  (if (fixnum? idx)
+                      (vector-ref ($processor-data-ref CPU-VECTOR:PROCESS-VECTOR) idx)
+                      (error 'symbol-value "This symbol has no value" symbol))))
+               (else
+                ;; A non-bootstrap gensym just contains the value.
+                (let ((x ($box-ref symbol 2)))
+                  (if (eq? x *unbound-hack*)
+                      (error 'eval "This variable has no value" symbol)
+                      x)))))
+        (else
+         (error 'symbol-value "Expected a gensym" symbol)))))

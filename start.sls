@@ -22,6 +22,6 @@
 (library (loko start)
   (export)
   (import
-    (only (loko system $init) init))
+    (only (loko init) init))
 
 (init))

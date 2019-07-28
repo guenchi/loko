@@ -35,18 +35,16 @@
     (rnrs)
     (rnrs mutable-pairs)
     (srfi :98 os-environment-variables)
+    (only (loko init) init-set!)
     (loko system unsafe)
     (loko arch amd64 pc-ap-boot)
-    (only (loko system $repl) print-condition)
-    (loko system $asm-amd64)
+    (loko arch amd64 processes)
+    (only (loko libs context) CPU-VECTOR:SCHEDULER-SP CPU-VECTOR:LAST-INTERRUPT-VECTOR)
+    (only (loko libs io) $init-standard-ports)
+    (only (loko libs control) print-condition)
+    (loko system $x86)
     (loko system $host)
-    (loko system $io)
-    (only (loko system $bytevectors)
-          $bytevector-location)
-    (loko system $processes)
-    (only (loko libs context)
-          CPU-VECTOR:SCHEDULER-SP
-          CPU-VECTOR:LAST-INTERRUPT-VECTOR))
+    (loko system $primitives))
 
 ;; Alist of filename to textual input port. This will represent some
 ;; sort of early filesystem.

@@ -37,11 +37,19 @@
           assertion-violation car cdr null? not eqv? values
           ;; TODO: These should not be needed
           div0-and-mod0 div0 mod0 expt + - *)
+    (rnrs conditions (6))
     (rnrs control (6))
+    (rnrs exceptions (6))
     (only (rnrs lists (6)) fold-left)
     (prefix (rnrs arithmetic fixnums (6)) sys:)
-    (loko system $fixnums)
-    (only (loko system $control) implementation-restriction))
+    (loko system $primitives))
+
+(define (implementation-restriction who msg . irritants)
+  (raise (condition
+          (make-implementation-restriction-violation)
+          (make-who-condition who)
+          (make-message-condition msg)
+          (make-irritants-condition irritants))))
 
 (define (fixnum? x) (sys:fixnum? x))
 (define (fixnum-width) (sys:fixnum-width))

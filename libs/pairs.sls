@@ -48,7 +48,7 @@
             cons*)
     (prefix (rnrs) sys:)
     (prefix (only (rnrs mutable-pairs) set-car! set-cdr!) sys:)
-    (only (loko system $pairs) $cons))
+    (only (loko system $primitives) $cons))
 
 (define-syntax define-integrable
   (lambda (x)

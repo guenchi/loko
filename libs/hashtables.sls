@@ -61,10 +61,8 @@
             string-hash string-ci-hash)
     (rnrs mutable-pairs)
     (only (loko system $host)
-          $object->fixnum
-          garbage-collection-count
-          $void?)
-    (only (loko system $symbols) $immsym?))
+          garbage-collection-count)
+    (only (loko system $primitives) $immsym? $object->fixnum $void?))
 
 (define-syntax print
   (syntax-rules ()

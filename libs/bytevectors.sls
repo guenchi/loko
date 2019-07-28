@@ -50,8 +50,6 @@
     string->utf8 ;;string->utf16 string->utf32
     utf8->string utf16->string utf32->string)
   (import
-    (loko system $bytevectors)
-    (loko system $strings)
     (except (rnrs)
             native-endianness bytevector? make-bytevector bytevector-length
             bytevector=? bytevector-fill! bytevector-copy! bytevector-copy
@@ -80,7 +78,8 @@
             bytevector-ieee-double-native-set! bytevector-ieee-double-set!
             string->utf8 string->utf16 string->utf32
             utf8->string utf16->string utf32->string)
-    (prefix (rnrs) sys:))
+    (prefix (rnrs) sys:)
+    (loko system $primitives))
 
 ;; Answers the question: are the
 ;; bytevector-{s,u}{8,16,32}-{native-,}{ref,set!} procedures

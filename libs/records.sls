@@ -57,7 +57,6 @@ record-constructor-descriptors:
     record-type-uid record-type-generative? record-type-sealed?
     record-type-opaque? record-type-field-names record-field-mutable?)
   (import
-    (loko system $boxes)
     (except (rnrs)
             make-record-type-descriptor record-type-descriptor?
             make-record-constructor-descriptor
@@ -66,7 +65,7 @@ record-constructor-descriptors:
             record? record-rtd record-type-name record-type-parent
             record-type-uid record-type-generative? record-type-sealed?
             record-type-opaque? record-type-field-names record-field-mutable?)
-    (prefix (rnrs) sys:))
+    (loko system $primitives))
 
 ;;; Procedural layer
 

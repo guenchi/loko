@@ -33,7 +33,6 @@
     string-normalize-nfc ;; string-normalize-nfkc
     )
   (import
-    (loko system $strings)
     (except (rnrs)
             string? make-string string string-length string-ref
             string=? string<? string>? string<=? string>=?
@@ -44,7 +43,8 @@
             string-normalize-nfd string-normalize-nfkd
             string-normalize-nfc string-normalize-nfkc)
     (prefix (rnrs) sys:)
-    (prefix (rnrs mutable-strings) sys:))
+    (prefix (rnrs mutable-strings) sys:)
+    (loko system $primitives))
 
 (define (string? x) (sys:string? x))
 

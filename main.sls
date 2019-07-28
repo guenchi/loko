@@ -27,9 +27,8 @@
   (import
     (rnrs (6))
     (rnrs mutable-strings (6))
-    (only (loko init) init-set!)
-    (only (loko system $repl) banner repl)
-    (only (loko system $init) run-user-interface)
+    (only (loko init) init-set! run-user-interface)
+    (only (loko repl) banner repl)
     (only (psyntax expander) compile-r6rs-top-level)
     (only (loko libs reader) read-annotated)
     (srfi :98 os-environment-variables)

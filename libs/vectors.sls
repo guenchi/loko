@@ -29,8 +29,9 @@
             vector? make-vector vector vector-length vector-ref
             vector-set! vector->list list->vector vector-fill!
             vector-map vector-for-each)
-    (loko system $vectors)
-    (prefix (rnrs) sys:))
+    (prefix (only (rnrs) vector? vector-length vector-ref vector-set!)
+            sys:)
+    (loko system $primitives))
 
 (define (vector? x) (sys:vector? x))
 

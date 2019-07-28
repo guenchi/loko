@@ -26,7 +26,6 @@
     eq? eqv? equal?
     equal-hash)
   (import
-    (only (loko system $host) $void? #;eq-hash)
     (except (rnrs) eq? eqv? equal? equal-hash)
     (prefix (rnrs) sys:))
 
@@ -37,10 +36,6 @@
         ((fixnum? x) (and (fixnum? y) (fx=? x y)))
         ;; TODO: matching exactness when doing flonums
         ((number? x) (and (number? y) (= x y)))
-        ;; XXX: perhaps this is dumb. the only place that really
-        ;; needs to check for voids, but that might not have access
-        ;; to $void?, is the object serializer.
-        (($void? x) ($void? y))
         (else #f)))
 
 (define (equal? x y)

@@ -25,9 +25,9 @@
   (import
     (rnrs (6))
     (machine-code assembler x86)
+    (loko arch amd64 registers)
     (loko system unsafe)
-    (only (loko system $host) $linker-address)
-    (loko arch amd64 registers))
+    (only (loko system $primitives) $linker-address))
 
 (define (ap-init-code ap-start)
   ;; This code is run by the application processors, i.e. all the

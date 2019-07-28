@@ -219,37 +219,19 @@
     (srfi98      (srfi :98 os-environment-variables)   #t    #t)
     (s98         (srfi :98)                            #t    #t)
 
-    (lsu         (loko system unsafe)                  #f    #t)
-
-    ($amd64      (loko system $asm-amd64)              #f    #t)
-    ($arithmetic (loko system $arithmetic)             #f    #t)
-    ($boxes      (loko system $boxes)                  #f    #t)
-    ($bv         (loko system $bytevectors)            #f    #t)
-    ($compiler   (loko system $compiler)               #f    #t)
-    ($control    (loko system $control)                #f    #t)
-    ($disasm     (loko system $disassembler)           #f    #t)
-    ($expand     (loko system $expand)                 #f    #t)
-    ($fixnums    (loko system $fixnums)                #f    #t)
-    ($flonums    (loko system $flonums)                #f    #t)
-    ($host       (loko system $host)                   #f    #t)
-    ($init       (loko system $init)                   #f    #t)
-    ($io         (loko system $io)                     #f    #t)
-    ($proc       (loko system $processes)              #f    #t)
-    ($procs      (loko system $procedures)             #f    #t)
-    ($repl       (loko system $repl)                   #f    #t)
-    ($strings    (loko system $strings)                #f    #t)
-    ($symbols    (loko system $symbols)                #f    #t)
-    ($vectors    (loko system $vectors)                #f    #t)
-    ($pairs      (loko system $pairs)                  #f    #t)
-
     ($compat     (loko compat)                         #f    #t)
+    (lsu         (loko system unsafe)                  #f    #t)
+    ($p          (loko system $primitives)             #f    #t)
+    ($x86        (loko system $x86)                    #f    #t)
 
-    ;; Hack for running the standalone compiler
+    ($host       (loko system $host)                   #f    #t)
+    ($control    (loko system $control)                #f    #t)
+
+    ;; Hack for self-compiling a bit faster
     (compiler    (loko compiler)                       #t    #f)
     (cp0         (loko compiler cp0)                   #t    #f)
 
-    (bitwise     (loko arithmetic bitwise)             #t    #t)
-
+    ;; A hack
     ($terminfo-builtin (text-mode terminfo builtins)   #t    #f)
 
     ))
@@ -995,8 +977,8 @@
     (string-upcase                              ^ r uc)
     ;;;
     ; (char-ready?                                )
-    (interaction-environment                    ^ $repl)
-    (load                                       ^ $repl)
+    (interaction-environment                    ^)
+    (load                                       ^)
     ;;;
     (void                     $boot)
     (gensym                   $boot ^)
@@ -1090,6 +1072,15 @@
     (disassemble           ^)
     (machine-type          ^)
 
+    ;; Procedures that cp0 can emit calls to
+    (bitwise-lsr)
+
+    ;; The (loko compat) library for self-compilation
+    (gensym?                  $compat)
+    (gensym->unique-string    $compat)
+    (gensym-prefix            $compat)
+    (call/1cc                 $compat)
+
     ;; The (loko system unsafe) library
     (get-i/o-u8    lsu) (get-i/o-u16    lsu) (get-i/o-u32    lsu)
     (put-i/o-u8    lsu) (put-i/o-u16    lsu) (put-i/o-u32    lsu)
@@ -1098,123 +1089,78 @@
     (put-mem-u8    lsu) (put-mem-u16    lsu) (put-mem-u32    lsu) (put-mem-s61 lsu)
     (syscall       lsu)
 
-    (implementation-restriction $control)
-    (make-program-counter-condition $control)
-    (register-error-invoker $control)
-    ($display-number            $arithmetic)
+    ($cpuid!                  $x86)
+    (cpuid                    $x86)
+    (rdtsc                    $x86)
+    ($disable-interrupts      $x86)
+    ($enable-interrupts       $x86)
 
-    ;; This is core-expand from psyntax
-    (core-expand $expand)
-
-    ;; For running the standalone compiler
-    (compiler-passes     compiler)
-    (assemble-text-file  compiler)
-
-    ($cpuid!                  $amd64)
-    (cpuid                    $amd64)
-    (rdtsc                    $amd64)
-    ($disable-interrupts      $amd64)
-    ($enable-interrupts       $amd64)
-
-    ($debug-display           $host)
-    ($debug-put-u8            $host)
-    ($processor-data-set!     $host)
-    ($processor-data-ref      $host)
-    ($boot-loader-data        $host)     ;XXX:remove
-    ($boot-loader-type        $host)     ;XXX:remove
-    ($copy-stack              $host)
-    ($restore-stack           $host)
-    ($switch-stack            $host)
-    ($void->fixnum            $host)
-    ($void?                   $host)
-    ($linker-address          $host)     ;link-time access to linker symbols
-    ($heap-remaining          $host)     ;for the time-it procedure
-    ;; ($current-closure         $host)
-    ($stack-pointer           $host)     ;for stack traces
-    ($get-mem-object          $host)     ;also for stack traces
-    ($object->fixnum          $host)
-    ($init-standard-ports     $host $io)
-    ($port-buffer-mode-set!   $host $io)
     ($mmap                    $host)
     (valgrind                 $host)
-    ($valgrind                $host)
     (garbage-collection-count $host)
     (current-processor-time   $host)
     (nanosleep                $host)
     (allocate                 $host)
-    (init-set!                $host $init)
-    (init                     $init)
-    (run-user-interface       $init)
+    (stack-trace              $host)
 
-    ($make-bytevector         $bv)
-    ($bytevector-location     $bv)
+    ;; The (loko system $primitives) library
+    ($bootstrap-symbols       $p)
+    ($make-bytevector         $p)
+    ($bytevector-location     $p)
+    ($make-vector             $p)
+    ($make-string             $p)
+    ($cons                    $p)
+    ($immsym?                 $p)
+    ($immsym->fixnum          $p)
+    ($fixnum->immsym          $p)
+    ($fx+/false               $p)
+    ($fx-/false               $p)
+    ($fx*/false               $p)
+    ($fxquotient              $p)
+    ($fxremainder             $p)
+    ($fxasl/false             $p)
+    ($fxasr/false             $p)
+    ($fxlength                $p)
+    ($fxfirst-bit-set         $p)
+    ($box?                    $p)
+    ($make-box                $p)
+    ($box-type                $p)
+    ($box-type-set!           $p)
+    ($box-ref                 $p)
+    ($box-set!                $p)
+    ($make-box-header         $p)
+    ($box-header?             $p)
+    ($box-header-length       $p)
+    ($box-header-type         $p)         ;FIXME: this is unabstracted
+    ($box-header-refs?        $p)
+    ($box-header-value        $p)
+    ($procedure-entry         $p)
+    ($procedure-info          $p)
+    ($processor-data-set!     $p)
+    ($processor-data-ref      $p)
+    ($copy-stack              $p)
+    ($restore-stack           $p)
+    ($switch-stack            $p)
+    ($void->fixnum            $p)
+    ($void?                   $p)
+    ($valgrind                $p)
+    ($debug-display           $p)
+    ($debug-put-u8            $p)
+    ($boot-loader-data        $p)
+    ($boot-loader-type        $p)
+    ($linker-address          $p)     ;link-time access to linker symbols
+    ($heap-remaining          $p)     ;for the time-it procedure
+    ;; ($current-closure         $p)
+    ($stack-pointer           $p)     ;for stack traces
+    ($get-mem-object          $p)     ;also for stack traces
+    ($object->fixnum          $p)
 
-    ($make-vector             $vectors)
-    ($make-string             $strings)
-
-    ($cons                    $pairs)
-
-    ($immsym?                     $symbols)
-    ($immsym->fixnum              $symbols)
-    ($fixnum->immsym              $symbols)
-    ($bootstrap-symbols           $symbols)
-    ($gensym-generate-names!      $symbols)
-    (gensym?                      $symbols $compat)
-    (gensym->unique-string        $symbols $compat)
-    (gensym-prefix                $symbols $compat)
-    (call/1cc                     $compat)
-
-    ($fx+/false       $fixnums)
-    ($fx-/false       $fixnums)
-    ($fx*/false       $fixnums)
-    ($fxquotient      $fixnums)
-    ($fxremainder     $fixnums)
-    ($fxasl/false     $fixnums)
-    ($fxasr/false     $fixnums)
-    ($fxlength        $fixnums)
-    ($fxfirst-bit-set $fixnums)
-
-    ($box?                $boxes)
-    ($make-box            $boxes)
-    ($box-type            $boxes)
-    ($box-type-set!       $boxes)
-    ($box-ref             $boxes)
-    ($box-set!            $boxes)
-    ($make-box-header     $boxes)
-    ($box-header?         $boxes)
-    ($box-header-length   $boxes)
-    ($box-header-type     $boxes)         ;FIXME: this is unabstracted
-    ($box-header-refs?    $boxes)
-    ($box-header-value    $boxes)
-
-    ($procedure-entry $procs)           ;XXX:remove
-    ($procedure-info  $procs)
-
-    ;; This is a procedure which takes a bytevector and a byte
-    ;; collector. it disassembles the bytevector to the same symbolic
-    ;; form used by the machine-code package. It only supports the
-    ;; target machine.
-    (disassemble1         $disasm)
-
-    ;; Processes. XXX: there should also be a user-accessible API
-    ($scheme-start-address $proc)       ;temporary
-    ($process-init-address $proc)       ;temporary
-    ;; ($make-process         $proc)
-    ($process-start        $proc)
-    ;; ($process-terminate!   $proc)
-    ($process-yield        $proc)
-
-    ;; REPL stuff
-    (stack-trace          $repl)
-    (print-condition      $repl)
-    (banner               $repl)
-    (repl                 $repl)
+    ;; Hack for speeding up self-compilation
+    (compiler-passes     compiler)
+    (assemble-text-file  compiler)
 
     (ti-printf            $terminfo-builtin)
     (msleep               $terminfo-builtin)
-
-    ;; Loko-specific bitwise operations
-    (bitwise-lsr bitwise)
     ))
 
 (define (verify-map)

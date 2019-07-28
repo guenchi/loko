@@ -22,23 +22,17 @@
 (library (loko arch amd64 processes)
   (export
     ;; process stuff
-    $process-yield $process-start
-    ;; less pretty:
-    $scheme-start-address $process-init-address)
+    $process-yield $process-start)
   (import
     (rnrs (6))
     (only (loko) machine-type)
     (loko arch amd64 memory)
     (loko system unsafe)
-    (loko system $boxes)
+    (loko system $primitives)
     (loko system $host)
-    (only (loko system $asm-amd64) $enable-interrupts)
+    (only (loko system $x86) $enable-interrupts)
     (only (loko libs context) CPU-VECTOR:SCHEDULER-RUNNING?
           CPU-VECTOR:SCHEDULER-SP))
-
-(define ($scheme-start-address) ($linker-address 'scheme-start))
-
-(define ($process-init-address) ($linker-address 'process-init))
 
 ;; This should be split: the mapping and the starting. After mapping
 ;; and setting up the stack frame and pointer, just put it in the
@@ -91,8 +85,8 @@
                                (expt 2 9))) ;Interrupt flag
           (r14 start-current-heap)
           (r13 size-current-heap)
-          (start ($scheme-start-address))
-          (rip ($process-init-address)))
+          (start ($linker-address 'scheme-start))
+          (rip ($linker-address 'process-init)))
       (let* ((sp (+ (stack-area area) (- STACK-SIZE PROCESS-SAVE-SIZE)))
              ;; The routine called to start up the Scheme
              (sp (fx- sp 8)) (_ (put-mem-u64 sp start))
