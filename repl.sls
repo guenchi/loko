@@ -26,6 +26,7 @@
     (rnrs)
     (rnrs eval)
     (only (loko libs control) print-condition)
+    (only (loko system $primitives) $void?)
     (only (loko system $host) stack-trace)
     (only (psyntax expander) interaction-environment new-interaction-environment)
     (only (psyntax compat) make-parameter parameterize)
@@ -74,7 +75,7 @@ certain conditions.
                          (case-lambda
                            (() #f)
                            ((x)
-                            (unless (eqv? x (if #f #f))
+                            (unless ($void? x)
                               (write x) (newline)))
                            (x*
                             (for-each (lambda (x)
