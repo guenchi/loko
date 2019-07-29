@@ -31,8 +31,6 @@
     open-file-output-port
     open-file-input/output-port
     $mmap
-    current-processor-time
-    nanosleep
     allocate
     run-user-interface
     machine-type
@@ -140,16 +138,6 @@
 (define ($mmap start len type)
   (*mmap* start len type))
 
-(define *current-processor-time* (lambda () 0))
-(define (current-processor-time)
-  (*current-processor-time*))
-
-(define *nanosleep*
-  (lambda _ (error 'nanosleep "No nanosleep procedure installed")))
-(define (nanosleep seconds)
-  ;; The process sleeps for the given amount. Can be less than a second.
-  (*nanosleep* seconds))
-
 (define *allocate*
   (lambda _ (error 'allocate "No allocate procedure installed")))
 (define (allocate type size mask)
@@ -181,8 +169,6 @@
     ((delete-file) (set! *delete-file* value))
     ((open-file-input-port) (set! *open-file-input-port* value))
     ((open-file-output-port) (set! *open-file-output-port* value))
-    ((current-processor-time) (set! *current-processor-time* value))
-    ((nanosleep) (set! *nanosleep* value))
     ((allocate) (set! *allocate* value))
     ((init) (set! *init* value))
     ((run-user-interface) (set! *run-user-interface* value))

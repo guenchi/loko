@@ -23,6 +23,7 @@
   (export
     make-syscall-error
 
+    sys_clock_getres
     sys_clock_gettime
     sys_close
     sys_exit
@@ -94,6 +95,7 @@
                       (k-failure (fx- v))
                       (k-success v)))])))))))
 
+(define-syscall (clock_getres clk-id *tp))
 (define-syscall (clock_gettime clk-id *tp))
 (define-syscall (close fd))
 (define-syscall (exit status))

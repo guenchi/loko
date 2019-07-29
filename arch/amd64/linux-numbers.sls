@@ -9,6 +9,7 @@
   (export
     errno-list
     __NR_arch_prctl
+    __NR_clock_getres
     __NR_clock_gettime
     __NR_close
     __NR_epoll_create1
@@ -461,6 +462,7 @@
 
 ;;; asm/unistd.h
 (define-inlined __NR_arch_prctl 158)
+(define-inlined __NR_clock_getres 229)
 (define-inlined __NR_clock_gettime 228)
 (define-inlined __NR_close 3)
 (define-inlined __NR_epoll_create1 291)

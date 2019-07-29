@@ -30,6 +30,7 @@
     valgrind)
   (import
     (rnrs (6))
+    (loko system time)
     (loko system unsafe)
     (only (loko system $x86) rdtsc)
     (only (loko system $primitives) $box-ref $bytevector-location
@@ -40,7 +41,6 @@
           $stack-pointer
           $get-mem-object)
     (loko match)
-    (only (loko system $host) current-processor-time)
     (loko arch amd64 disassembler)
     (only (loko libs context)
           CPU-VECTOR:PROCESS-VECTOR
@@ -58,29 +58,32 @@
 
 (define (time-it what thunk)
   (define (print . x) (for-each display x) (newline))
+  (define (time->µs t)
+    (+ (div (time-nanosecond t) (expt 10 3))
+       (* (time-second t) (expt 10 (- 9 3)))))
   ;; Number of garbage collections, elapsed CPU and real time, time
   ;; spent in the garbage collector, bytes allocated.
-  (let* ((t0 (current-processor-time))
-         (t1 (current-processor-time))
-         (t2 (current-processor-time))
-         (t3 (current-processor-time))
+  (let* ((t0 (cumulative-process-time))
+         (t1 (cumulative-process-time))
+         (t2 (cumulative-process-time))
+         (t3 (cumulative-process-time))
          (_ (garbage-collection-count))
          (_ ($heap-remaining))
          ;; TODO: check if this is right by averaging even more
          ;; numbers and see if this is a good approximation
-         (overhead (div (- t3 t0) 4)))
+         (overhead (div (- (time->µs t3) (time->µs t0)) 4)))
     (let* ((gc0 (garbage-collection-count))
-           (time0 (current-processor-time))
+           (time0 (cumulative-process-time))
            (hr0 ($heap-remaining))
            (tsc0 (rdtsc 'start)))
       (let ((ret (thunk)))
         (let* ((tsc1 (rdtsc 'stop))
                (hr1 ($heap-remaining))
-               (time1 (current-processor-time))
+               (time1 (cumulative-process-time))
                (gc1 (garbage-collection-count)))
           (print "Timings for " what ":")
           (print "  " (- gc1 gc0) " garbage collection runs")
-          (print "  " (div (- time1 time0 overhead) (expt 10 3))
+          (print "  " (- (time->µs time1) (time->µs time0) overhead)
                  " µs elapsed process time")
           (print "  " (- tsc1 tsc0) " elapsed processor cycles")
           ;; hr0-hr1 is accurate if there were no collections

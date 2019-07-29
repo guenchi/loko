@@ -41,6 +41,7 @@
     (only (loko init) run-user-interface init-set!)
     (loko arch amd64 processes)
     (only (loko libs io) $init-standard-ports $port-buffer-mode-set!)
+    (only (loko libs time) time-init-set!)
     (except (loko system $host) allocate)
     (only (loko repl) banner repl)
     (loko system $primitives)
@@ -586,20 +587,18 @@
         (if maybe-transcoder
             (transcoded-port p maybe-transcoder)
             p))))
-  (define (current-processor-time)
-    ;; TODO: Loko's scheduler must be involved in this so that it
-    ;; does not measure time spent in other processes, and so that
-    ;; process migration does not mess it up. Apparently Linux's
-    ;; scheduler must also be involved (see clock_getres(2)) because
-    ;; it does not work properly when threads are moved between
-    ;; processors...
+  (define (linux-get-time clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_gettime CLOCK_THREAD_CPUTIME_ID
-                                      ($bytevector-location x)))
-           (nanoseconds
-            (+ (* (expt 10 9) (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
-               (bytevector-u64-native-ref x offsetof-timespec-tv_nsec))))
-      nanoseconds))
+           (status (sys_clock_gettime clock ($bytevector-location x)))
+           (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
+           (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
+      (values seconds nanoseconds)))
+  (define (linux-get-time-resolution clock)
+    (let* ((x (make-bytevector sizeof-timespec))
+           (status (sys_clock_getres clock ($bytevector-location x)))
+           (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
+           (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
+      (values seconds nanoseconds)))
   ($init-standard-ports (lambda (bv start count)
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
                           (sys_read STDIN_FILENO (fx+ ($bytevector-location bv) start) count))
@@ -613,7 +612,12 @@
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
-  (init-set! 'current-processor-time current-processor-time)
+  (time-init-set! 'cumulative-process-time
+                  (lambda () (linux-get-time CLOCK_THREAD_CPUTIME_ID)))
+  (time-init-set! 'cumulative-process-time-resolution
+                  (lambda () (linux-get-time-resolution CLOCK_THREAD_CPUTIME_ID)))
+  (time-init-set! 'current-time (lambda () (linux-get-time CLOCK_REALTIME)))
+  (time-init-set! 'current-time-resolution (lambda () (linux-get-time-resolution CLOCK_REALTIME)))
   ;; (display "PID: ")
   ;; (write (pid-value (get-pid)))
   ;; (newline)
@@ -632,7 +636,7 @@
     (wait seconds)
     (if #f #f))
   (init-set! 'exit process-exit)
-  (init-set! 'nanosleep nanosleep)
+  (time-init-set! 'nanosleep nanosleep)
   (init-set! 'allocate allocate)
   (init-set! 'command-line (get-command-line))
   (init-set! 'environment-variables (get-environment))

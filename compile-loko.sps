@@ -55,6 +55,7 @@
     "loko/libs/io"
     "loko/libs/reader"
     "loko/libs/sorting"
+    "loko/libs/time"
     "psyntax/compat"
     "psyntax/internal"
     "psyntax/config"

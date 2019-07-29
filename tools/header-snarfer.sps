@@ -19,6 +19,7 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
 (define instructions
   '((c-include "asm/unistd.h")
     __NR_arch_prctl
+    __NR_clock_getres
     __NR_clock_gettime
     __NR_close
     __NR_epoll_create1

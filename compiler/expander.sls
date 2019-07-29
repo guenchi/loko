@@ -219,8 +219,9 @@
     (srfi98      (srfi :98 os-environment-variables)   #t    #t)
     (s98         (srfi :98)                            #t    #t)
 
-    ($compat     (loko compat)                         #f    #t)
-    (lsu         (loko system unsafe)                  #f    #t)
+    ($compat     (loko compat)                         #t    #t)
+    (time        (loko system time)                    #t    #t)
+    (lsu         (loko system unsafe)                  #t    #t)
     ($p          (loko system $primitives)             #f    #t)
     ($x86        (loko system $x86)                    #f    #t)
 
@@ -1081,6 +1082,13 @@
     (gensym-prefix            $compat)
     (call/1cc                 $compat)
 
+    ;; The (loko system time) library
+    (cumulative-process-time  time)
+    (current-time             time)
+    (time-second              time)
+    (time-nanosecond          time)
+    (time-resolution          time)
+
     ;; The (loko system unsafe) library
     (get-i/o-u8    lsu) (get-i/o-u16    lsu) (get-i/o-u32    lsu)
     (put-i/o-u8    lsu) (put-i/o-u16    lsu) (put-i/o-u32    lsu)
@@ -1098,7 +1106,6 @@
     ($mmap                    $host)
     (valgrind                 $host)
     (garbage-collection-count $host)
-    (current-processor-time   $host)
     (nanosleep                $host)
     (allocate                 $host)
     (stack-trace              $host)
