@@ -88,7 +88,9 @@
 
     make-file-options             ;for psyntax/expander
     $port-buffer-mode-set!        ;for various open-file-stuff
-    $init-standard-ports)
+    $init-standard-ports
+    open-output-string
+    get-output-string)
   (import
     (except (rnrs)
             buffer-mode? latin-1-codec utf-8-codec utf-16-codec
@@ -200,6 +202,7 @@
           (mutable get-positioner)
           (mutable set-positioner)
           (mutable closer)
+          (mutable extractor)
           ;; maybe needs a string-buffer, too
           (mutable buffer)
           (mutable buffer-r)
@@ -254,6 +257,7 @@
                          (port-get-positioner p)
                          (port-set-positioner p)
                          (port-closer p)
+                         #f
                          (port-buffer p)
                          (port-buffer-r p)
                          (port-buffer-w p)
@@ -265,6 +269,7 @@
     (port-get-positioner-set! p #f)
     (port-set-positioner-set! p #f)
     (port-closer-set! p #f)
+    (port-extractor-set! p #f)
     (port-buffer-set! p #f)
     (port-buffer-r-set! p 0)
     (port-buffer-w-set! p 0)
@@ -345,7 +350,7 @@
   (define (set-position! pos) #f)
   (assert (bytevector? bv))
   (make-port "*bytevector*" #f #b10
-             #f read! port-position set-position! #f
+             #f read! port-position set-position! #f #f
              bv 0 (bytevector-length bv) 0 #f
              'block))
 
@@ -355,21 +360,21 @@
   (define (set-position! pos) #f)
   (assert (string? string))
   (make-port "*string*" #f #b110
-             #f read! port-position set-position! #f
+             #f read! port-position set-position! #f #f
              string 0 (string-length string) 0 #f
              'block))
 
 (define (make-custom-binary-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b10
-             #f read! get-position set-position! close
+             #f read! get-position set-position! close #f
              (make-bytevector 512) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b110
-             #f read! get-position set-position! close
+             #f read! get-position set-position! close #f
              (make-string 512) 0 0 0 #f
              'block))
 
@@ -778,6 +783,7 @@
     (set! pos 0))
   (define port
     (make-custom-textual-output-port "*string*" write! #f #f close))
+  (port-extractor-set! port string-extractor)
   ;; TODO: port-position
   (values port string-extractor))
 
@@ -792,16 +798,29 @@
   ;; XXX: larger buffer size. or adaptable buffer size.
   (assert (string? id))
   (make-port (string-copy id) #f #b01
-             write! #f get-position set-position! close
+             write! #f get-position set-position! close #f
              (make-bytevector 512) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-output-port id write! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b101
-             write! #f get-position set-position! close
+             write! #f get-position set-position! close #f
              (make-string 512) 0 0 0 #f
              'block))
+
+;;; SRFI 6-style string ports
+
+(define (open-output-string)
+  (let-values ([(port extractor) (open-string-output-port)])
+    port))
+
+(define (get-output-string port)
+  (let ((extractor (port-extractor port)))
+    (unless extractor
+      (assertion-violation 'get-output-string
+                           "Expected a string output port" port))
+    (extractor)))
 
 ;;; Binary output
 

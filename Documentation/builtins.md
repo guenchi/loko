@@ -57,6 +57,16 @@ first element is the CPU type (`amd64`) and the second is the OS
 
 ### Procedure: (time-it* *what iterations thunk*)
 
+### Procedure: (open-output-string)
+
+Make a new string output port that accumulates characters in memory.
+The accumulated string can be extracted with `get-output-string`.
+
+### Procedure: (get-output-string *string-output-port*)
+
+Extract the accumulated string in *string-output-port* and reset it.
+Returns the string.
+
 ## (loko system unsafe)
 
 This library provides raw access to kernel services, linear memory and

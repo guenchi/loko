@@ -1072,6 +1072,8 @@
     (expand/optimize       ^)
     (disassemble           ^)
     (machine-type          ^)
+    (open-output-string    ^)
+    (get-output-string     ^)
 
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)
