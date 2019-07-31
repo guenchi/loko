@@ -993,6 +993,7 @@
     (assertion-error )
     (make-file-options)
     (ellipsis-map) ;for psyntax
+    (make-promise)
 
     (&condition-rtd)
     (&condition-rcd)

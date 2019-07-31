@@ -27,6 +27,7 @@
     dynamic-wind
     with-exception-handler raise raise-continuable
     assertion-violation error
+    make-promise force
 
     ;; Internal
     implementation-restriction
@@ -280,4 +281,26 @@
 ;; traps. Any errors trapped before this runs result in a panic.
 (define (register-error-invoker x)
   (vector-set! ($processor-data-ref CPU-VECTOR:PROCESS-VECTOR)
-               PROCESS-VECTOR:ERROR-INVOKER x)))
+               PROCESS-VECTOR:ERROR-INVOKER x))
+
+;;; Promises
+
+;; From r6rs-lib
+
+(define force
+  (lambda (object)
+    (object)))
+
+(define make-promise
+  (lambda (proc)
+    (let ((result-ready? #f)
+          (result #f))
+      (lambda ()
+        (if result-ready?
+            result
+            (let ((x (proc)))
+              (if result-ready?
+                  result
+                  (begin (set! result-ready? #t)
+                         (set! result x)
+                         result)))))))))
