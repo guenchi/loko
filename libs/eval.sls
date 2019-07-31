@@ -200,7 +200,10 @@
                      ,@(map pass (funcall-operand* x))))
           ((primref? x)
            (let ((name (primref-name x)))
-             (cond (((current-primitive-locations) name) => symbol-value)
+             (cond (((current-primitive-locations) name) =>
+                    (lambda (sym)
+                      (let ((v (symbol-value sym)))
+                        (if (procedure? v) v (list 'quote v)))))
                    ((eq? name '$set-interaction-env!)
                     ;; TODO:what was the point of this then?
                     (lambda (lhs rhs)
