@@ -25,7 +25,6 @@
   (export
     cpuid rdtsc
 
-    $bytevector-location
     $processor-data-ref $processor-data-set!
     $object->fixnum
 
@@ -52,11 +51,6 @@
 
 (define (rdtsc)
   (sys:rdtsc))
-
-;; maybe not strictly part of this library...?
-(define ($bytevector-location bv)
-  (bytevector-length bv)
-  (sys:$bytevector-location bv))
 
 (define ($processor-data-ref idx)
   (sys:$processor-data-ref idx))

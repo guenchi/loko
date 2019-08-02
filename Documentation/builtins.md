@@ -90,6 +90,18 @@ than C programs would do the same. There are usually interactions with
 the standard library that should be considered, such as flushing of
 ports to prevent duplicated output.
 
+### Procedure: (bytevector-address *bytevector*)
+
+Get the linear address of the first byte of *bytevector*, which is
+guaranteed to have an alignment of eight bytes. The linear address is
+not the same as the physical address.
+
+Note that a moving garbage collector is used for normally allocated
+bytevectors (created with `make-bytevector`). There is no way to ensure
+that they do not move during GC.
+
+Returns a fixnum.
+
 ### Procedure: (get-mem-u8 *addr*)
 ### Procedure: (get-mem-u16 *addr*)
 ### Procedure: (get-mem-u32 *addr*)

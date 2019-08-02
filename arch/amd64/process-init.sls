@@ -461,7 +461,7 @@
     (let ((fn (filename->c-string 'file-exists? filename)))
       (eqv? 0
             (sys_faccessat AT_FDCWD
-                           ($bytevector-location fn) F_OK
+                           (bytevector-address fn) F_OK
                            (lambda (errno)
                              (cond ((eqv? errno ENOENT) #f)
                                    ;; These are arguable. They hide errors in
@@ -481,7 +481,7 @@
     (define who 'open-file-input-port)
     (assert (buffer-mode? buffer-mode))
     (let* ((fn (filename->c-string 'open-file-input-port filename))
-           (fd (sys_open ($bytevector-location fn)
+           (fd (sys_open (bytevector-address fn)
                          (bitwise-ior O_NOCTTY O_LARGEFILE)
                          0
                          (lambda (errno)
@@ -502,7 +502,7 @@
       (define (read! bv start count)
         ;; Reading should be done in another thread...
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-        (let ((status (sys_read fd (fx+ ($bytevector-location bv) start) count
+        (let ((status (sys_read fd (fx+ (bytevector-address bv) start) count
                                 handle-read-error)))
           (cond ((eqv? status 'retry)
                  (read! bv start count))
@@ -542,7 +542,7 @@
     (define no-truncate (enum-set-member? 'no-truncate file-options))
     (assert (buffer-mode? buffer-mode))
     (let* ((fn (filename->c-string 'open-file-output-port filename))
-           (fd (sys_open ($bytevector-location fn)
+           (fd (sys_open (bytevector-address fn)
                          (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY
                                       (if no-create 0 O_CREAT)
                                       (if (and no-fail (not no-truncate)) O_TRUNC 0))
@@ -564,7 +564,7 @@
                (make-syscall-error 'write errno)))))
       (define (write! bv start count)
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-        (let ((status (sys_write fd (fx+ ($bytevector-location bv) start) count
+        (let ((status (sys_write fd (fx+ (bytevector-address bv) start) count
                                  handle-write-error)))
           (cond ((eqv? status 'retry)
                  (write! bv start count))
@@ -592,25 +592,25 @@
             p))))
   (define (linux-get-time clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_gettime clock ($bytevector-location x)))
+           (status (sys_clock_gettime clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
   (define (linux-get-time-resolution clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_getres clock ($bytevector-location x)))
+           (status (sys_clock_getres clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
   ($init-standard-ports (lambda (bv start count)
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_read STDIN_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_read STDIN_FILENO (fx+ (bytevector-address bv) start) count))
                         (lambda (bv start count)
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_write STDOUT_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_write STDOUT_FILENO (fx+ (bytevector-address bv) start) count))
                         (lambda (bv start count)
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_write STDERR_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_write STDERR_FILENO (fx+ (bytevector-address bv) start) count))
                         (eol-style lf))
   (port-file-descriptor-set! (current-input-port) STDIN_FILENO)
   (port-file-descriptor-set! (current-output-port) STDOUT_FILENO)

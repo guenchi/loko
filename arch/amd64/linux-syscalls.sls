@@ -48,7 +48,6 @@
   (import
     (rnrs (6))
     (loko system unsafe)
-    (only (loko system $primitives) $bytevector-location)
     (loko arch amd64 linux-numbers))
 
 (define-condition-type &syscall-errno &error

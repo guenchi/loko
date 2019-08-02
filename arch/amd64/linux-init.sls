@@ -44,7 +44,7 @@
 
 (define (terminal-raw-mode)
   (let ((buf (make-bytevector sizeof-termios)))
-    (when (eqv? 0 (sys_ioctl STDIN_FILENO TCGETS ($bytevector-location buf)
+    (when (eqv? 0 (sys_ioctl STDIN_FILENO TCGETS (bytevector-address buf)
                              (lambda (errno) #f)))
       (set! original-termios (bytevector-copy buf))
       (let ((iflag (bytevector-u32-native-ref buf offsetof-termios-c_iflag))
@@ -63,18 +63,18 @@
           (bytevector-u32-native-set! buf offsetof-termios-c_lflag lflag)
           (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) 1)
           (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) 0)))
-      (sys_ioctl STDIN_FILENO TCSETSW ($bytevector-location buf)))))
+      (sys_ioctl STDIN_FILENO TCSETSW (bytevector-address buf)))))
 
 ;; Restore the terminal to the way it was.
 (define (terminal-restore)
   (when (bytevector? original-termios)
-    (sys_ioctl STDOUT_FILENO TCSETSW ($bytevector-location original-termios)
+    (sys_ioctl STDOUT_FILENO TCSETSW (bytevector-address original-termios)
                (lambda (errno) #f))))
 
 ;; Get the terminal's window size. Returns cols, rows.
 (define (terminal-get-window-size)
   (let ((buf (make-bytevector sizeof-winsize)))
-    (sys_ioctl STDOUT_FILENO TIOCGWINSZ ($bytevector-location buf))
+    (sys_ioctl STDOUT_FILENO TIOCGWINSZ (bytevector-address buf))
     (values (bytevector-u16-native-ref buf offsetof-winsize-ws_col)
             (bytevector-u16-native-ref buf offsetof-winsize-ws_row))))
 
@@ -86,8 +86,8 @@
     (bytevector-u32-native-set! evp offsetof-sigevent-sigev_notify SIGEV_SIGNAL)
     (let nuts ()
       (unless (sys_timer_create clock-id
-                                ($bytevector-location evp)
-                                ($bytevector-location timer-id)
+                                (bytevector-address evp)
+                                (bytevector-address timer-id)
                                 (lambda (errno)
                                   (if (eqv? errno EAGAIN)
                                       #f
@@ -106,14 +106,14 @@
     (bytevector-u64-native-set! itimerspec #x08 nanoseconds)
     (bytevector-u64-native-set! itimerspec #x10 seconds)
     (bytevector-u64-native-set! itimerspec #x18 nanoseconds)
-    (sys_timer_settime timer flags ($bytevector-location itimerspec)
+    (sys_timer_settime timer flags (bytevector-address itimerspec)
                        NULL)))
 
 (define (linux-init-signal-handlers)
   (define NULL 0)
   (define put! bytevector-u64-native-set!)
   (define (rt_sigaction signal act)
-    (sys_rt_sigaction signal ($bytevector-location act) NULL sizeof-sigset_t))
+    (sys_rt_sigaction signal (bytevector-address act) NULL sizeof-sigset_t))
   ;; TODO: SIGWINCH via signalfd
   (let* ((size sizeof-sigset_t)
          (act (make-bytevector sizeof-sigaction)))
@@ -130,7 +130,7 @@
       ;; SIGURG runs on the alternate signal stack
       (put! ss offsetof-sigaltstack-ss_sp ($processor-data-ref CPU-VECTOR:ALTSIGSTK-BASE))
       (put! ss offsetof-sigaltstack-ss_size ($processor-data-ref CPU-VECTOR:ALTSIGSTK-SIZE))
-      (sys_sigaltstack ($bytevector-location ss) NULL))
+      (sys_sigaltstack (bytevector-address ss) NULL))
     ;; SIGURG is for preemption.
     ;; TODO: SIGSEGV must have the alternate stack, too. (stack overflow)
     (put! act offsetof-sigaction-sa_handler ($linker-address 'linux:preempt))
@@ -143,15 +143,15 @@
 (define (linux-init-terminal)
   ($init-standard-ports (lambda (bv start count)
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_read STDIN_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_read STDIN_FILENO (fx+ (bytevector-address bv) start) count))
                         (lambda (bv start count)
                           (assert (fx<=? (fx+ start count)
                                          (bytevector-length bv)))
-                          (sys_write STDOUT_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_write STDOUT_FILENO (fx+ (bytevector-address bv) start) count))
                         (lambda (bv start count)
                           (assert (fx<=? (fx+ start count)
                                          (bytevector-length bv)))
-                          (sys_write STDERR_FILENO (fx+ ($bytevector-location bv) start) count))
+                          (sys_write STDERR_FILENO (fx+ (bytevector-address bv) start) count))
                         (eol-style lf)))
 
 ;; Verify that #AC is working and triggers SIGBUG
@@ -232,12 +232,12 @@
     (define NULL 0)
     (let ((tmp (make-bytevector SIZE 0)))
       ;; Tells AFL that the fork server has started.
-      (when (eqv? (sys_write (+ FORKSRV_FD 1) ($bytevector-location tmp) SIZE
+      (when (eqv? (sys_write (+ FORKSRV_FD 1) (bytevector-address tmp) SIZE
                              (lambda (errno) #f))
                   SIZE)
         (let loop ()
           ;; wait
-          (unless (eqv? SIZE (sys_read FORKSRV_FD ($bytevector-location tmp) SIZE))
+          (unless (eqv? SIZE (sys_read FORKSRV_FD (bytevector-address tmp) SIZE))
             (exit 2))
           (let ((pid (sys_fork)))
             (cond ((eqv? pid 0)
@@ -247,9 +247,9 @@
                    (sys_close (+ FORKSRV_FD 1)))
                   (else
                    (bytevector-u32-native-set! tmp 0 pid)
-                   (sys_write (+ FORKSRV_FD 1) ($bytevector-location tmp) SIZE)
-                   (sys_wait4 pid ($bytevector-location tmp) WUNTRACED NULL)
-                   (sys_write (+ FORKSRV_FD 1) ($bytevector-location tmp) SIZE)
+                   (sys_write (+ FORKSRV_FD 1) (bytevector-address tmp) SIZE)
+                   (sys_wait4 pid (bytevector-address tmp) WUNTRACED NULL)
+                   (sys_write (+ FORKSRV_FD 1) (bytevector-address tmp) SIZE)
                    (loop))))))))
   ;; Having "__AFL_SHM_ID" as a bytevector is necessary for AFL to
   ;; recognize that the binary is instrumented.

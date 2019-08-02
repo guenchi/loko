@@ -48,7 +48,9 @@
     bytevector-ieee-single-native-set! bytevector-ieee-single-set!
     bytevector-ieee-double-native-set! bytevector-ieee-double-set!
     string->utf8 ;;string->utf16 string->utf32
-    utf8->string utf16->string utf32->string)
+    utf8->string utf16->string utf32->string
+
+    bytevector-address)
   (import
     (except (rnrs)
             native-endianness bytevector? make-bytevector bytevector-length
@@ -79,6 +81,7 @@
             string->utf8 string->utf16 string->utf32
             utf8->string utf16->string utf32->string)
     (prefix (rnrs) sys:)
+    (prefix (only (loko system unsafe) bytevector-address) sys:)
     (loko system $primitives))
 
 ;; Answers the question: are the
@@ -844,6 +847,7 @@
                      (lp i^ rem^))
                     (else
                      (put (integer->char w0))
-                     (lp i^ rem^))))))))))))))
+                     (lp i^ rem^)))))))))))))
 
-
+(define (bytevector-address bv)
+  (sys:bytevector-address bv)))

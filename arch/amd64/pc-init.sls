@@ -55,7 +55,7 @@
 
 (define (read-msr reg)
   (let ((bv (make-bytevector 8)))
-    (syscall -2 reg ($bytevector-location bv))
+    (syscall -2 reg (bytevector-address bv))
     (bytevector-u64-native-ref bv 0)))
 
 (define (write-msr reg v)

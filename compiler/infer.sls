@@ -211,7 +211,7 @@
                       (infer x^ '((type . fixnum)))
                       x^))
                  ;; Loko stuff.
-                 ((syscall $bytevector-location
+                 ((syscall bytevector-address
                            $fxquotient $fxremainder $fxlength
                            $fxfirst-bit-set $immsym->fixnum
                            $void->fixnum)

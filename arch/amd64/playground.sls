@@ -33,7 +33,7 @@
     (loko system time)
     (loko system unsafe)
     (only (loko system $x86) rdtsc)
-    (only (loko system $primitives) $box-ref $bytevector-location
+    (only (loko system $primitives) $box-ref
           $procedure-info $processor-data-ref
           $heap-remaining
           $valgrind
@@ -485,13 +485,13 @@
      (assert (fx=? request RUNNING_ON_VALGRIND))
      (let ((req (make-bytevector (* 7 8) 0)))
        (bytevector-u64-native-set! req 0 request)
-       ($valgrind ($bytevector-location req))))
+       ($valgrind (bytevector-address req))))
     ((request arg0)
      (assert (fx=? request RUNNING_ON_VALGRIND))
      (let ((req (make-bytevector (* 7 8) 0)))
        (bytevector-u64-native-set! req 0 request)
        (bytevector-u64-native-set! req 8 arg0)
-       ($valgrind ($bytevector-location req))))))
+       ($valgrind (bytevector-address req))))))
 
 
 )

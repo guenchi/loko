@@ -1100,6 +1100,7 @@
     (get-mem-u8    lsu) (get-mem-u16    lsu) (get-mem-u32    lsu) (get-mem-s61 lsu)
     (put-mem-u8    lsu) (put-mem-u16    lsu) (put-mem-u32    lsu) (put-mem-s61 lsu)
     (syscall       lsu)
+    (bytevector-address lsu)
 
     ($cpuid!                  $x86)
     (cpuid                    $x86)
@@ -1117,7 +1118,6 @@
     ;; The (loko system $primitives) library
     ($bootstrap-symbols       $p)
     ($make-bytevector         $p)
-    ($bytevector-location     $p)
     ($make-vector             $p)
     ($make-string             $p)
     ($cons                    $p)

@@ -1078,6 +1078,19 @@
                     `(cmp ,tmp ,(tag 'flonum))
                     `(je ,proceed)))))))))
 
+  (define cg-check-bytevector?
+    (case-lambda
+      ((reg1 op)
+       (unless (inferred-as? op 'bytevector)
+         (with-restart-handler (bytevector? proceed)
+           (let ((tmp (reg)))
+             ;; This sequence should get peephole optimized to a byte
+             ;; register compare.
+             (emit `(mov ,tmp ,reg1)
+                   `(and ,tmp ,(mask 'bytevector))
+                   `(cmp ,tmp ,(tag 'bytevector))
+                   `(je ,proceed))))))))
+
   (define (cg-allocation size)
     ;; Generate a heap overflow check. After this code it is ok to
     ;; use the memory in [%alloc,%alloc+size[.
@@ -1727,11 +1740,10 @@
          [else
           (cg-primcall-proc name operand* ctxt env tail?)]))
 
-      (($bytevector-location)         ;UNSAFEish
-       (let ((bv-reg (reg)) (len (reg)) (ret (reg)))
-         (emit `(mov ,bv-reg ,(cg (car operand*) 'value env #f))
-               ;; Check that it's really a bytevector
-               `(mov ,len (mem64+ ,bv-reg ,(fx- (tag 'bytevector)))))
+      ((bytevector-address)
+       (let ((bv-reg (reg)) (ret (reg)))
+         (emit `(mov ,bv-reg ,(cg (car operand*) 'value env #f)))
+         (cg-check-bytevector? bv-reg (car operand*))
          (emit `(lea ,ret (mem64+ ,bv-reg 8 8 ,(fx- (tag 'bytevector)))))
          (emit `(sal ,ret ,(shift 'fixnum)))
          ret))
