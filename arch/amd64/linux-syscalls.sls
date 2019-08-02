@@ -29,14 +29,17 @@
     sys_exit
     sys_faccessat
     sys_fork
+    sys_fstat
     sys_ioctl
     sys_lseek
+    sys_lstat
     sys_mmap
     sys_open
     sys_read
     sys_rt_sigaction
     sys_shmat
     sys_sigaltstack
+    sys_stat
     sys_timer_create
     sys_timer_settime
     sys_wait4
@@ -101,8 +104,10 @@
 (define-syscall (exit status))
 (define-syscall (faccessat dfd *filename mode))
 (define-syscall (fork))
+(define-syscall (fstat fd *statbuf))
 (define-syscall (ioctl fd request *buf))
 (define-syscall (lseek fd offset whence))
+(define-syscall (lstat *pathname *statbuf))
 (define-syscall (mmap addr length prot flags fd offset))
 (define-syscall (open *pathname flags mode))
 (define-syscall (preadv fd *vec vlen pos_l pos_h))
@@ -111,6 +116,7 @@
 (define-syscall (rt_sigaction signal act oact sigsetsize))
 (define-syscall (shmat shmid *shmaddr shmflg))
 (define-syscall (sigaltstack uss uoss))
+(define-syscall (stat *pathname *statbuf))
 (define-syscall (timer_create clock event-spec created-id))
 (define-syscall (timer_settime timer flags new-setting old-setting))
 (define-syscall (wait4 pid *status options *rusage))

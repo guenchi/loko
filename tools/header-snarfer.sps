@@ -29,8 +29,10 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
     __NR_exit
     __NR_faccessat
     __NR_fork
+    __NR_fstat
     __NR_ioctl
     __NR_lseek
+    __NR_lstat
     __NR_mmap
     __NR_open
     __NR_preadv
@@ -457,6 +459,25 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
     SEEK_DATA
     SEEK_HOLE
 
+    (c-include "linux/stat.h")
+    (struct stat
+            st_dev st_ino st_mode st_nlink st_uid st_gid
+            st_rdev st_size st_blksize st_blocks
+            st_atime st_atime_nsec
+            st_mtime st_mtime_nsec
+            st_ctime st_ctime_nsec)
+
+    (c-include "asm/stat.h")
+    (fmt "#o%o")
+    S_IFMT
+    S_IFLNK
+    S_IFREG
+    S_IFDIR
+    S_IFCHR
+    S_IFBLK
+    S_IFIFO
+    S_IFSOCK
+
     ;; Not really part of the Linux ABI, but says how to use exit()
     (c-include "sysexits.h")
     EX_OK
@@ -495,7 +516,9 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
          ((ifdef)
           (print "#ifdef " (cadr x)))
          ((c-include)
-          (print-include (cadr x)))
+          (for-each (lambda (name) (print "#define " name)) (cddr x))
+          (print-include (cadr x))
+          (for-each (lambda (name) (print "#undef " name)) (cddr x)))
          ((endif)
           (print "#endif")))))
    instructions))
@@ -584,6 +607,7 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
 (print-include "ctype.h")                     ;tolower
 (print-include "stdio.h")                     ;printf
 (print-include "sys/utsname.h")               ;uname
+(print "#undef __GLIBC__")
 (includes instructions)
 (print "#define offsetof(TYPE, MEMBER) __builtin_offsetof (TYPE, MEMBER)")
 

@@ -19,8 +19,10 @@
     __NR_exit
     __NR_faccessat
     __NR_fork
+    __NR_fstat
     __NR_ioctl
     __NR_lseek
+    __NR_lstat
     __NR_mmap
     __NR_open
     __NR_preadv
@@ -437,6 +439,31 @@
     SEEK_END
     SEEK_DATA
     SEEK_HOLE
+    sizeof-stat
+    offsetof-stat-st_dev
+    offsetof-stat-st_ino
+    offsetof-stat-st_mode
+    offsetof-stat-st_nlink
+    offsetof-stat-st_uid
+    offsetof-stat-st_gid
+    offsetof-stat-st_rdev
+    offsetof-stat-st_size
+    offsetof-stat-st_blksize
+    offsetof-stat-st_blocks
+    offsetof-stat-st_atime
+    offsetof-stat-st_atime_nsec
+    offsetof-stat-st_mtime
+    offsetof-stat-st_mtime_nsec
+    offsetof-stat-st_ctime
+    offsetof-stat-st_ctime_nsec
+    S_IFMT
+    S_IFLNK
+    S_IFREG
+    S_IFDIR
+    S_IFCHR
+    S_IFBLK
+    S_IFIFO
+    S_IFSOCK
     EX_OK
     EX_USAGE
     EX_DATAERR
@@ -472,8 +499,10 @@
 (define-inlined __NR_exit 60)
 (define-inlined __NR_faccessat 269)
 (define-inlined __NR_fork 57)
+(define-inlined __NR_fstat 5)
 (define-inlined __NR_ioctl 16)
 (define-inlined __NR_lseek 8)
+(define-inlined __NR_lstat 6)
 (define-inlined __NR_mmap 9)
 (define-inlined __NR_open 2)
 (define-inlined __NR_preadv 295)
@@ -932,6 +961,35 @@
 (define-inlined SEEK_END 2)
 (define-inlined SEEK_DATA 3)
 (define-inlined SEEK_HOLE 4)
+
+;;; linux/stat.h
+(define-inlined sizeof-stat 144)
+(define-inlined offsetof-stat-st_dev 0)
+(define-inlined offsetof-stat-st_ino 8)
+(define-inlined offsetof-stat-st_mode 24)
+(define-inlined offsetof-stat-st_nlink 16)
+(define-inlined offsetof-stat-st_uid 28)
+(define-inlined offsetof-stat-st_gid 32)
+(define-inlined offsetof-stat-st_rdev 40)
+(define-inlined offsetof-stat-st_size 48)
+(define-inlined offsetof-stat-st_blksize 56)
+(define-inlined offsetof-stat-st_blocks 64)
+(define-inlined offsetof-stat-st_atime 72)
+(define-inlined offsetof-stat-st_atime_nsec 80)
+(define-inlined offsetof-stat-st_mtime 88)
+(define-inlined offsetof-stat-st_mtime_nsec 96)
+(define-inlined offsetof-stat-st_ctime 104)
+(define-inlined offsetof-stat-st_ctime_nsec 112)
+
+;;; asm/stat.h
+(define-inlined S_IFMT #o170000)
+(define-inlined S_IFLNK #o120000)
+(define-inlined S_IFREG #o100000)
+(define-inlined S_IFDIR #o40000)
+(define-inlined S_IFCHR #o20000)
+(define-inlined S_IFBLK #o60000)
+(define-inlined S_IFIFO #o10000)
+(define-inlined S_IFSOCK #o140000)
 
 ;;; sysexits.h
 (define-inlined EX_OK 0)
