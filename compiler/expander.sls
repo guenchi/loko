@@ -1073,8 +1073,9 @@
     (expand/optimize       ^)
     (disassemble           ^)
     (machine-type          ^)
-    (open-output-string    ^)
-    (get-output-string     ^)
+    (open-output-string    ^)           ;for SRFI 6
+    (get-output-string     ^)           ;for SRFI 6
+    (port-file-descriptor  ^)           ;for SRFI-170
 
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)

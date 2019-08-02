@@ -90,7 +90,9 @@
     $port-buffer-mode-set!        ;for various open-file-stuff
     $init-standard-ports
     open-output-string
-    get-output-string)
+    get-output-string
+    port-file-descriptor
+    port-file-descriptor-set!)
   (import
     (except (rnrs)
             buffer-mode? latin-1-codec utf-8-codec utf-16-codec
@@ -203,6 +205,7 @@
           (mutable set-positioner)
           (mutable closer)
           (mutable extractor)
+          (mutable file-descriptor)
           ;; maybe needs a string-buffer, too
           (mutable buffer)
           (mutable buffer-r)
@@ -258,6 +261,7 @@
                          (port-set-positioner p)
                          (port-closer p)
                          #f
+                         (port-file-descriptor p)
                          (port-buffer p)
                          (port-buffer-r p)
                          (port-buffer-w p)
@@ -270,6 +274,7 @@
     (port-set-positioner-set! p #f)
     (port-closer-set! p #f)
     (port-extractor-set! p #f)
+    (port-file-descriptor-set! p #f)
     (port-buffer-set! p #f)
     (port-buffer-r-set! p 0)
     (port-buffer-w-set! p 0)
@@ -350,7 +355,7 @@
   (define (set-position! pos) #f)
   (assert (bytevector? bv))
   (make-port "*bytevector*" #f #b10
-             #f read! port-position set-position! #f #f
+             #f read! port-position set-position! #f #f #f
              bv 0 (bytevector-length bv) 0 #f
              'block))
 
@@ -360,21 +365,21 @@
   (define (set-position! pos) #f)
   (assert (string? string))
   (make-port "*string*" #f #b110
-             #f read! port-position set-position! #f #f
+             #f read! port-position set-position! #f #f #f
              string 0 (string-length string) 0 #f
              'block))
 
 (define (make-custom-binary-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b10
-             #f read! get-position set-position! close #f
+             #f read! get-position set-position! close #f #f
              (make-bytevector 512) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b110
-             #f read! get-position set-position! close #f
+             #f read! get-position set-position! close #f #f
              (make-string 512) 0 0 0 #f
              'block))
 
@@ -798,14 +803,14 @@
   ;; XXX: larger buffer size. or adaptable buffer size.
   (assert (string? id))
   (make-port (string-copy id) #f #b01
-             write! #f get-position set-position! close #f
+             write! #f get-position set-position! close #f #f
              (make-bytevector 512) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-output-port id write! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b101
-             write! #f get-position set-position! close #f
+             write! #f get-position set-position! close #f #f
              (make-string 512) 0 0 0 #f
              'block))
 
@@ -1448,7 +1453,6 @@
   (make-custom-binary-input-port "*stdin*" *stdin-read* #f #f #f))
 
 (define (standard-output-port)
-  ;; XXX: standard out should be line buffered
   (let ((p (make-custom-binary-output-port "*stdout*" *stdout-write* #f #f #f)))
     ($port-buffer-mode-set! p (buffer-mode line))
     p))

@@ -40,7 +40,8 @@
     (loko system unsafe)
     (only (loko init) run-user-interface init-set!)
     (loko arch amd64 processes)
-    (only (loko libs io) $init-standard-ports $port-buffer-mode-set!)
+    (only (loko libs io) $init-standard-ports $port-buffer-mode-set!
+          port-file-descriptor-set!)
     (only (loko libs time) time-init-set!)
     (except (loko system $host) allocate)
     (only (loko repl) banner repl)
@@ -529,6 +530,7 @@
       (let ((p (make-custom-binary-input-port
                 filename read! get-position set-position! close)))
         ($port-buffer-mode-set! p buffer-mode)
+        (port-file-descriptor-set! p fd)
         (if maybe-transcoder
             (transcoded-port p maybe-transcoder)
             p))))
@@ -584,6 +586,7 @@
       (let ((p (make-custom-binary-output-port
                 filename write! get-position #f close)))
         ($port-buffer-mode-set! p buffer-mode)
+        (port-file-descriptor-set! p fd)
         (if maybe-transcoder
             (transcoded-port p maybe-transcoder)
             p))))
@@ -609,6 +612,9 @@
                           (assert (fx<=? (fx+ start count) (bytevector-length bv)))
                           (sys_write STDERR_FILENO (fx+ ($bytevector-location bv) start) count))
                         (eol-style lf))
+  (port-file-descriptor-set! (current-input-port) STDIN_FILENO)
+  (port-file-descriptor-set! (current-output-port) STDOUT_FILENO)
+  (port-file-descriptor-set! (current-error-port) STDERR_FILENO)
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
