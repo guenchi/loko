@@ -65,16 +65,7 @@ Or to get a basic REPL on the VGA text console and on the serial port
 qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -append '-- --ide'
 ```
 
-Multiboot modules provided by `-initrd` are made available in `/boot`.
-Here's an example showing how the hypothetical library `(testlib)` and
-the program `test.sps` can be started in pid 1:
-
-```sh
-qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio \
-  -append 'LOKO_LIBRARY_PATH=/boot -- --program /boot/test.sps' \
-  -initrd 'testlib.sls,test.sps'
-```
-
+See the [samples](samples) directory for more advanced examples.
 
 ## Contact
 
