@@ -73,10 +73,11 @@
 (define *open-file-input-port*
   (lambda (filename y z w)
     (raise
-      (make-i/o-error)
-      (make-who-condition 'open-file-input-port)
-      (make-message-condition "No open-file-input-port procedure has been installed")
-      (make-irritants-condition filename))))
+      (condition
+       (make-i/o-error)
+       (make-who-condition 'open-file-input-port)
+       (make-message-condition "No open-file-input-port procedure has been installed")
+       (make-irritants-condition filename)))))
 (define open-file-input-port
   (case-lambda
     ((x)
@@ -127,10 +128,11 @@
 (define *delete-file*
   (lambda (filename)
     (raise
-      (make-i/o-error)
-      (make-who-condition 'delete-file)
-      (make-message-condition "No delete-file procedure has been installed")
-      (make-irritants-condition filename))))
+      (condition
+       (make-i/o-error)
+       (make-who-condition 'delete-file)
+       (make-message-condition "No delete-file procedure has been installed")
+       (make-irritants-condition filename)))))
 (define (delete-file fn)
   (*delete-file* fn))
 

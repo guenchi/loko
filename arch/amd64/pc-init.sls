@@ -46,9 +46,9 @@
     (loko system $host)
     (loko system $primitives))
 
-;; Alist of filename to textual input port. This will represent some
-;; sort of early filesystem.
-(define *modules* '())
+;; Boot modules.
+;; (("filename" (args ...) base-address length) ...)
+(define *boot-modules* '())
 
 ;; Loko syscalls
 (define (sys_hlt) (syscall -1))
@@ -718,13 +718,14 @@
                    ((boot-loader)
                     (pcb-msg-set! pcb 'multiboot))
                    ((command-line)
-                    ;; XXX: command-line and environment
-                    ;; are extremely iffy. Process must
-                    ;; immediately copy the variables to
-                    ;; its own storage.
+                    ;; XXX: command-line, environment and boot-modules
+                    ;; are extremely iffy. Process must immediately
+                    ;; copy the variables to its own storage.
                     (pcb-msg-set! pcb (command-line)))
                    ((environment)
                     (pcb-msg-set! pcb (get-environment-variables)))
+                   ((boot-modules)
+                    (pcb-msg-set! pcb *boot-modules*))
                    (else
                     (display "bad message: ")
                     (write msg)
@@ -1212,9 +1213,7 @@
   ;;      (addr #x400 (fx+ addr 4))
   ;;      (i 0 (fx+ i 4)))
   ;;     ((fx=? i #x100)
-  ;;      (set! *modules*
-  ;;            (cons (cons 'bios-data (open-bytevector-input-port bv))
-  ;;                  *modules*)))
+  ;;      (set! bios-data bv))
   ;;   (bytevector-u32-native-set! bv i (get-mem-u32 addr)))
 
   (when (set? flag-cmdline)
@@ -1257,8 +1256,7 @@
         (bss-end-addr ($linker-address 'bss-end)))
     (mark-area load-addr (fx- bss-end-addr load-addr) 'kernel))
 
-  ;; Modules contain Scheme code. These will be compiled later on,
-  ;; so the memory must be marked. All modules are page-aligned.
+  ;; Modules contain Scheme code to run in pid 1.
   (when (set? flag-mods)
     (do ((mods (mbi-ref field-mods-count))
          (addr (mbi-ref field-mods-addr) (fx+ addr 16))
@@ -1267,11 +1265,14 @@
       (let ((start (get-mem-u32 addr))
             (end (get-mem-u32 (fx+ addr 4)))
             (str (utf8->string (copy-utf8z (get-mem-u32 (fx+ addr 8))))))
+        ;; Mark the code so we don't accidentally overwrite it.
         (mark-area start (fx- end start) (cons 'module str))
         ;; TODO: free the pages used by the modules after using them
-        (set! *modules*
-              (cons (cons str (open-memory-input-port str start (fx- end start)))
-                    *modules*)))))
+        (let-values ([(env cmdline)
+                      (pc-init-parse-command-line str)])
+          (set! *boot-modules* (cons (list (car cmdline) (cdr cmdline)
+                                           start (fx- end start))
+                                     *boot-modules*))))))
 
   ;; BIOS data area + some extra for good measure, VGA, EBDA, ROMs.
   (mark-area 0 #x3000 'bios)

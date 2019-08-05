@@ -37,6 +37,7 @@
   (import
     (except (rnrs) command-line exit)
     (srfi :98 os-environment-variables)
+    (loko match)
     (loko system unsafe)
     (only (loko init) run-user-interface init-set!)
     (loko arch amd64 processes)
@@ -55,7 +56,7 @@
     (loko main))
 
 (define-record-type pid
-  (sealed #t) (opaque #t)
+  (sealed #t) (opaque #f)
   (fields value))
 
 (define (get-command-line)
@@ -70,6 +71,14 @@
            (cons (string-copy (car var))
                  (string-copy (cdr var))))
          env)))
+
+(define (get-boot-modules)
+  (let ((modules ($process-yield '(boot-modules))))
+    (assert (list? modules))
+    (map (match-lambda
+          [((? string? fn) _args (? fixnum? start) (? fixnum? len))
+           (list (string-copy fn) '() start len)])
+         modules)))
 
 (define (get-pid)
   (let ((id ($process-yield '(get-pid))))
@@ -426,6 +435,55 @@
         [else
          #f]))))
 
+;; Hook up a minimal /boot filesystem consisting of the multiboot
+;; modules.
+(define (pc-setup-boot-filesystem)
+  (define boot-modules (get-boot-modules))
+  (define (find-module filename)
+    (find (lambda (mod)
+            (equal? (string-append "/boot/" (car mod))
+                    filename))
+          boot-modules))
+  (define (file-exists? filename)
+    (cond ((find-module filename) #t)
+          ((member filename '("/" "/boot")) #t)
+          (else #f)))
+  (define (open-file-input-port filename file-options buffer-mode maybe-transcoder)
+    (define who 'open-file-input-port)
+    (cond
+      ((find-module filename) =>
+       (lambda (mod)
+         (let ((base (caddr mod)) (size (cadddr mod)) (position 0))
+           (define (read! bv start count)
+             (define remaining (fx- size position))
+             (do ((n (fxmin count remaining))
+                  (addr (fx+ base position) (fx+ addr 1))
+                  (i start (fx+ i 1)))
+                 ((fx=? i n)
+                  (set! position (fx+ position n))
+                  n)
+               (bytevector-u8-set! bv i (get-mem-u8 addr))))
+           (define (get-position)
+             position)
+           (define (set-position! off)
+             (set! position (fxmin off size)))
+           (define (close)
+             (if #f #f))
+           (let ((p (make-custom-binary-input-port
+                     filename read! get-position set-position! close)))
+             ($port-buffer-mode-set! p buffer-mode)
+             (if maybe-transcoder
+                 (transcoded-port p maybe-transcoder)
+                 p)))))
+      (else
+       (raise (condition
+               (make-who-condition who)
+               (make-i/o-file-does-not-exist-error filename)
+               (make-message-condition "Could not open boot module")
+               (make-irritants-condition (list filename)))))))
+  (init-set! 'file-exists? file-exists?)
+  (init-set! 'open-file-input-port open-file-input-port))
+
 (define (linux-process-setup)
   ;; TODO: this is NOT what should happen. There should be message
   ;; passing and things like that. Basically none of these syscalls
@@ -666,13 +724,16 @@
          ((1)
           (new-process)                 ;starts the serial console
           (current-console (make-console (vga-textmode-backend)))
+          (pc-setup-boot-filesystem)
           (let lp ()
             (main)
             (lp)))
          ((2)
           ;; FIXME: Needs more IPC
+          (init-set! 'command-line '("loko"))
           (com0-setup)
           (current-console (default-console))
+          (pc-setup-boot-filesystem)
           (let lp ()
             (main)
             (lp)))
