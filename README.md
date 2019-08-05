@@ -1,8 +1,12 @@
 # Loko Scheme
 
-Loko Scheme is an implementation of the algorithmic programming
-language R6RS Scheme. It runs on the Linux kernel (amd64) and on bare
-amd64 hardware.
+Loko Scheme is an implementation of the algorithmic language R6RS
+Scheme. It runs on the Linux kernel (amd64) and on bare amd64
+hardware.
+
+Loko Scheme is intended to be a platform for application and operating
+system development. It is written purely in Scheme and assembler
+language.
 
 ## Current status
 
