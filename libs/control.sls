@@ -32,7 +32,8 @@
     ;; Internal
     implementation-restriction
     register-error-invoker
-    print-condition)
+    print-condition
+    assertion-error)
   (import
     (except (rnrs)
             procedure?
@@ -46,7 +47,9 @@
     (loko system $host)
     (only (loko libs context)
           CPU-VECTOR:PROCESS-VECTOR
-          PROCESS-VECTOR:ERROR-INVOKER))
+          PROCESS-VECTOR:ERROR-INVOKER)
+    (only (loko libs reader)
+          annotation-source->condition))
 
 (define (procedure? x) (sys:procedure? x))
 
@@ -180,6 +183,14 @@
           (make-who-condition who)
           (make-message-condition msg)
           (make-irritants-condition irritants))))
+
+(define (assertion-error expr pos)
+  (raise (condition
+          (make-assertion-violation)
+          (make-who-condition 'assert)
+          (make-message-condition "Assertion failed")
+          (make-irritants-condition (list expr))
+          (annotation-source->condition pos))))
 
 (define (assertion-violation who msg . irritants)
   (define EX_SOFTWARE 70)            ;Linux: internal software error

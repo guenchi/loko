@@ -27,7 +27,8 @@
   (import
     (rnrs (6))
     (rnrs mutable-strings (6))
-    (only (loko init) init-set! run-user-interface)
+    (only (loko) compile-program)
+    (only (loko init) init-set!)
     (only (loko repl) banner repl)
     (only (psyntax expander) compile-r6rs-top-level)
     (only (loko libs reader) read-annotated)
@@ -99,27 +100,23 @@
      (match rest
        [(fn . rest)
         (init-set! 'command-line (cons fn rest))
-        (run-program fn)
-        (exit 0)]
+        (run-program fn)]
        [()
         (display "Fatal: the Loko scheme-script program expects a filename.\n"
                  (current-error-port))
         (exit 1)])]
     [(exec-name (or "--script" "--program") fn . rest)
      (init-set! 'command-line (cons fn rest))
-     (run-program fn)
-     (exit 0)]
-    [(exec-name "--ide" . rest)
-     (run-user-interface)
-     (exit 0)]
+     (run-program fn)]
+    [(exec-name "--compile" sps-fn "--output" out-fn)
+     (compile-program out-fn sps-fn '())]
     [(exec-name)
      (banner)
      (repl)
      ;; All polite Schemes say good bye
-     (display "Sabbaṁ pahāya gamanīyaṁ.\n")
-     (exit 0)]
+     (display "Sabbaṁ pahāya gamanīyaṁ.\n")]
     [args
      (display "Fatal: unrecognized Loko command line:\n" (current-error-port))
      (write args (current-error-port))
-     (newline)
+     (newline (current-error-port))
      (exit 1)])))

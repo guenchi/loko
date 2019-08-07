@@ -56,20 +56,14 @@ scheme-script`.
 
 ## Running on KVM
 
-To get a REPL on the serial port:
+To get a REPL on the serial port (no echo or line editing, but it
+works as an inferior Scheme for Emacs):
 
 ```sh
 qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
 ```
 
-Or to get a basic REPL on the VGA text console and on the serial port
-(Ctrl+Alt+3):
-
-```sh
-qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -append '-- --ide'
-```
-
-See the [samples](samples) directory for more advanced examples.
+See the [samples](samples) directory for more examples.
 
 ## Contact
 
@@ -82,6 +76,8 @@ See the [samples](samples) directory for more advanced examples.
 
 **Work is pending to formulate an exception to this license. For now,
 there is no exception. See https://gitlab.com/weinholt/loko/issues/2.**
+
+**The samples/ directory is covered by a different license.**
 
 Copyright © 2019 Göran Weinholt
 

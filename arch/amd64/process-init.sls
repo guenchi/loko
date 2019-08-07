@@ -39,21 +39,15 @@
     (srfi :98 os-environment-variables)
     (loko match)
     (loko system unsafe)
-    (only (loko init) run-user-interface init-set!)
+    (only (loko init) init-set!)
     (loko arch amd64 processes)
     (only (loko libs io) $init-standard-ports $port-buffer-mode-set!
           port-file-descriptor-set!)
     (only (loko libs time) time-init-set!)
     (except (loko system $host) allocate)
-    (only (loko repl) banner repl)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
-    (loko arch amd64 linux-syscalls)
-    (text-mode console)
-    (text-mode console events)
-    (text-mode console model)
-    (text-mode platform)
-    (loko main))
+    (loko arch amd64 linux-syscalls))
 
 (define-record-type pid
   (sealed #t) (opaque #f)
@@ -180,7 +174,7 @@
   )
 
 (define (com0-setup)
-  ;; Start a REPL on com0
+  ;; Start standard input/output on com0
   (define com0 #x3f8)
   (define com0-irq 4)
   (define rbr (+ com0 0))
@@ -239,201 +233,6 @@
                   k))
            (bytevector-u8-set! bv start (get-i/o-u8 rbr))))))
    put put (eol-style crlf)))
-
-(define (make-keyboard-reader)
-  ;; 1st level entries:
-  ;; (<code> <no-mods> <shift> <alt-graph>)
-  ;; 2nd level entries: <char> | <symbol>
-  (define swedish-keymap
-    '((1 Escape Escape)
-      (41 #\§ #\½)
-      (2 #\1 #\!) (3 #\2 #\") (4 #\3 #\# #\£) (5 #\4 #\¤ #\$) (6 #\5 #\% #\€)
-      (7 #\6 #\& #\¥) (8 #\7 #\/ #\{) (9 #\8 #\( #\[) (10 #\9 #\) #\]) (11 #\0 #\= #\})
-      (12 #\+ #\?) (14 Backspace Backspace)
-      (15 Tab Tab)
-      (16 #\q #\Q) (17 #\w #\W) (18 #\e #\E) (19 #\r #\R) (20 #\t #\T) (21 #\y #\Y)
-      (22 #\u #\U) (23 #\i #\I) (24 #\o #\O) (25 #\p #\P) (26 #\å #\Å)
-
-      (28 Enter Enter)
-
-      (30 #\a #\A) (31 #\s #\S) (32 #\d #\D) (33 #\f #\F) (34 #\g #\G) (35 #\h #\H)
-      (36 #\j #\J) (37 #\k #\K) (38 #\l #\L) (39 #\ö #\Ö) (40 #\ä #\Ä)
-      ;; (#x1B dead_key)
-
-      (43 #\' #\*)
-
-      (44 #\z #\Z) (45 #\x #\X) (46 #\c #\C) (47 #\v #\V) (48 #\b #\B) (49 #\n #\N)
-      (50 #\m #\M) (51 #\, #\;) (52 #\. #\:) (53 #\- #\_)
-
-      (57 #\space #\space)
-
-      (86 #\< #\>)
-
-      ;; (29 ctrl)                           ; left ctrl
-      ;; (42 shift)
-      ;; (54 shift)
-      ;; (56 alt)
-
-      ;; (#xE01D ctrl)                       ; right ctrl
-      ;; (#xE038 altgr)
-      ;; (#xE05B meta)
-      ;; (#xE05D compose)
-
-      ;; (58 ctrl)                           ; (58 caps-lock)
-      ;; (69 num-lock)
-      ;; (70 scroll-lock)
-
-      (59 F1 F1) (60 F2 F2) (61 F3 F3) (62 F4 F4)
-
-      (#xE052 Insert Insert)
-      (#xE047 Home Home)
-      (#xE049 PageUp PageUp)
-      (#xE053 Delete Delete)
-      (#xE04F End End)
-      (#xE051 PageDown PageDown)
-
-      (#xE04B ArrowLeft ArrowLeft)
-      (#xE04D ArrowRight ArrowRight)
-      (#xE048 ArrowUp ArrowUp)
-      (#xE050 ArrowDown ArrowDown)))
-  (define kbd-irq 1)
-  (define kbd-data #x60)
-  (define kbd-sts/cmd #x64)
-  (define (read-scancode) (get-i/o-u8 kbd-data))
-  (define (read-status) (get-i/o-u8 kbd-sts/cmd))
-  (define mods (modifier-set))
-  (enable-irq kbd-irq)
-  (lambda ()
-    (let lp-ext ((extended 0))
-      (let lp ()
-        (let ((msg (acknowledge-irq/wait kbd-irq #f)))
-          (if (fxzero? (fxand (read-status) #b1))
-              (lp)                        ;no data
-              (let ((scancode (fxior extended (read-scancode))))
-                (case scancode
-                  ((#x38)
-                   (set! mods (enum-set-union mods (modifier-set alt)))
-                   (lp-ext 0))
-                  ((#xB8)
-                   (set! mods (enum-set-difference mods (modifier-set alt)))
-                   (lp-ext 0))
-
-                  ((#xE038)
-                   (set! mods (enum-set-union mods (modifier-set alt-graph)))
-                   (lp-ext 0))
-                  ((#xE0B8)
-                   (set! mods (enum-set-difference mods (modifier-set alt-graph)))
-                   (lp-ext 0))
-
-                  ((#x1D #xE01D #x3A)
-                   (set! mods (enum-set-union mods (modifier-set ctrl)))
-                   (lp-ext 0))
-                  ((#x9D #xE09D #xBA)
-                   (set! mods (enum-set-difference mods (modifier-set ctrl)))
-                   (lp-ext 0))
-
-                  ((42 54)
-                   (set! mods (enum-set-union mods (modifier-set shift)))
-                   (lp-ext 0))
-                  ((170 182)
-                   (set! mods (enum-set-difference mods (modifier-set shift)))
-                   (lp-ext 0))
-
-                  ((#xE0)
-                   ;; Extended scancodes
-                   (lp-ext #xE000))
-
-                  (else
-                   (cond
-                     ((fxbit-set? scancode 7)
-                      ;; Released key
-                      (lp-ext 0))
-                     ((assv scancode swedish-keymap) =>
-                      (lambda (binding)
-                        (let* ((binding (cdr binding))
-                               (level2
-                                (cond ((enum-set-member? (modifier shift) mods)
-                                       (cadr binding))
-                                      ((and (enum-set-member? (modifier alt-graph) mods)
-                                            (fx>=? (length binding) 3))
-                                       (caddr binding))
-                                      (else
-                                       (car binding)))))
-                          (if (char? level2)
-                              (make-key-press-event mods level2 level2 'standard)
-                              (make-key-press-event mods #f level2 'standard)))))
-                     (else
-                      (make-unknown-event 'keyboard scancode))))))))))))
-
-(define (vga-textmode-backend)
-  (define pid (get-pid))
-  (define mem-base #xb8000)
-  (define reg-base #x3c0)
-  (define rows 25)
-  (define cols 80)
-  ;; VGA regs
-  (define crtc-addr 20)
-  (define crtc-data 21)
-  ;; Registers in the CRT Controller:
-  (define cursor-start #x0a)
-  (define cursor-end #x0b)
-  (define cursor-location-high #x0e)
-  (define cursor-location-low #x0f)
-  (define (crtc-read addr)
-    (put-i/o-u8 (fx+ reg-base crtc-addr) addr)
-    (get-i/o-u8 (fx+ reg-base crtc-data)))
-  (define (crtc-write addr byte)
-    (put-i/o-u8 (fx+ reg-base crtc-addr) addr)
-    (put-i/o-u8 (fx+ reg-base crtc-data) byte))
-  (define (vga-cursor-move x y)
-    (let ((offset (+ x (* y cols))))
-      (crtc-write cursor-location-low (fxbit-field offset 0 8))
-      (crtc-write cursor-location-high (fxbit-field offset 8 16))))
-  (define vga-colors
-    (vector Black Blue Green Cyan Red Magenta Brown Gray
-            DarkGray LightBlue LightGreen LightCyan LightRed
-            LightMagenta Yellow White))
-  (define (closest-color col fallback)
-    (if (eqv? col Default)
-        fallback
-        (let lp ((i 0))
-          (cond ((fx=? i (vector-length vga-colors)) fallback)
-                ((fx=? col (vector-ref vga-colors i)) i)
-                (else (lp (fx+ i 1)))))))
-  (let ((keyboard (make-keyboard-reader)))
-    (lambda (cmd arg)
-      (case cmd
-        [(get-size)
-         (values cols rows 0 0)]
-        [(init)
-         #f]
-        [(update redraw)
-         (let ((c arg))
-           (assert (fx=? cols (console-full-cols c)))
-           (assert (fx=? rows (console-full-rows c)))
-           (do ((y 0 (fx+ y 1))) ((fx=? y rows))
-             (let ((mem-row (fx* 2 (fx* y cols))))
-               (when (console-row-dirty? c y 'absolute)
-                 (let-values ([(buf mbuf fgbuf bgbuf abuf idx) (%index/nowin c 0 y)])
-                   (do ((x 0 (fx+ x 1))) ((fx=? x cols))
-                     (let ((mem-offset (fx+ (fx* 2 x) mem-row)))
-                       (let ((ch (text-ref buf (fx+ idx x))))
-                         (unless (textcell-unused? ch)
-                           (put-mem-u8 (fx+ mem-base mem-offset)
-                                        (char->integer ch))
-                           (let ((fg (closest-color (fg-ref fgbuf (fx+ idx x)) 7))
-                                 (bg (closest-color (bg-ref bgbuf (fx+ idx x)) 0)))
-                             (put-mem-u8 (fx+ mem-base (fx+ mem-offset 1))
-                                         (fxior (fxarithmetic-shift-left bg 4)
-                                                fg)))))))))))
-           (clear-console-dirty! c)
-           (vga-cursor-move (fx+ (console-x c) (console-x1 c))
-                            (fx+ (console-y c) (console-y1 c))))]
-        [(read-event)
-         #; (let lp () (wait (expt 10 9)) (lp))
-         (keyboard)]
-        [else
-         #f]))))
 
 ;; Hook up a minimal /boot filesystem consisting of the multiboot
 ;; modules.
@@ -712,9 +511,7 @@
        (case (pid-value pid)
          ((1)
           ;; FIXME: Needs to use IPC for port communication
-          (linux-process-setup)
-          (current-console (default-console))
-          (main))
+          (linux-process-setup))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))
     ((multiboot)
@@ -722,27 +519,13 @@
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)
-          (new-process)                 ;starts the serial console
-          (current-console (make-console (vga-textmode-backend)))
-          (pc-setup-boot-filesystem)
-          (let lp ()
-            (main)
-            (lp)))
-         ((2)
-          ;; FIXME: Needs more IPC
-          (init-set! 'command-line '("loko"))
           (com0-setup)
-          (current-console (default-console))
-          (pc-setup-boot-filesystem)
-          (let lp ()
-            (main)
-            (lp)))
+          (pc-setup-boot-filesystem))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))
     (else
      (error '$init-process "Internal error: wrong value for get-boot-loader"
-            (get-boot-loader))))
-  (process-exit 0))
+            (get-boot-loader)))))
 
 (when (eq? ($boot-loader-type) 'scheme)
   (init-set! 'init process-init)))

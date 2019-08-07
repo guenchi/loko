@@ -32,7 +32,6 @@
     open-file-input/output-port
     $mmap
     allocate
-    run-user-interface
     machine-type
     init
     init-set!)
@@ -151,11 +150,6 @@
 (define (init)
   (*init*))
 
-(define *run-user-interface*
-  (lambda _ (error 'run-user-interface "There is no user interface installed")))
-(define (run-user-interface)
-  (*run-user-interface*))
-
 (define *machine-type* '#(unknown unknown))
 (define (machine-type)
   *machine-type*)
@@ -173,7 +167,6 @@
     ((open-file-output-port) (set! *open-file-output-port* value))
     ((allocate) (set! *allocate* value))
     ((init) (set! *init* value))
-    ((run-user-interface) (set! *run-user-interface* value))
     ((machine-type) (set! *machine-type* value))
     (else
      (error 'init-set! "Unrecognized key" what value)))))

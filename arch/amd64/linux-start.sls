@@ -272,7 +272,7 @@
     ;; Debug scripts for GDB
     (%label ,:debug_gdb_scripts)
     (%u8 1)                           ;Python
-    (%utf8z "src/loko/arch/amd64/loko-gdb.py")
+    (%utf8z "arch/amd64/loko-gdb.py")
     (%label ,:debug_gdb_scripts-end)))
 
 ;;; .text

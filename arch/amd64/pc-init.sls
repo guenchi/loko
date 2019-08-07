@@ -1367,6 +1367,7 @@
         (print "AP boot page: #x" (and &cpu (number->string &cpu 16)))
         (when &cpu
           (boot-application-processors &cpu APIC:ICR-low busywait))
+        (newline)
         (pc-scheduler cpu-freq interval dma-allocate)))))
 
 (when (eq? ($boot-loader-type) 'multiboot)

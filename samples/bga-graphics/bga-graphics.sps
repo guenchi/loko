@@ -54,8 +54,11 @@
                     (if enable-lfb? #x40 0)
                     (if clear-memory? 0 #x80))))
 
+(define current-bank #f)
 (define (bga-set-bank! n)
-  (bga-write VBE_DISPI_INDEX_BANK n))
+  (unless (eqv? n current-bank)
+    (set! current-bank n)
+    (bga-write VBE_DISPI_INDEX_BANK n)))
 
 (display "Starting Bochs graphics\n")
 (unless (fx<=? #xB0C0 (bga-read VBE_DISPI_INDEX_ID) #xB0CF)
@@ -99,7 +102,7 @@
 
 ;;; Bresenham's line drawing algorithm
 
-(define-syntax let-swap  ;; name in CL?
+(define-syntax let-swap
   (lambda (x)
     (syntax-case x ()
       ((_ () body)

@@ -38,11 +38,6 @@ do, as the case may be).
 One fairly good guideline when adding a feature to the core of Loko is
 that it should work more or less the same across all targets.
 
-* Easy compilation of user programs. Currently the only way to compile
-  something with Loko is to modify the `compile-loko.sps` script. It
-  would be better if normal R6RS programs could be compiled with
-  something like `loko --compile script.sps`.
-
 * Separate compilation. As Loko and applications grow it will become
   untenable to compile whole programs in one pass. The psyntax library
   has hooks ready for saving compiled libraries.
@@ -91,7 +86,3 @@ that it should work more or less the same across all targets.
 * The `linux` target needs support for threads in order to utilize all
   cores in a system, and in order to work the same as the `loko`
   target on a multicore system.
-
-* The `loko` target should be able to use an early file system that is
-  passed to it from the boot loader. This will contain drivers and
-  programs needed to get the full system up and running.

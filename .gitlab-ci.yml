@@ -17,9 +17,10 @@ stages:
 
 bootbuild:
   stage: bootstrap
+  before_script:
+    - apk add --no-cache make
   script:
-    - akku install
-    - ./build.sh
+    - make
   artifacts:
     paths:
       - loko

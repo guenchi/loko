@@ -1,3 +1,4 @@
+#!/usr/bin/env scheme-script
 ;; -*- mode: scheme; coding: utf-8 -*-
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 ;; Loko Scheme - an R6RS Scheme compiler
@@ -17,23 +18,6 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-;;; Loko compatibility for text-mode
+(import (loko main))
 
-(library (text-mode termios)
-  (export
-    termios-get-window-size
-    termios-raw-mode
-    termios-canonical-mode)
-  (import
-    (rnrs (6)))
-
-;;; TODO: implement them properly
-
-(define (termios-get-window-size fd)
-  (error 'termios-get-window-size "Not implemented" fd))
-
-(define (termios-raw-mode fd)
-  #f)
-
-(define (termios-canonical-mode fd)
-  #f))
+(main)

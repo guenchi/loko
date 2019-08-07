@@ -232,9 +232,6 @@
     (compiler    (loko compiler)                       #t    #f)
     (cp0         (loko compiler cp0)                   #t    #f)
 
-    ;; A hack
-    ($terminfo-builtin (text-mode terminfo builtins)   #t    #f)
-
     ))
 
 ;;; required? flag means that said library is required for
@@ -1073,6 +1070,7 @@
     (expand/optimize       ^)
     (disassemble           ^)
     (machine-type          ^)
+    (compile-program       ^)
     (open-output-string    ^)           ;for SRFI 6
     (get-output-string     ^)           ;for SRFI 6
     (port-file-descriptor  ^)           ;for SRFI-170
@@ -1170,8 +1168,6 @@
     (compiler-passes     compiler)
     (assemble-text-file  compiler)
 
-    (ti-printf            $terminfo-builtin)
-    (msleep               $terminfo-builtin)
     ))
 
 (define (verify-map)
@@ -1304,6 +1300,24 @@
             (proc x)
             (f)))))))
 
+(define (read-code fn)
+  (define (skip-shebang p)
+    (let* ((pos0 (port-position p))
+           (shebang (get-string-n p 3)))
+      (if (and (string? shebang)
+               (or (string=? shebang "#!/")
+                   (string=? shebang "#! ")))
+          (begin (get-line p) #f)
+          (set-port-position! p pos0))))
+  (call-with-input-file fn
+    (lambda (p)
+      (skip-shebang p)
+      (let lp ((codes '()))
+        (let ((datum (read-annotated p fn)))
+          (if (eof-object? datum)
+              (reverse codes)
+              (lp (cons datum codes))))))))
+
 ;;; remove all re-exported identifiers (those with labels in
 ;;; subst but not binding in env).
 (define (prune-subst subst env)
@@ -1312,7 +1326,8 @@
     ((not (assq (cdar subst) env)) (prune-subst (cdr subst) env))
     (else (cons (car subst) (prune-subst (cdr subst) env)))))
 
-(define (expand-all files use-primlocs)
+(define (expand-all files top-level-file use-primlocs)
+  (define ls '())
   (let-values (((name* code* subst env) (make-init-code)))
     (for-each
      (lambda (file)
@@ -1323,21 +1338,46 @@
              (lambda (x)
                (let-values (((name code export-subst export-env)
                              (boot-library-expand x)))
+                 (set! ls (cons name ls))
                  (set! name* (cons name name*))
                  (set! code* (cons code code*))
                  (set! subst (append export-subst subst))
                  (set! env (append export-env env))))))
      files)
+    (letrec ((expand-top-level
+              (lambda (name top-level-code)
+                (let-values ([(req* exp _macro* export-subst export-env)
+                              (top-level-expander top-level-code)])
+                  (define (serialize lib)
+                    (unless (member (library-name lib) ls)
+                      (set! ls (cons (library-name lib) ls))
+                      (for-each serialize (library-invoke-dependencies lib))
+                      (set! name* (cons (library-name lib) name*))
+                      (set! code* (cons (library-invoke-code lib) code*))
+                      (set! subst (append export-subst subst))
+                      (set! env (append export-env env))))
+                  (for-each serialize req*)
+                  (set! name* (cons name name*))
+                  (set! code* (cons exp code*))))))
+      (cond (top-level-file
+             (display " ")
+             (display top-level-file)
+             (newline)
+             (expand-top-level '(*main*) (read-code top-level-file)))
+            (else
+             (expand-top-level '(*main*) '((import)))))
+      (expand-top-level '(*exit*)
+                        '((import (only (rnrs) exit))
+                          (exit 0))))
     (let-values (((export-subst export-env export-locs)
                   (make-system-data (prune-subst subst env) env)))
       (if use-primlocs
           (let-values (((name code)
                         (build-system-library export-subst export-env export-locs)))
-            ;; Insert the primloc library just before the last library
-            ;; from scheme-library-files.
+            ;; Insert the primloc library just before (*main*)
             (values
-              (reverse (cons* (car name*) name (cdr name*)))
-              (reverse (cons* (car code*) code (cdr code*)))
+              (reverse (cons* (car name*) (cadr name*) name (cddr name*)))
+              (reverse (cons* (car code*) (cadr code*) code (cddr code*)))
               export-locs))
           (values (reverse name*) (reverse code*) export-locs)))))
 
@@ -1396,11 +1436,16 @@
                          subst env values values '#f '#f '#f '() visible? '#f)))))))
             (for-each build-library library-legend)))))))
 
-(define (expand-files scheme-library-files use-primlocs)
+;; Expand an a list of .sls files followed by an optional .sps file.
+;; The .sps file can pull in additional libraries. Returns a list of
+;; names, a list of core forms and export locations.
+(define (expand-files scheme-library-files scheme-program-file use-primlocs)
   (initialize)
   (let-values (((name* core* locs)
                 (parameterize ((current-library-collection (copy-collection bootstrap-collection)))
-                  (expand-all scheme-library-files use-primlocs))))
+                  (expand-all scheme-library-files
+                              scheme-program-file
+                              use-primlocs))))
     #;
     (current-primitive-locations
      (lambda (x)

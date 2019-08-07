@@ -115,11 +115,11 @@
     ;; in RDI and the return value is already in RAX.
     ;; TODO: CLI/STI should be done by $process-yield. Right now
     ;; there is nothing that does STI again after this
-    (pushfq)
-    (and (mem64+ rsp) ,(fxnot (RFLAGS IF))) ;attempt to do CLI
-    (popfq)
-    (sal rsp ,(shift 'fixnum))
-    (mov (mem+ fs ,(* 8 CPU-VECTOR:SCHEDULER-SP)) rsp)
+    ;; (pushfq)
+    ;; (and (mem64+ rsp) ,(fxnot (RFLAGS IF))) ;attempt to do CLI
+    ;; (popfq)
+    (mov (mem64+ fs ,(* 8 CPU-VECTOR:SCHEDULER-SP)) rsp)
+    (sal (mem64+ fs ,(* 8 CPU-VECTOR:SCHEDULER-SP)) ,(shift 'fixnum))
     (mov rsp rdi)
     (ret)
 

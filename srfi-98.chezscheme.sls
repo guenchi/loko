@@ -1,7 +1,7 @@
-#!/usr/bin/env scheme-script
 ;; -*- mode: scheme; coding: utf-8 -*-
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 ;; Loko Scheme - an R6RS Scheme compiler
+;; Copyright © 2019 Göran Weinholt
 
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU Affero General Public License as published by
@@ -17,23 +17,17 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-;;; Program that builds the loko binary
+;;; Partial SRFI 98 for bootstrapping with Chez Scheme
 
-(import
-  (rnrs (6))
-  (psyntax library-manager)
-  (loko config)
-  (only (loko compiler cp0) cp0-effort-limit)
-  (loko compiler static))
+(library (srfi :98 os-environment-variables)
+  (export
+    get-environment-variable)
+  (import
+    (rnrs (6))
+    (only (chezscheme) load-shared-object foreign-procedure))
 
-;; Amp up the optimizations
-(cp0-effort-limit 1000)
+(define dummy
+  (load-shared-object "libc.so.6"))
 
-;; We don't want to load libraries that aren't in the built-in list.
-(library-directories '())
-
-(let ((filename "loko.out"))
-  (compile-program filename "loko.sps" '(eval main use-primlocs))
-  (display "Build finished and written to ")
-  (display filename)
-  (newline))
+(define get-environment-variable
+  (foreign-procedure "getenv" (string) string)))
