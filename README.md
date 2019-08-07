@@ -11,12 +11,16 @@ language.
 ## Current status
 
 * Most of R6RS Scheme is present and accounted for.
-* No SRFIs apart from SRFI 98 are implemented.
+* No SRFIs apart from SRFI 98 are implemented. (In most cases SRFIs
+  will not be added directly, but the support that is needed to use
+  them via [chez-srfi][chez-srfi] will be provided instead).
 * Memory management is limited. The Linux target makes at most 1 GB
   available (hard coded limit, will be fixed some day).
 * Very few Linux system calls are implemented. Basic I/O works, but
   may have horrible bugs and is fully blocking.
 * There is no test suite.
+
+ [chez-srfi]: https://akkuscm.org/packages/chez-srfi/
 
 ## Building on GNU/Linux
 
@@ -69,9 +73,15 @@ See the [samples](samples) directory for more advanced examples.
 
 ## Contact
 
-https://gitlab.com/weinholt/loko-scheme/issues and `#loko` on Freenode.
+* [Loko Scheme on GitLab issues](https://gitlab.com/weinholt/loko/issues)
+* The IRC channel `#loko` on Freenode.
+* The Usenet group comp.lang.scheme, available through any Usenet
+  provider, e.g. [Eternal September](http://www.eternal-september.org/).
 
-## Legal notice
+## License
+
+**Work is pending to formulate an exception to this license. For now,
+there is no exception. See https://gitlab.com/weinholt/loko/issues/2.**
 
 Copyright © 2019 Göran Weinholt
 
