@@ -328,7 +328,8 @@
       (port-buffer-r-set! p 0)
       (port-buffer-w-set! p 0)
       (when closer
-        (closer)))))
+        (closer))))
+  (if #f #f))
 
 (define (call-with-port port proc)
   (assert (port? port))
