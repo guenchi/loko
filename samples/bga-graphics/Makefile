@@ -11,7 +11,6 @@ all: $(PROGRAM)
 
 $(PROGRAM): $(PROGRAM).sps $(LOKO)
 	LOKO_HOME=$(LOKO_HOME) $(LOKO) --compile $< --output $@
-	chmod +x $@
 
 run: $(PROGRAM)
 	qemu-system-x86_64 -enable-kvm -kernel $(PROGRAM) -m 1024 -serial stdio \

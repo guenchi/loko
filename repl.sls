@@ -56,10 +56,8 @@ certain conditions.
             ;; TODO: what about warnings?
             ;; TODO: flush output ports?
             (let ((p (current-error-port)))
-              (display ";;; \x1b;[1;31mAn unhandled exception has found the repl.\x1b;[0m\n"
-                       p)
-              (print-condition exn p)
-              (stack-trace p))
+              (stack-trace p)
+              (print-condition exn p))
             (k 'restart))
           (lambda ()
             (let loop ()
