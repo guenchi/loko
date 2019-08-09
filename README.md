@@ -71,6 +71,7 @@ See the [samples](samples) directory for more examples.
 * The IRC channel `#loko` on Freenode.
 * The Usenet group comp.lang.scheme, available through any Usenet
   provider, e.g. [Eternal September](http://www.eternal-september.org/).
+* The [Loko Scheme](https://scheme.fail/) website.
 
 ## License
 
