@@ -374,14 +374,14 @@
   (assert (string? id))
   (make-port (string-copy id) #f #b10
              #f read! get-position set-position! close #f #f
-             (make-bytevector 512) 0 0 0 #f
+             (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b110
              #f read! get-position set-position! close #f #f
-             (make-string 512) 0 0 0 #f
+             (make-string 4096) 0 0 0 #f
              'block))
 
 ;;; Binary input
@@ -482,14 +482,14 @@
                      (put-u8 out (bytevector-u8-ref b r))))))))))
 
 (define (get-bytevector-all ip)
-  (let ((datum (get-bytevector-n ip 512)))
+  (let ((datum (get-bytevector-n ip 4096)))
     (if (eof-object? datum)
         datum
         (call-with-bytevector-output-port
           (lambda (op)
             (let lp ((datum datum))
               (put-bytevector op datum)
-              (let ((datum (get-bytevector-n ip 512)))
+              (let ((datum (get-bytevector-n ip 4096)))
                 (unless (eof-object? datum)
                   (lp datum)))))))))
 
@@ -801,18 +801,17 @@
       ret)))
 
 (define (make-custom-binary-output-port id write! get-position set-position! close)
-  ;; XXX: larger buffer size. or adaptable buffer size.
   (assert (string? id))
   (make-port (string-copy id) #f #b01
              write! #f get-position set-position! close #f #f
-             (make-bytevector 512) 0 0 0 #f
+             (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-output-port id write! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f #b101
              write! #f get-position set-position! close #f #f
-             (make-string 512) 0 0 0 #f
+             (make-string 4096) 0 0 0 #f
              'block))
 
 ;;; SRFI 6-style string ports
