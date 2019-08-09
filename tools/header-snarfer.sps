@@ -5,15 +5,6 @@
 
 ;;; C header snarfer for syscall ABIs
 
-#|
-cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
-  scheme --program tools/header-snarfer.scm loko arch | \
-  tee header-snarfer.c && \
-  gcc -Wall header-snarfer.c -o header-snarfer && \
-  ./header-snarfer | tee src/loko/arch/amd64/linux-numbers.sls && \
-  /bin/rm -f header-snarfer.c header-snarfer
-|#
-
 (import (rnrs))
 
 (define instructions
@@ -30,6 +21,7 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
     __NR_faccessat
     __NR_fork
     __NR_fstat
+    __NR_getdents64
     __NR_ioctl
     __NR_lseek
     __NR_lstat
@@ -458,6 +450,15 @@ cat /lib/modules/`uname -r`/source/include/uapi/asm-generic/errno* | \
     SEEK_END
     SEEK_DATA
     SEEK_HOLE
+    DT_UNKNOWN
+    DT_FIFO
+    DT_CHR
+    DT_DIR
+    DT_BLK
+    DT_REG
+    DT_LNK
+    DT_SOCK
+    DT_WHT
 
     (c-include "linux/stat.h")
     (struct stat

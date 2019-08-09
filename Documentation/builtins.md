@@ -72,6 +72,15 @@ Returns the string.
 Get the file descriptor associated with *port*. Returns `#f` if there
 is no associated file descriptor.
 
+### Procedure: (port-file-descriptor-set! *port fd*)
+
+Set the file descriptor associated with *port* to *fd*.
+
+This procedure is primarily intended to allow custom ports to have
+file descriptors. It is unspecified whether changing a port's file
+descriptor affects the file descriptor used for subsequent operations
+on the port.
+
 ## (loko system unsafe)
 
 This library provides raw access to kernel services, linear memory and

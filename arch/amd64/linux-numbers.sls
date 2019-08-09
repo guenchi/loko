@@ -20,6 +20,7 @@
     __NR_faccessat
     __NR_fork
     __NR_fstat
+    __NR_getdents64
     __NR_ioctl
     __NR_lseek
     __NR_lstat
@@ -500,6 +501,7 @@
 (define-inlined __NR_faccessat 269)
 (define-inlined __NR_fork 57)
 (define-inlined __NR_fstat 5)
+(define-inlined __NR_getdents64 217)
 (define-inlined __NR_ioctl 16)
 (define-inlined __NR_lseek 8)
 (define-inlined __NR_lstat 6)

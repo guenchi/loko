@@ -1054,26 +1054,27 @@
     (get-environment-variable    ^ s98 srfi98)
 
     ;;; Loko
-    (library               ^)
-    (export                ^)
-    (import                ^)
-    (installed-libraries   ^)
-    (uninstall-library     ^)
-    (library-directories   ^)
-    (library-extensions    ^)
-    (time                  ^)
-    (time-it               ^)
-    (time-it*              ^)
-    (cp0-size-limit        ^ cp0)
-    (cp0-effort-limit      ^ cp0)
-    (expand                ^)
-    (expand/optimize       ^)
-    (disassemble           ^)
-    (machine-type          ^)
-    (compile-program       ^)
-    (open-output-string    ^)           ;for SRFI 6
-    (get-output-string     ^)           ;for SRFI 6
-    (port-file-descriptor  ^)           ;for SRFI-170
+    (library                   ^)
+    (export                    ^)
+    (import                    ^)
+    (installed-libraries       ^)
+    (uninstall-library         ^)
+    (library-directories       ^)
+    (library-extensions        ^)
+    (time                      ^)
+    (time-it                   ^)
+    (time-it*                  ^)
+    (cp0-size-limit            ^ cp0)
+    (cp0-effort-limit          ^ cp0)
+    (expand                    ^)
+    (expand/optimize           ^)
+    (disassemble               ^)
+    (machine-type              ^)
+    (compile-program           ^)
+    (open-output-string        ^)       ;for SRFI 6
+    (get-output-string         ^)       ;for SRFI 6
+    (port-file-descriptor      ^)       ;for SRFI-170
+    (port-file-descriptor-set! ^)       ;for SRFI-170
 
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)

@@ -30,6 +30,7 @@
     sys_faccessat
     sys_fork
     sys_fstat
+    sys_getdents64
     sys_ioctl
     sys_lseek
     sys_lstat
@@ -104,6 +105,7 @@
 (define-syscall (faccessat dfd *filename mode))
 (define-syscall (fork))
 (define-syscall (fstat fd *statbuf))
+(define-syscall (getdents64 fd *dirent count))
 (define-syscall (ioctl fd request *buf))
 (define-syscall (lseek fd offset whence))
 (define-syscall (lstat *pathname *statbuf))
