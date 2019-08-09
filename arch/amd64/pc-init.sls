@@ -1159,7 +1159,7 @@
     ;; get-4K-zero-page allocate >4GB pages before using low pages.
     ;; FIXME: This only looks at the first area.
     (assert (eqv? size 4096))
-    (print "DMA allocate: " (list 'size size 'mask mask '*available* *available*))
+    ;; (print "DMA allocate: " (list 'size size 'mask mask '*available* *available*))
     (if (null? *available*)
         (values #f #f)
         (let* ((a (car *available*))
