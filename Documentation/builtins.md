@@ -67,6 +67,11 @@ The accumulated string can be extracted with `get-output-string`.
 Extract the accumulated string in *string-output-port* and reset it.
 Returns the string.
 
+### Procedure: (port-file-descriptor *port*)
+
+Get the file descriptor associated with *port*. Returns `#f` if there
+is no associated file descriptor.
+
 ## (loko system unsafe)
 
 This library provides raw access to kernel services, linear memory and
