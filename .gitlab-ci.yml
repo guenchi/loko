@@ -21,6 +21,7 @@ bootbuild:
     - apk add --no-cache make
   script:
     - make
+    - make install
   artifacts:
     paths:
       - loko

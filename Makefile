@@ -4,6 +4,10 @@
 
 LINUX_SOURCE := /lib/modules/$(shell uname -r)/source
 
+DESTDIR=
+PREFIX=/usr/local
+INSTALL=install
+
 all: loko scheme-script
 
 .akku/env:
@@ -33,3 +37,7 @@ clean:
 	/bin/rm -f header-snarfer.c header-snarfer \
 	  loko loko.out \
 	  scheme-script scheme-script.old
+
+install: all
+	$(INSTALL) -m 0755 -d   $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -m 0755 loko $(DESTDIR)$(PREFIX)/bin
