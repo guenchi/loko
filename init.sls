@@ -64,6 +64,7 @@
   (case-lambda
     (()
      (flush-output-port (current-output-port))
+     ;; FIXME: run winders
      (*exit* #t))
     ((status)
      (flush-output-port (current-output-port))

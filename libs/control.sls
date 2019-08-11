@@ -135,15 +135,19 @@
                                 (from)
                                 (do-winds to (fx- delta 1)))))))
                     (continuation
-                     (lambda (v)
-                       ;; TODO: multiple values. mvcall etc.
-                       (do-winds old-winders
-                                 (fx- (length *winders*)
-                                      (length old-winders)))
-                       ($restore-stack k v))))
+                     (case-lambda
+                       ((v)
+                        (do-winds old-winders
+                                  (fx- (length *winders*)
+                                       (length old-winders)))
+                        ($restore-stack k v))
+                       (v*
+                        (do-winds old-winders
+                                  (fx- (length *winders*)
+                                       (length old-winders)))
+                        ($restore-stack k (cons magic v*))))))
              (proc continuation)))
           (else
-           ;; TODO: multiple values
            k))))
 
 (define call/1cc call/cc)
