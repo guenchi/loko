@@ -30,6 +30,7 @@
     __NR_preadv
     __NR_pwritev
     __NR_read
+    __NR_readlink
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
@@ -450,15 +451,15 @@
     SEEK_END
     SEEK_DATA
     SEEK_HOLE
-    DT_UNKNOWN
-    DT_FIFO
-    DT_CHR
-    DT_DIR
-    DT_BLK
-    DT_REG
-    DT_LNK
-    DT_SOCK
-    DT_WHT
+    ;; DT_UNKNOWN
+    ;; DT_FIFO
+    ;; DT_CHR
+    ;; DT_DIR
+    ;; DT_BLK
+    ;; DT_REG
+    ;; DT_LNK
+    ;; DT_SOCK
+    ;; DT_WHT
 
     (c-include "linux/stat.h")
     (struct stat

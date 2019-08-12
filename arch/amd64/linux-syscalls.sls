@@ -37,6 +37,7 @@
     sys_mmap
     sys_open
     sys_read
+    sys_readlink
     sys_rt_sigaction
     sys_shmat
     sys_sigaltstack
@@ -114,6 +115,7 @@
 (define-syscall (preadv fd *vec vlen pos_l pos_h))
 (define-syscall (pwritev fd *vec vlen pos_l pos_h))
 (define-syscall (read fd *buf count))
+(define-syscall (readlink *path *buf bufsiz))
 (define-syscall (rt_sigaction signal act oact sigsetsize))
 (define-syscall (shmat shmid *shmaddr shmflg))
 (define-syscall (sigaltstack uss uoss))

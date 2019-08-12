@@ -226,7 +226,6 @@
     ($x86        (loko system $x86)                    #f    #t)
 
     ($host       (loko system $host)                   #f    #t)
-    ($control    (loko system $control)                #f    #t)
 
     ;; Hack for self-compiling a bit faster
     (compiler    (loko compiler)                       #t    #f)

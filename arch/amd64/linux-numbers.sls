@@ -29,6 +29,7 @@
     __NR_preadv
     __NR_pwritev
     __NR_read
+    __NR_readlink
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
@@ -510,6 +511,7 @@
 (define-inlined __NR_preadv 295)
 (define-inlined __NR_pwritev 296)
 (define-inlined __NR_read 0)
+(define-inlined __NR_readlink 89)
 (define-inlined __NR_rt_sigaction 13)
 (define-inlined __NR_rt_sigprocmask 14)
 (define-inlined __NR_rt_sigreturn 15)
