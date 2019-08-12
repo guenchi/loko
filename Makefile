@@ -8,13 +8,18 @@ DESTDIR=
 PREFIX=/usr/local
 INSTALL=install
 
+do_subst = sed -e 's,[@]PREFIX[@],$(PREFIX),g'
+
 all: loko scheme-script
 
-.akku/env:
+config.sls: config.sls.in
+	$(do_subst) < config.sls.in > config.sls
+
+.akku/env: config.sls
 	akku install
 
 loko: .akku/env
-	.akku/env scheme --program compile-loko.sps
+	LOKO_SOURCE=.akku/lib .akku/env scheme --program compile-loko.sps
 	chmod +x loko.out
 	if [ -f loko ]; then mv -f loko loko.old; fi
 	mv -f loko.out loko
@@ -34,10 +39,34 @@ arch/amd64/linux-numbers.sls: header-snarfer
 	./header-snarfer > arch/amd64/linux-numbers.sls
 
 clean:
-	/bin/rm -f header-snarfer.c header-snarfer \
-	  loko loko.out \
-	  scheme-script scheme-script.old
+	rm -f header-snarfer.c header-snarfer
+	rm -f loko loko.out
+	rm -f scheme-script scheme-script.old
+	rm -f config.sls
 
 install: all
 	$(INSTALL) -m 0755 -d   $(DESTDIR)$(PREFIX)/bin
 	$(INSTALL) -m 0755 loko $(DESTDIR)$(PREFIX)/bin
+# Libraries for users
+	$(INSTALL) -m 0755 -d             $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+	$(INSTALL) -m 0644 arch/amd64/linux-numbers.sls  $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+	$(INSTALL) -m 0644 arch/amd64/linux-syscalls.sls $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+# Libraries needed when compiling programs
+	(cd .akku/lib; find * -type d | \
+	  while read fn; do \
+	    $(INSTALL) -m 0755 -d $(DESTDIR)$(PREFIX)/lib/loko/$$fn; \
+	  done)
+# FIXME: Install only those libraries used by (loko compiler static).
+	(cd .akku/lib; find * ! -type d -a \
+            ! \( -name '*.chezscheme.sls' -o -name '*.ikarus.sls' \) | \
+	  while read fn; do \
+	    $(INSTALL) -m 0644 $$fn $(DESTDIR)$(PREFIX)/lib/loko/$$fn; \
+	  done)
+
+install-all: install
+	ln -f $(DESTDIR)$(PREFIX)/bin/loko $(DESTDIR)$(PREFIX)/bin/scheme-script
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/loko
+	rm -rf $(DESTDIR)$(PREFIX)/share/loko
+	rm -rf $(DESTDIR)$(PREFIX)/lib/loko

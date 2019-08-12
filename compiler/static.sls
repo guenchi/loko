@@ -161,8 +161,8 @@
 
 (define (compile-program out-fn sps-fn options)
   (define library-files
-    (get-scheme-library-files (or (get-environment-variable "LOKO_HOME")
-                                  ".akku/lib")
+    (get-scheme-library-files (or (get-environment-variable "LOKO_SOURCE")
+                                  (config-source-path))
                               (config-target-cpu)
                               (config-target-kernel)
                               options))

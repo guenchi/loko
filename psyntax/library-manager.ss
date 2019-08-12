@@ -146,17 +146,7 @@
                        (display-hex h)
                        (display-hex l))))))
               (bytevector->u8-list (string->utf8 name)))))
-         ls)
-
-        #;
-        (for-each
-         ;; FIXME: This is like Chez until Akku knows about Loko. The
-         ;; best one to replace this is probably Ikarus' version.
-         (lambda (component)
-           (put-char p #\/)
-           (let ((str (symbol->string component)))
-             (put-string p str)))
-         x))))
+         ls))))
 
   (define alternative-file-locator
     (make-parameter

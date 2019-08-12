@@ -24,9 +24,8 @@ language.
 
 ## Building on GNU/Linux
 
-Install the package manager [Akku.scm](https://akkuscm.org) and run
-`akku install` in a checked out copy of the repository, followed by
-`./build.sh`.
+Install the package manager [Akku.scm](https://akkuscm.org) and then
+run `make` followed by `make install`.
 
 Alternatively get the pre-compiled `loko` binary from the CI system or
 use the Docker base image [weinholt/loko:base][docker]: `docker run
@@ -64,6 +63,25 @@ qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
 ```
 
 See the [samples](samples) directory for more examples.
+
+## Compiling a program
+
+Loko can compile R6RS top-level programs. Use this command line:
+
+```sh
+loko --compile hello.sps --output hello
+```
+
+Libraries are looked up from the `LOKO_LIBRARY_PATH` environment
+variable (which is automatically set by Akku).
+
+**Note**: Currently you need to do chmod +x hello yourself and the
+command line is very inflexible.
+
+**Note**: Loko integrates its run-time into the resulting binary and
+Loko's source code needs to be available for compilation to succeed.
+The location is decided by `PREFIX` when compiling Loko, but can be
+overridden using the `LOKO_SOURCE` environment variable.
 
 ## Contact
 

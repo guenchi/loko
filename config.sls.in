@@ -23,7 +23,9 @@
   (export
     config-target-cpu
     config-target-kernel
-    config-max-cpus)
+    config-max-cpus
+    config-library-path
+    config-source-path)
   (import
     (rnrs))
 
@@ -37,4 +39,12 @@
   'loko+linux)
 
 (define (config-max-cpus)
-  16))
+  16)
+
+(define (config-library-path)
+  '("@PREFIX@/share/r6rs"))
+
+;; Loko's source code will be installed here for use by (loko compiler
+;; static).
+(define (config-source-path)
+  "@PREFIX@/lib/loko"))

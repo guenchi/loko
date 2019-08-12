@@ -15,6 +15,7 @@ stages:
   - build
   - test
 
+# Bootstrap from Chez Scheme
 bootbuild:
   stage: bootstrap
   before_script:
@@ -26,11 +27,14 @@ bootbuild:
     paths:
       - loko
 
+# Test self-compilation
 build:
   stage: build
+  before_script:
+    - apk add --no-cache make
   script:
-    - akku install
-    - .akku/env ./loko --program compile-loko.sps
+    - make .akku/env
+    - LOKO_SOURCE=.akku/lib .akku/env ./loko --program compile-loko.sps
     - chmod +x loko.out
   artifacts:
     paths:
@@ -38,9 +42,12 @@ build:
 
 test:
   stage: test
+  before_script:
+    - apk add --no-cache make
   script:
-    - akku install
+    - make .akku/env
     - echo '(exit 0)' | ./loko.out
+    - cd samples/bga-graphics; make LOKO=../../loko.out
   artifacts:
     paths:
       - loko.out

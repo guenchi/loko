@@ -30,6 +30,7 @@
     (only (loko) compile-program)
     (only (loko init) init-set!)
     (only (loko repl) banner repl)
+    (only (loko config) config-library-path)
     (only (psyntax expander) compile-r6rs-top-level)
     (only (loko libs reader) read-annotated)
     (srfi :98 os-environment-variables)
@@ -88,11 +89,13 @@
 
   ;; Read the environment
   (library-extensions '(".loko.sls" ".sls" ".ss" ".scm"))
-  (library-directories ".")
   (cond
     ((get-environment-variable "LOKO_LIBRARY_PATH") =>
      (lambda (path)
-       (library-directories (string-split path #\:)))))
+       (library-directories (append (string-split path #\:)
+                                    (config-library-path)))))
+    (else
+     (library-directories (cons "." (config-library-path)))))
 
   ;; Parse the command line
   (match (command-line)
