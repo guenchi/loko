@@ -81,6 +81,10 @@ file descriptors. It is unspecified whether changing a port's file
 descriptor affects the file descriptor used for subsequent operations
 on the port.
 
+### Procedure: (gensym)
+
+Generate an uninterned symbol.
+
 ## (loko system unsafe)
 
 This library provides raw access to kernel services, linear memory and
