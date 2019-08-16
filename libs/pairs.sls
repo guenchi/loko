@@ -368,7 +368,7 @@
 
 (define (partition proc list)
   (if (null? list)
-      '()
+      (values '() '())
       (let lp ((rett '()) (retf '()) (x list) (t (cdr/f list)) (h (cddr/f list)))
         (cond ((null? x)
                (values (sys:reverse rett) (sys:reverse retf)))
