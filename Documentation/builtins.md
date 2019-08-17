@@ -17,7 +17,7 @@ Default: `(".")`
 This parameter is a list of strings with file extensions to use when
 importing libraries.
 
-Default: `(".loko.sls" ".sls")`
+Default: `(".loko.sls" ".sls" ".ss" ".scm")`
 
 ### Procedure: (installed-libraries)
 
