@@ -81,11 +81,15 @@
                [(arg ...)
                 ;; Default: raise errors automatically
                 (let ((tmp arg) ...)
-                  (let ((v (syscall __NR tmp ...)))
-                    (if (fx<=? -4095 v -1)
-                        (raise (condition (make-syscall-error 'name (fx- v))
-                                          (make-irritants-condition (list tmp ...))))
-                        v)))]
+                  (let retry ()
+                    (let ((v (syscall __NR tmp ...)))
+                      (if (fx<=? -4095 v -1)
+                          (let ((errno (fx- v)))
+                            (if (eqv? errno EINTR)
+                                (retry)   ;see "Worse is Better" for an explanation
+                                (raise (condition (make-syscall-error 'name errno)
+                                                  (make-irritants-condition (list tmp ...))))))
+                          v))))]
                [(arg ... k-failure)
                 ;; Let the caller handle errors
                 (let ((v (syscall __NR arg ...)))
