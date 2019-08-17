@@ -247,10 +247,14 @@
 
 (define (hashtable-delete! ht key)
   ;; XXX: This is dumb
-  (hashtable-set! ht key cleared))
+  (cond ((hashtable-contains? ht key)
+         (hashtable-size-set! ht (fx- (hashtable-size ht) 1))
+         (hashtable-set! ht key cleared))
+        (else (values))))
 
 (define (hashtable-contains? ht key)
-  (and (hashtable-ref ht key #f) #t))
+  ;; XXX: This is dumb
+  (if (eq? (hashtable-ref ht key cleared) cleared) #f #t))
 
 (define (hashtable-update! ht key proc default)
   (define (alist-update! alist)
@@ -261,7 +265,11 @@
                                   (hashtable-mutable? ht))))
       (cond ((pair? cell/len)
              (print ";; already in bucket")
-             (set-cdr! cell/len (proc (cdr cell/len)))
+             (cond ((eq? (cdr cell/len) cleared)
+                    (hashtable-size-set! ht (fx+ (hashtable-size ht) 1))
+                    (set-cdr! cell/len (proc default)))
+                   (else
+                    (set-cdr! cell/len (proc (cdr cell/len)))))
              (values 0 alist))
             (else
              (print ";; new element in bucket")
