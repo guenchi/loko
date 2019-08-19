@@ -17,7 +17,7 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-;;; Primitives needed by SRFI 19
+;;; Primitives needed for time keeping
 
 ;; SRFI 19 is not provided directly by Loko, but can be found in the
 ;; chez-srfi package.
@@ -29,7 +29,8 @@
     time-second
     time-nanosecond
     time-resolution
-    time-init-set!)
+    time-init-set!
+    current-ticks)
   (import
     (rnrs (6)))
 
@@ -49,6 +50,12 @@
   (let-values ([(s ns) (*current-time*)])
     (make-time s ns *current-time-resolution*)))
 
+(define *current-ticks*
+  (lambda () (error 'current-ticks
+                    "No current-ticks procedure installed")))
+(define (current-ticks)
+  (*current-ticks*))
+
 (define *nanosleep*
   (lambda _ (error 'nanosleep "No nanosleep procedure installed")))
 (define (nanosleep seconds)
@@ -66,6 +73,7 @@
              (set! *cumulative-process-time-resolution* res)))))
     ((cumulative-process-time) (set! *cumulative-process-time* value))
     ((current-time) (set! *current-time* value))
+    ((current-ticks) (set! *current-ticks* value))
     ((nanosleep) (set! *nanosleep* value))
     (else
      (error 'time-init-set! "Unrecognized key" what value)))))

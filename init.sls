@@ -30,6 +30,7 @@
     open-file-input-port
     open-file-output-port
     open-file-input/output-port
+    open-i/o-poller
     $mmap
     allocate
     machine-type
@@ -119,6 +120,13 @@
     ((x y z w)
      (*open-file-input/output-port* x y z w))))
 
+(define *open-i/o-poller*
+  (lambda x
+    (apply error 'open-i/o-poller
+           "No open-i/o-poller has been installed" x)))
+(define (open-i/o-poller)
+  (*open-i/o-poller*))
+
 (define *file-exists?*
   (lambda (filename)
     #f))
@@ -166,6 +174,7 @@
     ((delete-file) (set! *delete-file* value))
     ((open-file-input-port) (set! *open-file-input-port* value))
     ((open-file-output-port) (set! *open-file-output-port* value))
+    ((open-i/o-poller) (set! *open-i/o-poller* value))
     ((allocate) (set! *allocate* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))

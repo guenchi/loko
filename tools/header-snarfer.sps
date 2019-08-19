@@ -5,24 +5,36 @@
 
 ;;; C header snarfer for syscall ABIs
 
+;; Most or all of these defines should come from linux-libc-dev, but
+;; in actuality a lot of it is just not there and has to be taken from
+;; from libc instead.
+
 (import (rnrs))
 
 (define instructions
   '((c-include "asm/unistd.h")
+    __NR_accept4
     __NR_arch_prctl
+    __NR_bind
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
+    __NR_connect
     __NR_epoll_create1
     __NR_epoll_ctl
     __NR_epoll_pwait
     __NR_epoll_wait
     __NR_exit
     __NR_faccessat
+    __NR_fcntl
     __NR_fork
     __NR_fstat
     __NR_getdents64
+    __NR_getpeername
+    __NR_getsockname
+    __NR_getsockopt
     __NR_ioctl
+    __NR_listen
     __NR_lseek
     __NR_lstat
     __NR_mmap
@@ -31,12 +43,20 @@
     __NR_pwritev
     __NR_read
     __NR_readlink
+    __NR_recvfrom
+    __NR_recvmsg
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
+    __NR_sendmsg
+    __NR_sendto
+    __NR_setsockopt
     __NR_shmat
+    __NR_shutdown
     __NR_sigaltstack
-    __NR_signalfd
+    __NR_signalfd4
+    __NR_socket
+    __NR_socketpair
     __NR_stat
     __NR_timer_create
     __NR_timer_settime
@@ -267,7 +287,12 @@
     TCSADRAIN
     TCSAFLUSH
 
-    (c-include "asm/signal.h") (fmt "%d")
+    (c-include "asm/signal.h")
+    (fmt "%d")
+    SIG_BLOCK
+    SIG_UNBLOCK
+    SIG_SETMASK
+    (fmt "%d")
     SIGHUP
     SIGINT
     SIGQUIT
@@ -353,7 +378,15 @@
     (c-include "linux/time.h")
     CLOCK_REALTIME
     CLOCK_MONOTONIC
+    CLOCK_PROCESS_CPUTIME_ID
     CLOCK_THREAD_CPUTIME_ID
+    CLOCK_MONOTONIC_RAW
+    CLOCK_REALTIME_COARSE
+    CLOCK_MONOTONIC_COARSE
+    CLOCK_BOOTTIME
+    CLOCK_REALTIME_ALARM
+    CLOCK_BOOTTIME_ALARM
+    CLOCK_TAI
     (struct itimerspec it_interval it_value)
     (struct timespec tv_sec tv_nsec)
 
@@ -406,6 +439,12 @@
     O_SYNC
     O_PATH
     O_TMPFILE
+    (fmt "%d")
+    F_DUPFD
+    F_GETFD
+    F_SETFD
+    F_GETFL
+    F_SETFL
     (fmt "#x%x")
     AT_SYMLINK_NOFOLLOW
     AT_REMOVEDIR
@@ -439,10 +478,17 @@
     EPOLLWRBAND
     EPOLLMSG
     EPOLLRDHUP
+
     EPOLLEXCLUSIVE
     EPOLLWAKEUP
     EPOLLONESHOT
     EPOLLET
+
+    (fmt "%d")
+    EPOLL_CLOEXEC
+    EPOLL_CTL_ADD
+    EPOLL_CTL_DEL
+    EPOLL_CTL_MOD
 
     (c-include "linux/fs.h")
     (fmt "%d")
@@ -480,6 +526,139 @@
     S_IFIFO
     S_IFSOCK
 
+    (c-include "linux/in6.h")
+    (struct sockaddr_in6 sin6_family sin6_port sin6_flowinfo
+            sin6_addr sin6_scope_id)
+
+    (c-include "linux/un.h")
+    (struct sockaddr_un sun_family sun_path)
+
+    (c-include "linux/in.h")
+    (struct sockaddr_in sin_family sin_port sin_addr)
+    (fmt "%d")
+    IPPROTO_IP
+    IPPROTO_ICMP
+    IPPROTO_TCP
+    IPPROTO_UDP
+    IPPROTO_SCTP
+
+    (c-include "linux/tcp.h")
+    (fmt "%d")
+    TCP_NODELAY
+    TCP_MAXSEG
+    TCP_CORK
+    TCP_KEEPIDLE
+    TCP_KEEPINTVL
+    TCP_KEEPCNT
+    TCP_SYNCNT
+    TCP_LINGER2
+    TCP_DEFER_ACCEPT
+    TCP_WINDOW_CLAMP
+    TCP_INFO
+    TCP_QUICKACK
+    TCP_CONGESTION
+    TCP_MD5SIG
+    TCP_THIN_LINEAR_TIMEOUTS
+    TCP_THIN_DUPACK
+    TCP_USER_TIMEOUT
+    TCP_REPAIR
+    TCP_REPAIR_QUEUE
+    TCP_QUEUE_SEQ
+    TCP_REPAIR_OPTIONS
+    TCP_FASTOPEN
+    TCP_TIMESTAMP
+    TCP_NOTSENT_LOWAT
+    TCP_CC_INFO
+    TCP_SAVE_SYN
+    TCP_SAVED_SYN
+    TCP_REPAIR_WINDOW
+    TCP_FASTOPEN_CONNECT
+    TCP_ULP
+    TCP_MD5SIG_EXT
+    TCP_FASTOPEN_KEY
+    TCP_FASTOPEN_NO_COOKIE
+    TCP_ZEROCOPY_RECEIVE
+    TCP_INQ
+
+    (c-include "asm/socket.h")
+    (fmt "%d")
+    SOL_SOCKET
+    SO_DEBUG
+    SO_REUSEADDR
+    SO_TYPE
+    SO_ERROR
+    SO_DONTROUTE
+    SO_BROADCAST
+    SO_SNDBUF
+    SO_RCVBUF
+    SO_SNDBUFFORCE
+    SO_RCVBUFFORCE
+    SO_KEEPALIVE
+    SO_OOBINLINE
+    SO_NO_CHECK
+    SO_PRIORITY
+    SO_LINGER
+    SO_BSDCOMPAT
+    SO_REUSEPORT
+
+    ;; This isn't in the UAPI headers. For the PF_ defines, just use
+    ;; the AF_ name, they are identical. Apparently some of these
+    ;; things can be different on some archs.
+    (ifdef __amd64__)
+    (fmt "%d")
+    (define AF_UNSPEC 0)
+    (define AF_LOCAL 1)
+    (define AF_INET 2)
+    (define AF_AX25 3)
+    (define AF_NETROM 6)
+    (define AF_INET6 10)
+    (define AF_PACKET 17)
+    (define AF_CAN 29)
+    (fmt "%d")
+    (define SOCK_STREAM 1)
+    (define SOCK_DGRAM 2)
+    (define SOCK_RAW 3)
+    (define SOCK_SEQPACKET 5)
+    (fmt "#x%x")
+    (define SOCK_CLOEXEC O_CLOEXEC)
+    (define SOCK_NONBLOCK O_NONBLOCK)
+    (fmt "%d")
+    (define SHUT_RD 0)
+    (define SHUT_WR 1)
+    (define SHUT_RDWR 2)
+    (fmt "%d")
+    (define SOL_IP 0)
+    ;; SOL_SOCKET
+    (define SOL_TCP 6)
+    (define SOL_UDP 17)
+    (define SOL_IPV6 41)
+    (define SOL_AX25 257)
+    (define SOL_NETROM 259)
+    (define SOL_PACKET 263)
+    (fmt "%x")
+    (define MSG_OOB #x1)
+    (define MSG_PEEK #x2)
+    (define MSG_DONTROUTE #x4)
+    (define MSG_CTRUNC #x8)
+    (define MSG_PROBE #x10)
+    (define MSG_TRUNC #x20)
+    (define MSG_DONTWAIT #x40)
+    (define MSG_EOR #x80)
+    (define MSG_WAITALL #x100)
+    (define MSG_FIN #x200)
+    (define MSG_SYN #x400)
+    (define MSG_CONFIRM #x800)
+    (define MSG_RST #x1000)
+    (define MSG_ERRQUEUE #x2000)
+    (define MSG_NOSIGNAL #x4000)
+    (define MSG_MORE #x8000)
+    (define MSG_WAITFORONE #x10000)
+    (define MSG_BATCH #x40000)
+    (define MSG_ZEROCOPY #x4000000)
+    (define MSG_FASTOPEN #x20000000)
+    (define MSG_CMSG_CLOEXEC #x40000000)
+    (endif)
+
     ;; Not really part of the Linux ABI, but says how to use exit()
     (c-include "sysexits.h")
     EX_OK
@@ -498,7 +677,6 @@
     EX_PROTOCOL
     EX_NOPERM
     EX_CONFIG
-
     ))
 
 (define (print . x) (for-each display x) (newline))
@@ -560,7 +738,9 @@
                members)))
            ((sizeof)
             (let ((type (cadr x)))
-              (print "    printf(\"\\n    sizeof-" type "\");"))))
+              (print "    printf(\"\\n    sizeof-" type "\");")))
+           ((define)
+            (print "    printf(\"\\n    " (cadr x) "\");")))
          (print "    printf(\"\\n    " x "\");")))
    (cons 'errno-list instructions))
   (print "    printf(\")\\n\");")
@@ -593,6 +773,10 @@
 (define (printf-sizeof type)
   (print "    printf(\"(define-inlined sizeof-" type
          " %lu)\\n\", sizeof(" type "));"))
+
+(define (printf-define fmt what as)
+  (print "    printf(\"(define-inlined " what " " fmt
+         ")\\n\", " as ");"))
 
 (define (printf . x*)
   (print "    printf(\"" (apply string-append
@@ -646,6 +830,9 @@
                 (lp format (cdr x*)))
                ((sizeof)
                 (printf-sizeof (cadr x))
+                (lp format (cdr x*)))
+               ((define)
+                (printf-define format (cadr x) (caddr x))
                 (lp format (cdr x*)))
                ((comment)
                 (printf ";; " (cadr x))

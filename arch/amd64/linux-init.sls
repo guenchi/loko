@@ -40,44 +40,6 @@
           CPU-VECTOR:SCHEDULER-SP)
     (srfi :98 os-environment-variables))
 
-(define original-termios #f)
-
-(define (terminal-raw-mode)
-  (let ((buf (make-bytevector sizeof-termios)))
-    (when (eqv? 0 (sys_ioctl STDIN_FILENO TCGETS (bytevector-address buf)
-                             (lambda (errno) #f)))
-      (set! original-termios (bytevector-copy buf))
-      (let ((iflag (bytevector-u32-native-ref buf offsetof-termios-c_iflag))
-            (oflag (bytevector-u32-native-ref buf offsetof-termios-c_oflag))
-            (cflag (bytevector-u32-native-ref buf offsetof-termios-c_cflag))
-            (lflag (bytevector-u32-native-ref buf offsetof-termios-c_lflag)))
-        ;; Raw mode.
-        (let ((iflag (fxand iflag (fxnot (fxior IGNBRK BRKINT PARMRK ISTRIP
-                                                INLCR IGNCR ICRNL IXON))))
-              (oflag (fxand oflag (fxnot (fxior OPOST))))
-              (lflag (fxand lflag (fxnot (fxior ECHO ECHONL ICANON ISIG IEXTEN))))
-              (cflag (fxior cflag CS8)))
-          (bytevector-u32-native-set! buf offsetof-termios-c_iflag iflag)
-          (bytevector-u32-native-set! buf offsetof-termios-c_oflag oflag)
-          (bytevector-u32-native-set! buf offsetof-termios-c_cflag cflag)
-          (bytevector-u32-native-set! buf offsetof-termios-c_lflag lflag)
-          (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) 1)
-          (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) 0)))
-      (sys_ioctl STDIN_FILENO TCSETSW (bytevector-address buf)))))
-
-;; Restore the terminal to the way it was.
-(define (terminal-restore)
-  (when (bytevector? original-termios)
-    (sys_ioctl STDOUT_FILENO TCSETSW (bytevector-address original-termios)
-               (lambda (errno) #f))))
-
-;; Get the terminal's window size. Returns cols, rows.
-(define (terminal-get-window-size)
-  (let ((buf (make-bytevector sizeof-winsize)))
-    (sys_ioctl STDOUT_FILENO TIOCGWINSZ (bytevector-address buf))
-    (values (bytevector-u16-native-ref buf offsetof-winsize-ws_col)
-            (bytevector-u16-native-ref buf offsetof-winsize-ws_row))))
-
 ;; Less general than the libc counterpart
 (define (timer-create clock-id signal)
   (let ((evp (make-bytevector sizeof-sigevent))
@@ -114,9 +76,15 @@
   (define put! bytevector-u64-native-set!)
   (define (rt_sigaction signal act)
     (sys_rt_sigaction signal (bytevector-address act) NULL sizeof-sigset_t))
-  ;; TODO: SIGWINCH via signalfd
-  (let* ((size sizeof-sigset_t)
-         (act (make-bytevector sizeof-sigaction)))
+  (define (rt_sigprocmask how set)
+    (let ((buf (make-bytevector sizeof-sigset_t)))
+      (bytevector-u64-native-set! buf 0 set)
+      (sys_rt_sigprocmask how (bytevector-address buf) NULL (bytevector-length buf))))
+  ;; SIGPIPE is not needed because the syscalls that would raise it
+  ;; will instead get errors that are handled properly.
+  (rt_sigprocmask SIG_BLOCK (fxarithmetic-shift-left 1 (- SIGPIPE 1)))
+  (let ((act (make-bytevector sizeof-sigaction)))
+    ;; TODO: SIGWINCH via signalfd
     (put! act offsetof-sigaction-sa_handler ($linker-address 'signal-handler))
     (put! act offsetof-sigaction-sa_flags
           (bitwise-ior SA_SIGINFO SA_NODEFER SA_RESTORER))
@@ -301,7 +269,6 @@
 
   (init-set! '$mmap linux-mmap)
   (init-set! 'exit (lambda (status)
-                     (terminal-restore)
                      ;; XXX: status must be a byte?
                      (let lp ()
                        (sys_exit (if (fixnum? status)

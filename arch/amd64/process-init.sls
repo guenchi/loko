@@ -284,10 +284,8 @@
   (init-set! 'open-file-input-port open-file-input-port))
 
 (define (linux-process-setup)
-  ;; TODO: this is NOT what should happen. There should be message
-  ;; passing and things like that. Basically none of these syscalls
-  ;; should be here, they should be implemented by passing messages
-  ;; to the scheduler.
+  ;; TODO: migrate the I/O done here to fibers
+  (define NULL 0)
   (define (filename->c-string who fn)
     (string-for-each
      (lambda (c)
@@ -447,15 +445,99 @@
         (if maybe-transcoder
             (transcoded-port p maybe-transcoder)
             p))))
+  (define (linux-open-i/o-poller)
+    (let* ((epfd (sys_epoll_create1 EPOLL_CLOEXEC))
+           (maxevents 10)
+           (events (make-bytevector (* maxevents sizeof-epoll_event)))
+           (fds (make-eqv-hashtable))
+           (who 'linux-i/o-poller))
+      (define epoller
+        (case-lambda
+          (()
+           (hashtable-size fds))
+          ((wakeup)                       ;wakeup = no-wait / forever / <timeout>
+           (let ((n (let retry ()
+                      (if (and (eqv? (hashtable-size fds) 0)
+                               (eq? wakeup 'no-wait))
+                          0               ;nothing to do
+                          (let ((timeout
+                                 (cond ((eq? wakeup 'no-wait) 0)
+                                       ((eq? wakeup 'forever) -1)
+                                       (else
+                                        ;; Let's wait until the wakeup
+                                        ;; time. It doesn't matter if we
+                                        ;; wait shorter.
+                                        (max 0 (min (- wakeup (linux-current-ticks))
+                                                    60000))))))
+                            (if (and (eqv? (hashtable-size fds) 0)
+                                     (not (fx>=? timeout 0)))
+                                0         ;even more nothing to do
+                                (sys_epoll_pwait
+                                 epfd (bytevector-address events) maxevents
+                                 timeout NULL
+                                 (lambda (errno)
+                                   (if (eqv? errno EINTR)
+                                       (retry)
+                                       (raise (condition (make-syscall-error 'epoll_pwait errno)
+                                                         (make-irritants-condition
+                                                          (list epfd events maxevents timeout NULL)))))))))))))
+             (do ((i 0 (fx+ i 1))
+                  (offset 0 (fx+ offset sizeof-epoll_event))
+                  (ret '()
+                       (let ((events (bytevector-u32-native-ref events (fx+ offset offsetof-epoll_event-events)))
+                             (fd (bytevector-u32-native-ref events (fx+ offset offsetof-epoll_event-data))))
+                         (cond ((hashtable-ref fds fd #f) =>
+                                (lambda (user-value)
+                                  ;; TODO: Does it really need to be deleted?
+                                  (hashtable-delete! fds fd)
+                                  (sys_epoll_ctl epfd EPOLL_CTL_DEL fd NULL)
+                                  (cons user-value ret)))
+                               (else
+                                (error who "Event on unknown fd" epfd fd))))))
+                 ((fx=? i n) ret))))
+          ((cmd fd poll-type user-value)
+           (case cmd
+             ((add)
+              (let ((event (make-bytevector sizeof-epoll_event))
+                    (events (bitwise-ior
+                             (case poll-type
+                               ((read) EPOLLIN)
+                               ((write) EPOLLOUT)
+                               (else 0))
+                             ;; TODO: check the error cases
+                             (bitwise-ior
+                              ;; EPOLLPRI             ;out of band data
+                              EPOLLRDHUP           ;peer closed
+                              EPOLLET              ;event-triggered
+                              EPOLLONESHOT         ;one event only
+                              EPOLLERR EPOLLHUP))) ;can't be unset
+                    (user-data fd))
+                (bytevector-u32-native-set! event 0 events)
+                (bytevector-u32-native-set! event 4 user-data)
+                (sys_epoll_ctl epfd EPOLL_CTL_ADD fd (bytevector-address event))
+                (hashtable-set! fds fd user-value)))
+             ((close)
+              (sys_close epfd))
+             (else
+              (error who "Unhandled command" cmd))))))
+      epoller))
+  (define (linux-current-ticks)
+    ;; TODO: See if CLOCK_MONOTONIC_COARSE and the vDSO is better for this
+    (let* ((x (make-bytevector sizeof-timespec))
+           (_ (sys_clock_gettime CLOCK_BOOTTIME (bytevector-address x)))
+           (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
+           (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
+      (fx+ (fx* seconds 1000)
+           (fxdiv nanoseconds #e1e+6))))
   (define (linux-get-time clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_gettime clock (bytevector-address x)))
+           (_ (sys_clock_gettime clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
   (define (linux-get-time-resolution clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_getres clock (bytevector-address x)))
+           (_ (sys_clock_getres clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
@@ -475,12 +557,14 @@
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
+  (init-set! 'open-i/o-poller linux-open-i/o-poller)
   (time-init-set! 'cumulative-process-time
                   (lambda () (linux-get-time CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'cumulative-process-time-resolution
                   (lambda () (linux-get-time-resolution CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'current-time (lambda () (linux-get-time CLOCK_REALTIME)))
   (time-init-set! 'current-time-resolution (lambda () (linux-get-time-resolution CLOCK_REALTIME)))
+  (time-init-set! 'current-ticks linux-current-ticks)
   ;; (display "PID: ")
   ;; (write (pid-value (get-pid)))
   ;; (newline)
