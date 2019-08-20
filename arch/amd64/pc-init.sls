@@ -726,6 +726,8 @@
                     (pcb-msg-set! pcb (get-environment-variables)))
                    ((boot-modules)
                     (pcb-msg-set! pcb *boot-modules*))
+                   ((current-ticks)
+                    (pcb-msg-set! pcb (fxdiv (rdtsc) (fxdiv cpu-freq 1000))))
                    (else
                     (display "bad message: ")
                     (write msg)

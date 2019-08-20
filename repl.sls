@@ -92,7 +92,7 @@ certain conditions.
 ;; FIXME: This is really a bad implementation
 (define (load filename)
   (unless (env)
-    (error 'load "Load can only be called from a repl." filename))
+    (error 'load "Load can only be called from a repl" filename))
   (call-with-input-file filename
     (lambda (p)
       (let lp ()

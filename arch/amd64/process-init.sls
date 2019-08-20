@@ -89,6 +89,9 @@
   ($process-yield `(exit ,(pid-value (get-pid))
                          ,status)))
 
+(define (pc-current-ticks)
+  ($process-yield '(current-ticks)))
+
 (define (allocate type size mask)
   (assert (eq? type 'dma))
   (assert (fx=? size 4096))
@@ -128,10 +131,6 @@
     (else
      (error 'wait "Unknown reply from scheduler" reply)))
   )
-
-#;
-(define (listen fd mask)
-  ($process-yield `(listen ,fd ,mask)))
 
 ;; (define (wait/irq irq timeout)
 ;;   ;; XXX: compound message?
@@ -282,6 +281,31 @@
                (make-irritants-condition (list filename)))))))
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port))
+
+(define (pc-open-i/o-poller)
+  (define pc-poll
+    (case-lambda
+      (()
+       0)
+      ((wakeup)                ;wakeup = no-wait / forever / <timeout>
+       (if (eq? wakeup 'no-wait)
+           0                            ;nothing to do
+           (let ((timeout
+                  (cond ((eq? wakeup 'no-wait) 0)
+                        ((eq? wakeup 'forever) 60000)
+                        (else
+                         ;; Let's wait until the wakeup time. It
+                         ;; doesn't matter if we wait shorter.
+                         (max 0 (min (- wakeup (pc-current-ticks))
+                                     60000))))))
+             (if (not (fx>? timeout 0))
+                 0                      ;even more nothing to do
+                 (wait (* #e1e6 timeout)))))
+       '())
+      ((cmd . x)
+       (unless (eq? cmd 'close)
+         (apply error 'pc-poll "Unhandled command" x)))))
+  pc-poll)
 
 (define (linux-process-setup)
   ;; TODO: migrate the I/O done here to fibers
@@ -600,6 +624,8 @@
           (error '$init-process "Internal error: no code for this pid" pid)))))
     ((multiboot)
      (init-set! 'machine-type '#(amd64 loko))
+     (init-set! 'open-i/o-poller pc-open-i/o-poller)
+     (time-init-set! 'current-ticks pc-current-ticks)
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)

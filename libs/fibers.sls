@@ -83,7 +83,7 @@
 ;;-
 
 ;; A single global scheduler per Loko process
-(define *scheduler-k* #f)
+(define *scheduler-k* 'sched-uninit)
 (define *scheduler-inbox* #f)
 (define *scheduler-next* #f)
 (define *scheduler-i/o* #f)
@@ -97,14 +97,13 @@
 (define (run-fibers init-thunk)
   (cond
     ((not *scheduler-i/o*)
-     (set! *scheduler-k* #f)
+     (set! *scheduler-k* 'sched-inited)
      (set! *scheduler-inbox* #f)
      (set! *scheduler-next* (make-queue))
      (set! *scheduler-i/o* (open-i/o-poller))
      (set! *scheduler-timers* '())
      (schedule init-thunk)
      (run-fiber-scheduler)
-     (display "fiber scheduler returned\n")
      (*scheduler-i/o* 'close #f #f #f)
      (set! *scheduler-i/o* #f))
     (else
@@ -201,7 +200,7 @@
                         (lambda (k)
                           (set! *scheduler-k* k)
                           (task)
-                          (set! *scheduler-k* #f)
+                          (set! *scheduler-k* 'sched-inact)
                           (values 'return #f #f)))])
           (debug (list 'RETURN-FROM-TASK task '=> cmd arg0 arg1))
           (case cmd
