@@ -1,0 +1,9 @@
+#!r6rs ; -*- mode: scheme; coding: utf-8 -*-
+(import (akku format manifest))
+
+(akku-package ("loko-web-server" "0.0.0-alpha.0")
+  (synopsis "Sample web server for Loko")
+  (authors "Göran Weinholt")
+  (license "MIT")
+  (depends ("struct-pack" "^1.1.1") ("ip-address" "^1.0.0"))
+)
