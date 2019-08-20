@@ -176,7 +176,7 @@
       (let ((now (current-ticks)))
         (debug (list 'ready-for-i/o ready-for-i/o))
         (let-values ([(expired pending) (partition (match-lambda
-                                                    [(expiry . _) (<= expiry now)])
+                                                    [(expiry . _) (fx<=? expiry now)])
                                                    *scheduler-timers*)])
           (set! *scheduler-timers* pending)
           (for-each (lambda (x) (enqueue! *scheduler-inbox* (cdr x))) expired)
@@ -302,82 +302,75 @@
 
 (define-record-type channel
   (nongenerative)
-  (fields (mutable recvq) (mutable sendq))
+  (fields recvq sendq)
   (protocol
    (lambda (new)
      (lambda ()
-       ;; FIXME: use the real queues
-       (new '() '())))))
+       (new (make-queue) (make-queue))))))
 
 (define (put-operation ch message)
   ;; Try to send a message on a channel without blocking. Succeeds if
   ;; there is a receiver waiting.
   (define (send-try-fn)
-    (match (channel-recvq ch)
-      [() #f]
-      [(#(resume-recv recv-state) . rest)
-       (debug (list 'TRY 'SENT message))
-       (resume-recv (lambda () message))
-       (channel-recvq-set! ch rest)
-       values]))
+    (and (not (queue-empty? (channel-recvq ch)))
+         (match (dequeue! (channel-recvq ch))
+           [#(resume-recv recv-state)
+            (debug (list 'TRY 'SENT message))
+            (resume-recv (lambda () message))
+            values])))
   (define (send-block-fn resume-send send-state)
     ;; Enqueue this fiber. The receiver will remove us from the queue.
     (debug "enqueue\n")
-    (channel-sendq-set! ch (append (channel-sendq ch)
-                                   (list (vector message resume-send send-state))))
+    (enqueue! (channel-sendq ch) `#(,message ,resume-send ,send-state))
     ;; See if someone showed up in the meantime.
     (let retry ()
       (debug (list 'send-retrying (channel-recvq ch)))
-      (match (channel-recvq ch)       ;FIXME: find the first not from us
-        [() #f]
-        [(#(resume-recv recv-state) . rest)
-         (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
-                (channel-recvq-set! ch rest)
-                (retry))
-               (else
-                (debug (list 'BLOCK 'SENT message))
-                (channel-recvq-set! ch rest)
-                (vector-set! send-state 0 'SYNCHED)
-                (resume-recv (lambda () message))
-                (resume-send values)
-                (values)))])))
+      (and (not (queue-empty? (channel-recvq ch)))
+           ;;FIXME: find the first not from us
+           (match (dequeue! (channel-recvq ch))
+             [#(resume-recv recv-state)
+              (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
+                     (retry))
+                    (else
+                     (debug (list 'BLOCK 'SENT message))
+                     (vector-set! send-state 0 'SYNCHED)
+                     (resume-recv (lambda () message))
+                     (resume-send values)
+                     (values)))]))))
   (make-base-operation #f send-try-fn send-block-fn))
 
 (define (get-operation ch)
   ;; Try to receive a message on a channel without blocking.
   (define (recv-try-fn)
-    (match (channel-sendq ch)
-      [() #f]                           ;no sender is ready
-      [(#(val resume-sender state) . rest)
-       ;; We have a sender in the queue. Resume the sender, delete
-       ;; them from the queue and return the value they sent.
-       (debug (list 'TRY 'RECEIVED val))
-       (resume-sender values)
-       (channel-sendq-set! ch rest)
-       (lambda () val)]))
+    (and (not (queue-empty? (channel-sendq ch)))
+         (match (dequeue! (channel-sendq ch))
+           [#(val resume-sender state)
+            ;; We have a sender in the queue. Resume the sender, delete
+            ;; them from the queue and return the value they sent.
+            (debug (list 'TRY 'RECEIVED val))
+            (resume-sender values)
+            (lambda () val)])))
   ;; Receive a message on a channel. The blocking case.
   (define (recv-block-fn resume-recv recv-state)
     ;; There was no sender ready, so this fiber is blocked. Put
     ;; ourselves in the recv queue.
-    (channel-recvq-set! ch (append (channel-recvq ch)
-                                   (list (vector resume-recv recv-state))))
+    (enqueue! (channel-recvq ch) `#(,resume-recv ,recv-state))
     (let retry ()
       (debug (list 'recv-retrying (channel-recvq ch)))
       ;; FIXME: (choice-operation (put-operation A v) (get-operation
       ;; A)) must not send v to itself.
-      (match (channel-sendq ch)       ;FIXME: find the first not from us
-        [() #f]
-        [(#(val resume-send send-state) . rest)
-         (cond ((eq? (vector-ref send-state 0) 'SYNCHED)
-                (channel-sendq-set! ch rest)
-                (retry))
-               (else
-                (debug (list 'BLOCK 'RECEIVED val))
-                (channel-sendq-set! ch rest)
-                (vector-set! recv-state 0 'SYNCHED)
-                (resume-send values)
-                (resume-recv (lambda () val))
-                (values)))])))
+      (and (not (queue-empty? (channel-sendq ch)))
+           ;;FIXME: find the first not from us
+           (match (dequeue! (channel-sendq ch))
+             [#(val resume-send send-state)
+              (cond ((eq? (vector-ref send-state 0) 'SYNCHED)
+                     (retry))
+                    (else
+                     (debug (list 'BLOCK 'RECEIVED val))
+                     (vector-set! recv-state 0 'SYNCHED)
+                     (resume-send values)
+                     (resume-recv (lambda () val))
+                     (values)))]))))
   (make-base-operation #f recv-try-fn recv-block-fn))
 
 (define (put-message ch message)
@@ -393,7 +386,7 @@
 
 (define (timer-operation expiry)
   (define (sleep-try-fn)
-    (cond ((<= expiry (current-ticks))
+    (cond ((fx<=? expiry (current-ticks))
            values)
           (else #f)))
   (define (sleep-block-fn resume-sleep state)
