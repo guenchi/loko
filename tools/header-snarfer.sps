@@ -441,6 +441,7 @@
     O_TMPFILE
     (fmt "%d")
     F_DUPFD
+    F_DUPFD_CLOEXEC
     F_GETFD
     F_SETFD
     F_GETFL

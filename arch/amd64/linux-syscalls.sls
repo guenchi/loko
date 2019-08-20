@@ -28,11 +28,13 @@
     sys_clock_getres
     sys_clock_gettime
     sys_close
+    ;; sys_dup, sys_dup2 and sys_dup3: use fcntl
     sys_epoll_create1
     sys_epoll_ctl
     sys_epoll_pwait
     sys_exit
     sys_faccessat
+    sys_fcntl
     sys_fork
     sys_fstat
     sys_getdents64

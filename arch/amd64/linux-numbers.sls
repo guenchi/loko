@@ -431,6 +431,7 @@
     O_PATH
     O_TMPFILE
     F_DUPFD
+    F_DUPFD_CLOEXEC
     F_GETFD
     F_SETFD
     F_GETFL
@@ -1101,6 +1102,7 @@
 (define-inlined O_PATH #o10000000)
 (define-inlined O_TMPFILE #o20200000)
 (define-inlined F_DUPFD 0)
+(define-inlined F_DUPFD_CLOEXEC 1030)
 (define-inlined F_GETFD 1)
 (define-inlined F_SETFD 2)
 (define-inlined F_GETFL 3)
