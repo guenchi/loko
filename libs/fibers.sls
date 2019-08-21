@@ -41,6 +41,8 @@
     make-channel channel? put-operation get-operation
     put-message get-message
     sleep-operation timer-operation sleep
+    make-cvar cvar? signal-cvar! wait-operation wait
+
     yield-current-task                  ;TODO: is this public?
 
     ;; Seemingly not exported in Guile. It has them, but the arguments
@@ -234,7 +236,6 @@
     (call-with-values (lambda () (apply f x*))
                       g)))
 
-;;; FIXME: Untested
 (define (wrap-operation op f)
   (make-op (if (op-wrap op) (compose f (op-wrap op)) f)
            (op-try op)
@@ -278,7 +279,9 @@
     (define (pessimistic)
       (define (block resume)
         (block-fn (if wrap-fn
-                      (compose wrap-fn resume)
+                      (lambda (thunk)
+                        (resume (lambda ()
+                                  (call-with-values thunk wrap-fn))))
                       resume)
                   (vector 'WAITING)))
       ((suspend
@@ -421,4 +424,49 @@
      (schedule-for-poll fd 'write
                         (lambda ()
                           (debug (list 'now-writable fd))
-                          (resume (lambda () (values)))))))))
+                          (resume (lambda () (values))))))))
+
+;;; Condition variables
+
+(define-record-type cvar
+  (fields (mutable state)
+          (mutable waiting))
+  (protocol
+   (lambda (new)
+     (lambda ()
+       (new #f '())))))
+
+(define (call-resume waiting)
+  (do ((waiting waiting (cdr waiting)))
+      ((null? waiting)
+       #f)
+    (match (car waiting)
+      (#(their-resume their-state)
+       (cond ((eq? (vector-ref their-state 0) 'SYNCHED)
+              #f)
+             (else
+              (vector-set! their-state 0 'SYNCHED)
+              (their-resume values)))))))
+
+(define (wait-operation cvar)
+  (define (wait-try-fn)
+    (cond ((cvar-state cvar) values)
+          (else #f)))
+  (define (wait-block-fn resume-wait state)
+    (cvar-waiting-set! cvar (cons `#(,resume-wait ,state) (cvar-waiting cvar)))
+    (when (cvar-state cvar)
+      (let ((waiting (cvar-waiting cvar)))
+        (cvar-waiting-set! cvar '())
+        (call-resume waiting)))
+    (values))
+  (make-base-operation #f wait-try-fn wait-block-fn))
+
+(define (signal-cvar! cvar)
+  (unless (cvar-state cvar)
+    (cvar-state-set! cvar #t)
+    (let ((waiting (cvar-waiting cvar)))
+      (cvar-waiting-set! cvar '())
+      (call-resume waiting))))
+
+(define (wait cvar)
+  (perform-operation (wait-operation cvar))))

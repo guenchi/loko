@@ -105,18 +105,19 @@
           (dma-addr (vector-ref v 5)))
       (values cpu-addr dma-addr))))
 
-(define (wait timeout)
+(define (scheduler-wait ns-timeout)
   ;; TODO: this message should take a number back from the scheduler
   ;; that indicates for how long it slept. This is so that if the
   ;; process is awoken by an uninteresting message it can go back to
   ;; sleeping with the original timeout without asking the scheduler
   ;; for the current time.
-  (when timeout
-    (assert (fxpositive? timeout)))
-  (let ((vec (vector 'wait timeout #f)))
-    (handle-wait-reply vec ($process-yield vec))))
+  (when ns-timeout
+    (assert (fxpositive? ns-timeout)))
+  (let ((vec (vector 'wait ns-timeout #f)))
+    (handle-scheduler-wait-reply vec ($process-yield vec)
+                                 'scheduler-wait)))
 
-(define (handle-wait-reply vec reply)
+(define (handle-scheduler-wait-reply vec reply who)
   ;; The scheduler will update vec.
   (case reply
     ((timeout)
@@ -129,13 +130,12 @@
      #f
      )
     (else
-     (error 'wait "Unknown reply from scheduler" reply)))
-  )
+     (error who "Unknown reply from scheduler" reply))))
 
 ;; (define (wait/irq irq timeout)
 ;;   ;; XXX: compound message?
 ;;   (listen irq #f)
-;;   (wait timeout))
+;;   (scheduler-wait timeout))
 
 (define (enable-irq irq)
   (assert (fx<=? 0 irq 15))
@@ -146,7 +146,8 @@
   (when timeout
     (assert (fxpositive? timeout)))
   (let ((vec (vector 'wait timeout #f)))
-    (handle-wait-reply vec ($process-yield `(acknowledge-irq ,irq ,vec)))))
+    (handle-scheduler-wait-reply vec ($process-yield `(acknowledge-irq ,irq ,vec))
+                                 'acknowledge-irq/wait)))
 
 (define (send-message target message)
   (assert (fixnum? message))
@@ -165,7 +166,7 @@
   #;
   (let lp ((point (channel-start channel)))
     (cond ((channel-end? channel point)
-           (wait timeout))
+           (scheduler-wait timeout))
           ((match? (channel-peek channel point))
            (channel-dequeue channel point))
           (else
@@ -300,7 +301,7 @@
                                      60000))))))
              (if (not (fx>? timeout 0))
                  0                      ;even more nothing to do
-                 (wait (* #e1e6 timeout)))))
+                 (scheduler-wait (* #e1e6 timeout)))))
        '())
       ((cmd . x)
        (unless (eq? cmd 'close)
@@ -599,12 +600,9 @@
       (newline))))
 
 (define (process-init)
-  ;; XXX: this is temporary. It should actually use message passing
-  ;; to get a closure or something for startup.
-  (define (print . x) (for-each display x) (newline))
   (define (nanosleep seconds)
     (assert (fx>=? seconds 0))
-    (wait seconds)
+    (scheduler-wait seconds)
     (if #f #f))
   (init-set! 'exit process-exit)
   (time-init-set! 'nanosleep nanosleep)
@@ -614,11 +612,9 @@
   (case (get-boot-loader)
     ((linux)
      (init-set! 'machine-type '#(amd64 linux))
-     ;; FIXME: This needs to receive a procedure to start
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)
-          ;; FIXME: Needs to use IPC for port communication
           (linux-process-setup))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))

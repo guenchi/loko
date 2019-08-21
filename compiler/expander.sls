@@ -1121,6 +1121,11 @@
     (sleep                    fibers)
     (wait-for-readable        fibers)
     (wait-for-writable        fibers)
+    (make-cvar                fibers)
+    (cvar?                    fibers)
+    (signal-cvar!             fibers)
+    (wait-operation           fibers)
+    (wait                     fibers)
 
     ($cpuid!                  $x86)
     (cpuid                    $x86)
