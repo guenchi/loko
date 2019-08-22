@@ -22,7 +22,7 @@
 (library (loko libs strings)
   (export
     string? make-string string string-length string-ref
-    string=? ;;string<? string>? string<=? string>=?
+    string=? string<? string>? string<=? string>=?
     substring string-append string->list list->string
     string-for-each string-copy
     string-fill! string-set!
@@ -66,7 +66,7 @@
          (x chars (cdr x)))
         ((null? x) s)
       (when (not (char? (car x)))
-        (apply assertion-violation 'string "This procedure needs characters." chars))
+        (apply assertion-violation 'string "Expects characters" chars))
       (string-set! s i (car x)))))
 
 (define (string-length s) (sys:string-length s))
@@ -76,12 +76,13 @@
 (define string=?
   (case-lambda
     ((x1 x2)
-     (and (fx=? (string-length x1) (string-length x2))
-          (let ((len (string-length x1)))
-            (let lp ((i 0))
-              (or (fx=? i len)
-                  (and (eq? (string-ref x1 i) (string-ref x2 i))
-                       (lp (fx+ i 1))))))))
+     (or (eq? x1 x2)
+         (and (fx=? (string-length x1) (string-length x2))
+              (let ((len (string-length x1)))
+                (let lp ((i 0))
+                  (or (fx=? i len)
+                      (and (eq? (string-ref x1 i) (string-ref x2 i))
+                           (lp (fx+ i 1)))))))))
     ((x1 x2 . x*)
      (and (string=? x1 x2)
           (let lp ((x* x*))
@@ -89,7 +90,59 @@
                 (and (string=? x1 (car x*))
                      (lp (cdr x*)))))))))
 
-;; TODO: string<? string>? string<=? string>=?
+(define string<?
+  (case-lambda
+    ((x1 x2)
+     (if (eq? x1 x2)
+         #f
+         (let lp ((i 0))
+           (cond ((fx=? i (string-length x2)) #f)
+                 ((fx=? i (string-length x1)) #t)
+                 (else
+                  (let ((c1 (string-ref x1 i))
+                        (c2 (string-ref x2 i)))
+                    (cond ((char>? c1 c2) #f)
+                          ((char<? c1 c2) #t)
+                          (else (lp (fx+ i 1))))))))))
+    ((x1 x2 . x*)
+     (and (string<? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string<? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string<=?
+  (case-lambda
+    ((x1 x2)
+     (not (string>? x1 x2)))
+    ((x1 x2 . x*)
+     (and (string<=? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string<=? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string>?
+  (case-lambda
+    ((x1 x2)
+     (string<? x2 x1))
+    ((x1 x2 . x*)
+     (and (string>? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string>? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string>=?
+  (case-lambda
+    ((x1 x2)
+     (not (string<? x1 x2)))
+    ((x1 x2 . x*)
+     (and (string>=? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string>=? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
 
 (define (substring string start end)
   (let ((len (fx- end start)))
@@ -122,7 +175,7 @@
       ((null? l) string)
     (when (not (char? (car l)))
       (apply assertion-violation 'list->string
-             "This procedure needs characters." list))
+             "Expected a list of characters" list))
     (string-set! string n (car l))))
 
 (define string-for-each
