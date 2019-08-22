@@ -209,7 +209,7 @@
                   (loop-bucket (cdr obucket)
                                (and all-immobile (immobile? key))))))))))
 
-(define cleared '(cleared))
+(define cleared '(*key-cleared*))
 
 (define (hashtable-ref ht key default)
   (let lp ()
@@ -231,7 +231,10 @@
                      (else
                       (let ((cell/len (alist-lookup key bucket cmp
                                                     (hashtable-mutable? ht))))
-                        (cond ((pair? cell/len) (cdr cell/len))
+                        (cond ((pair? cell/len)
+                               (if (eq? (cdr cell/len) cleared)
+                                   default
+                                   (cdr cell/len)))
                               (else default)))))))
             (else
              ;; association list
@@ -417,16 +420,23 @@
                      (if (pair? b)
                          (let* ((k (caar b))
                                 (v (cdar b)))
-                           (vector-set! k* j k)
-                           (vector-set! v* j v)
-                           (loop-bucket (fx+ j 1) (cdr b)))
+                           (cond ((eq? v cleared)
+                                  (loop-bucket j (cdr b)))
+                                 (else
+                                  (vector-set! k* j k)
+                                  (vector-set! v* j v)
+                                  (loop-bucket (fx+ j 1) (cdr b)))))
                          (loop-vector j (fx+ i 1))))))))
             (else
-             (do ((i 0 (fx+ i 1))
-                  (vals vals (cdr vals)))
-                 ((not (pair? vals)))
-               (vector-set! k* i (caar vals))
-               (vector-set! v* i (cdar vals)))))
+             (let lp ((i 0)
+                      (vals vals))
+               (when (pair? vals)
+                 (cond ((eq? (cdar vals) cleared)
+                        (lp i (cdr vals)))
+                       (else
+                        (vector-set! k* i (caar vals))
+                        (vector-set! v* i (cdar vals))
+                        (lp (fx+ i 1) (cdr vals))))))))
       (values k* v*))))
 
 ;;; Hash functions
