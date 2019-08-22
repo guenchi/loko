@@ -237,34 +237,31 @@
                       g)))
 
 (define (wrap-operation op f)
-  (make-op (if (op-wrap op) (compose f (op-wrap op)) f)
-           (op-try op)
-           (op-block op)))
+  (if (vector? op)
+      (vector-map (lambda (op) (wrap-operation op f)) op)
+      (make-op (if (op-wrap op) (compose f (op-wrap op)) f)
+               (op-try op)
+               (op-block op))))
 
-;;; FIXME: Untested
 (define (choice-operation . ops)
-  (define (try)
-    (let lp ((ops ops))
-      (match ops
-        [(op . rest)
-         (let ((sub-try (op-try op))
-               (sub-wrap (op-wrap op)))
-           (cond ((sub-try) =>
-                  (lambda (thunk)
-                    (compose sub-wrap thunk)))
-                 (else
-                  (lp rest))))]
-        [_ #f])))
-  (define (block resume opstate)
-    (for-each
-     (lambda (subop)
-       (let ((sub-block (op-block subop))
-             (sub-wrap (op-wrap subop)))
-         (define (wrapped-resume results-thunk)
-           (resume (compose sub-wrap results-thunk)))
-         (sub-block wrapped-resume opstate)))
-     ops))
-  (make-op #f try block))
+  ;; Some kind of vector-flatten
+  (let* ((len (do ((ops ops (cdr ops))
+                   (len 0 (cond ((vector? (car ops)) (fx+ len (vector-length (car ops))))
+                                (else (fx+ len 1)))))
+                  ((null? ops) len)))
+         (ret (make-vector len #f)))
+    (let lp ((ops ops) (i 0))
+      (cond ((null? ops) ret)
+            ((vector? (car ops))
+             (do ((vec (car ops))
+                  (i i (fx+ i 1))
+                  (j 0 (fx+ j 1)))
+                 ((fx=? j (vector-length vec))
+                  (lp (cdr ops) i))
+               (vector-set! ret i (vector-ref vec j))))
+            (else
+             (vector-set! ret i (car ops))
+             (lp (cdr ops) (fx+ i 1)))))))
 
 (define (suspend callback)
   (debug "suspending")
@@ -273,32 +270,40 @@
       (*scheduler-k* 'suspend callback susp-k))))
 
 (define (perform-operation op)
-  (let ((try-fn (op-try op))
-        (block-fn (op-block op))
-        (wrap-fn (op-wrap op)))
-    (define (pessimistic)
-      (define (block resume)
-        (block-fn (if wrap-fn
-                      (lambda (thunk)
-                        (resume (lambda ()
-                                  (call-with-values thunk wrap-fn))))
-                      resume)
-                  (vector 'WAITING)))
-      ((suspend
-        (lambda (k)
-          (define (resume values-thunk)
-            (schedule (lambda () (k values-thunk))))
-          (debug "calling block-fn\n")
-          (block resume)))))
-    (cond ((try-fn) =>
-           (lambda (thunk)
-             (debug "try succeeding\n")
-             (if wrap-fn
-                 ((compose wrap-fn thunk))
-                 (thunk))))
-          (else
-           (debug "pessimistic\n")
-           (pessimistic)))))
+  (define (block resume ops)
+    (let ((state (vector 'WAITING)))
+      (vector-for-each
+       (lambda (base-op)
+         (let ((block-fn (op-block base-op))
+               (wrap-fn (op-wrap base-op)))
+           (block-fn (if wrap-fn
+                         (lambda (thunk)
+                           (resume (lambda ()
+                                     (call-with-values thunk wrap-fn))))
+                         resume)
+                     state)))
+       ops)))
+  (let ((ops (if (op? op) (vector op) op)))
+    (let lp ((i 0))                     ;TODO: nondeterminism
+      (cond
+        ((fx=? i (vector-length ops))
+         ((suspend
+           (lambda (k)
+             (define (resume values-thunk)
+               (schedule (lambda () (k values-thunk))))
+             (debug "calling block-fn\n")
+             (block resume ops)))))
+        (else
+         (let ((base-op (vector-ref ops i)))
+           (let ((try-fn (op-try base-op))
+                 (wrap-fn (op-wrap base-op)))
+             (cond ((try-fn) =>
+                    (lambda (thunk)
+                      (debug "try succeeding\n")
+                      (if wrap-fn
+                          ((compose wrap-fn thunk))
+                          (thunk))))
+                   (else (lp (fx+ i 1)))))))))))
 
 ;;; Channels
 
@@ -317,9 +322,13 @@
     (and (not (queue-empty? (channel-recvq ch)))
          (match (dequeue! (channel-recvq ch))
            [#(resume-recv recv-state)
-            (debug (list 'TRY 'SENT message))
-            (resume-recv (lambda () message))
-            values])))
+            (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
+                   (send-try-fn))
+                  (else
+                   (debug (list 'TRY 'SENT message))
+                   (vector-set! recv-state 0 'SYNCHED)
+                   (resume-recv (lambda () message))
+                   values))])))
   (define (send-block-fn resume-send send-state)
     ;; Enqueue this fiber. The receiver will remove us from the queue.
     (debug "enqueue\n")
@@ -349,9 +358,13 @@
            [#(val resume-sender state)
             ;; We have a sender in the queue. Resume the sender, delete
             ;; them from the queue and return the value they sent.
-            (debug (list 'TRY 'RECEIVED val))
-            (resume-sender values)
-            (lambda () val)])))
+            (cond ((eq? (vector-ref state 0) 'SYNCHED)
+                   (recv-try-fn))
+                  (else
+                   (debug (list 'TRY 'RECEIVED val))
+                   (vector-set! state 0 'SYNCHED)
+                   (resume-sender values)
+                   (lambda () val)))])))
   ;; Receive a message on a channel. The blocking case.
   (define (recv-block-fn resume-recv recv-state)
     ;; There was no sender ready, so this fiber is blocked. Put
@@ -384,7 +397,7 @@
 ;;; Timers
 
 (define (sleep-operation seconds)
-  (timer-operation (+ (current-ticks) (seconds->ticks seconds))))
+  (timer-operation (fx+ (current-ticks) (seconds->ticks seconds))))
 
 (define (timer-operation expiry)
   (define (sleep-try-fn)
@@ -392,13 +405,13 @@
            values)
           (else #f)))
   (define (sleep-block-fn resume-sleep state)
-    (schedule-at-time expiry
-                      (lambda ()
-                        (cond ((eq? (vector-ref state 0) 'SYNCHED)
-                               #f)
-                              (else
-                               (vector-set! state 0 'SYNCHED)
-                               (resume-sleep values))))))
+    (define (cthulhu)
+      (cond ((eq? (vector-ref state 0) 'SYNCHED)
+             #f)
+            (else
+             (vector-set! state 0 'SYNCHED)
+             (resume-sleep values))))
+    (schedule-at-time expiry cthulhu))
   (make-base-operation #f sleep-try-fn sleep-block-fn))
 
 (define (sleep seconds)
