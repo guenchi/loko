@@ -59,9 +59,16 @@
     (only (loko libs time) current-ticks)
     (only (loko init) open-i/o-poller))
 
-;; Public domain queue code based on SLIB.
+;; Public domain queue code based on SLIB, by Andrew Wilcox.
 (define (make-queue)
   (cons '() '()))
+
+(define (queue-push! q datum)
+  (let* ((old-first-pair (car q))
+         (new-first-pair (cons datum old-first-pair)))
+    (set-car! q new-first-pair)
+    (when (null? old-first-pair)
+      (set-cdr! q new-first-pair))))
 
 (define (enqueue! q datum)
   (let ((new-pair (cons datum '())))
@@ -76,8 +83,8 @@
         (error 'dequeue! "attempt to dequeue an empty queue"))
     (let ((first-cdr (cdr first-pair)))
       (set-car! q first-cdr)
-      (if (null? first-cdr)
-          (set-cdr! q '()))
+      (when (null? first-cdr)
+        (set-cdr! q '()))
       (car first-pair))))
 
 (define (queue-empty? q)
@@ -111,6 +118,19 @@
     (else
      (init-thunk))))
 
+(define (make-xorshift32 seed)
+  ;; http://www.jstatsoft.org/v08/i14/paper
+  (let ((state seed))
+    (lambda ()
+      (let* ((y state)
+             (y (fxxor y (fxarithmetic-shift y 13)))
+             (y (fxxor y (fxarithmetic-shift y -17)))
+             (y (fxxor y (fxarithmetic-shift y 5)))
+             (y (fxand y #xffffffff)))
+        (set! state y)
+        y))))
+(define random-u32 (make-xorshift32 2463534242))
+
 (define (spawn-fiber thunk)
   (debug (list 'SPAWN-FIBER thunk))
   (schedule
@@ -132,7 +152,11 @@
 
 (define (schedule x)
   (debug (list 'SCHEDULE x))
-  (enqueue! *scheduler-next* x))
+  (cond ((and (not (queue-empty? *scheduler-next*))
+              (fxodd? (random-u32)))
+         (queue-push! *scheduler-next* x))
+        (else
+         (enqueue! *scheduler-next* x))))
 
 (define (schedule-at-time expiry thunk)
   (set! *scheduler-timers*
@@ -142,8 +166,8 @@
            (< (car x) (car y)))
          (cons (cons expiry thunk) *scheduler-timers*))))
 
-(define (schedule-for-poll fd poll-type thunk)
-  (*scheduler-i/o* 'add fd poll-type thunk))
+(define (schedule-for-poll i/o fd poll-type thunk)
+  (i/o 'add fd poll-type thunk))
 
 (define (yield-current-task)
   (suspend
@@ -246,7 +270,8 @@
 (define (choice-operation . ops)
   ;; Some kind of vector-flatten
   (let* ((len (do ((ops ops (cdr ops))
-                   (len 0 (cond ((vector? (car ops)) (fx+ len (vector-length (car ops))))
+                   (len 0 (cond ((vector? (car ops))
+                                 (fx+ len (vector-length (car ops))))
                                 (else (fx+ len 1)))))
                   ((null? ops) len)))
          (ret (make-vector len #f)))
@@ -270,29 +295,40 @@
       (*scheduler-k* 'suspend callback susp-k))))
 
 (define (perform-operation op)
-  (define (block resume ops)
+  (define (block start-idx resume ops)
     (let ((state (vector 'WAITING)))
-      (vector-for-each
-       (lambda (base-op)
-         (let ((block-fn (op-block base-op))
-               (wrap-fn (op-wrap base-op)))
-           (block-fn (if wrap-fn
-                         (lambda (thunk)
-                           (resume (lambda ()
-                                     (call-with-values thunk wrap-fn))))
-                         resume)
-                     state)))
-       ops)))
-  (let ((ops (if (op? op) (vector op) op)))
-    (let lp ((i 0))                     ;TODO: nondeterminism
+      (let lp ((i start-idx) (j 0))
+        (cond ((fx=? j (vector-length ops))
+               (values))
+              ((fx=? i (vector-length ops))
+               (lp 0 j))
+              (else
+               (let ((base-op (vector-ref ops i)))
+                 (let ((block-fn (op-block base-op))
+                       (wrap-fn (op-wrap base-op)))
+                   (block-fn (if wrap-fn
+                                 (lambda (thunk)
+                                   (resume (lambda ()
+                                             (call-with-values thunk wrap-fn))))
+                                 resume)
+                             state)
+                   (lp (fx+ i 1) (fx+ j 1)))))))))
+  (let* ((ops (if (op? op) (vector op) op))
+         ;; random start element
+         (start-idx (if (fx<=? (vector-length ops) 1)
+                        0
+                        (fxmod (random-u32) (vector-length ops)))))
+    (let lp ((i start-idx) (j 0))
       (cond
-        ((fx=? i (vector-length ops))
+        ((fx=? j (vector-length ops))
          ((suspend
            (lambda (k)
              (define (resume values-thunk)
                (schedule (lambda () (k values-thunk))))
              (debug "calling block-fn\n")
-             (block resume ops)))))
+             (block i resume ops)))))
+        ((fx=? i (vector-length ops))
+         (lp 0 j))                      ;wraparound
         (else
          (let ((base-op (vector-ref ops i)))
            (let ((try-fn (op-try base-op))
@@ -303,7 +339,7 @@
                       (if wrap-fn
                           ((compose wrap-fn thunk))
                           (thunk))))
-                   (else (lp (fx+ i 1)))))))))))
+                   (else (lp (fx+ i 1) (fx+ j 1)))))))))))
 
 ;;; Channels
 
@@ -424,7 +460,7 @@
   (assert (fx>=? fd 0))
   (suspend
    (lambda (resume)
-     (schedule-for-poll fd 'read
+     (schedule-for-poll *scheduler-i/o* fd 'read
                         (lambda ()
                           (debug (list 'now-readable fd))
                           (resume (lambda () (values))))))))
@@ -434,7 +470,7 @@
   (assert (fx>=? fd 0))
   (suspend
    (lambda (resume)
-     (schedule-for-poll fd 'write
+     (schedule-for-poll *scheduler-i/o* fd 'write
                         (lambda ()
                           (debug (list 'now-writable fd))
                           (resume (lambda () (values))))))))
