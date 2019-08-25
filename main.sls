@@ -28,15 +28,14 @@
     (rnrs (6))
     (rnrs mutable-strings (6))
     (only (loko) compile-program)
-    (only (loko init) init-set!)
+    (only (loko init) init-set! init-get)
     (only (loko repl) banner repl)
     (only (loko config) config-library-path)
     (only (psyntax expander) compile-r6rs-top-level)
     (only (loko libs reader) read-annotated)
     (srfi :98 os-environment-variables)
-    (only (psyntax library-manager)
-          library-directories
-          library-extensions)
+    (only (psyntax library-manager) library-directories library-extensions)
+    (loko libs fibers)
     (loko match))
 
 (define (skip-shebang p)
@@ -110,12 +109,22 @@
         (exit 1)])]
     [(exec-name (or "--script" "--program") fn . rest)
      (init-set! 'command-line (cons fn rest))
-     (run-program fn)]
+     (let ((old-exit (init-get 'exit)))
+       (init-set! 'exit exit-current-task)
+       (run-fibers
+        (lambda ()
+          (run-program fn)))
+       (init-set! 'exit old-exit))]
     [(exec-name "--compile" sps-fn "--output" out-fn)
      (compile-program out-fn sps-fn '())]
     [(exec-name)
-     (banner)
-     (repl)
+     (let ((old-exit (init-get 'exit)))
+       (init-set! 'exit exit-current-task)
+       (run-fibers
+        (lambda ()
+          (banner)
+          (repl)))
+       (init-set! 'exit old-exit))
      ;; All polite Schemes say good bye
      (display "Sabbaṁ pahāya gamanīyaṁ.\n")]
     [args

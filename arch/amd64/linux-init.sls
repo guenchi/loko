@@ -22,6 +22,8 @@
 ;; At this point the standard library has been loaded and should be
 ;; available.
 
+;; This code runs in pid 0. Fibers are not available here.
+
 (library (loko arch amd64 linux-init)
   (export)
   (import
@@ -51,7 +53,8 @@
                                 (bytevector-address evp)
                                 (bytevector-address timer-id)
                                 (lambda (errno)
-                                  (if (eqv? errno EAGAIN)
+                                  (if (or (eqv? errno EAGAIN)
+                                          (eqv? errno EINTR))
                                       #f
                                       (raise
                                         (make-syscall-error 'timer_create errno)))))
@@ -283,11 +286,6 @@
   (linux-init-setup-afl)
   (linux-init-preemption-timer)
 
-  ;; TODO: Find the number of CPUs. Should first try
-  ;; /sys/devices/system/cpu, then /proc/cpuinfo.
-
-  ;; TODO: load modules (make it identical to the multiboot case)
-
   ;; TODO: if msg is 'preempted then SIGURG delivery has been
   ;; disabled. When scheduling a process that was preempted there
   ;; is no need to manually unmask SIGURG. But if SIGURG is
@@ -299,7 +297,8 @@
 
   ;; TODO: more than one process
 
-  ;; TODO: use epoll here to do the equivalent of IRQs and HLT
+  ;; TODO: use epoll here to do the equivalent of IRQs and HLT, to
+  ;; allow fiber schedulers to exist in multiple processes
 
   ;; Pid 0 for Linux
   (let ((sp* ($process-start 1))

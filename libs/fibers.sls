@@ -32,6 +32,9 @@
 ;; for inspiration, but the _Parallel Concurrent ML_ paper is closer
 ;; to this implementation.
 
+;; Here's CML documentation that can give a clue about what features
+;; are missing: http://cml.cs.uchicago.edu/pages/cml.html
+
 (library (loko libs fibers)
   (export
     ;; Public interface
@@ -43,7 +46,8 @@
     sleep-operation timer-operation sleep
     make-cvar cvar? signal-cvar! wait-operation wait
 
-    yield-current-task                  ;TODO: is this public?
+    yield-current-task
+    exit-current-task
 
     ;; Seemingly not exported in Guile. It has them, but the arguments
     ;; are ports.
@@ -98,9 +102,9 @@
 (define *scheduler-i/o* #f)
 (define *scheduler-timers* '())
 
-(define (debug x)
-  ;; (write x)
-  ;; (newline)
+(define (debug . x)
+  ;; (write (cons 'fiber: x) (current-error-port))
+  ;; (newline (current-error-port))
   (values))
 
 (define (run-fibers init-thunk)
@@ -132,7 +136,7 @@
 (define random-u32 (make-xorshift32 2463534242))
 
 (define (spawn-fiber thunk)
-  (debug (list 'SPAWN-FIBER thunk))
+  (debug 'FIBER 'SPAWNING thunk)
   (schedule
    (lambda ()
      (guard (exn
@@ -142,7 +146,7 @@
               (newline (current-error-port))
               (print-condition exn (current-error-port))))
        (thunk))))
-  (debug (list 'SPAWNED-FIBER)))
+  (debug 'FIBER 'SPAWNED))
 
 (define (i/o-poll i/o wakeup-time)
   (i/o wakeup-time))
@@ -151,12 +155,14 @@
   (eqv? 0 (i/o)))
 
 (define (schedule x)
-  (debug (list 'SCHEDULE x))
-  (cond ((and (not (queue-empty? *scheduler-next*))
-              (fxodd? (random-u32)))
-         (queue-push! *scheduler-next* x))
+  (debug 'SCHEDULE x)
+  (enqueue/push! *scheduler-next* x))
+
+(define (enqueue/push! q x)
+  (cond ((and (not (queue-empty? q)) (fxodd? (random-u32)))
+         (queue-push! q x))
         (else
-         (enqueue! *scheduler-next* x))))
+         (enqueue! q x))))
 
 (define (schedule-at-time expiry thunk)
   (set! *scheduler-timers*
@@ -175,12 +181,17 @@
      (schedule (lambda ()
                  (resume (lambda () #t)))))))
 
+(define (exit-current-task return-value)
+  (when (not *scheduler-k*)
+    (error 'exit-current-task "Expected to be called from inside a fiber"))
+  (*scheduler-k* 'exit return-value #f))
+
 (define (seconds->ticks s)
   (exact (round (* 1000 s))))
 
 (define (run-fiber-scheduler)
   (define (dequeue-tasks)
-    (debug (list 'DEQUEUING *scheduler-inbox*))
+    (debug 'DEQUEUING *scheduler-inbox*)
     (let* ((wakeup
             (cond ((not (queue-empty? *scheduler-inbox*))
                    ;; We have work pending, so we should
@@ -196,17 +207,17 @@
                    ;; No timeout and no work pending. Let's
                    ;; just wait for some I/O.
                    'forever)))
-           (_ (debug (list 'WAKEUP (current-ticks) wakeup)))
+           (_ (debug 'WAKEUP (current-ticks) wakeup))
            (ready-for-i/o (i/o-poll *scheduler-i/o* wakeup)))
       (let ((now (current-ticks)))
-        (debug (list 'ready-for-i/o ready-for-i/o))
+        (debug 'READY-FOR-I/O ready-for-i/o)
         (let-values ([(expired pending) (partition (match-lambda
                                                     [(expiry . _) (fx<=? expiry now)])
                                                    *scheduler-timers*)])
           (set! *scheduler-timers* pending)
-          (for-each (lambda (x) (enqueue! *scheduler-inbox* (cdr x))) expired)
-          (for-each (lambda (x) (enqueue! *scheduler-inbox* x)) ready-for-i/o)
-          (debug (list 'EXPIRED expired 'PENDING pending))))))
+          (for-each (lambda (x) (enqueue/push! *scheduler-inbox* (cdr x))) expired)
+          (for-each (lambda (x) (enqueue/push! *scheduler-inbox* x)) ready-for-i/o)
+          (debug 'EXPIRED expired 'PENDING pending)))))
   (debug 'SCHEDULER-STARTING)
   (do ()
       ((and (queue-empty? *scheduler-next*)
@@ -218,9 +229,9 @@
     (dequeue-tasks)
     (do ()
         ((queue-empty? *scheduler-inbox*))
-      (debug (list 'QUEUE-REMAINING *scheduler-inbox*))
+      (debug 'QUEUE-REMAINING *scheduler-inbox*)
       (let ((task (dequeue! *scheduler-inbox*)))
-        (debug (list 'CALLING-TASK task))
+        (debug 'CALLING-TASK task)
         (let-values ([(cmd arg0 arg1)
                       (call/cc
                         (lambda (k)
@@ -228,23 +239,25 @@
                           (task)
                           (set! *scheduler-k* 'sched-inact)
                           (values 'return #f #f)))])
-          (debug (list 'RETURN-FROM-TASK task '=> cmd arg0 arg1))
+          (debug 'RETURN-FROM-TASK task '=> cmd arg0 arg1)
           (case cmd
             ((suspend)
              (let ((after-suspend arg0)
                    (susp-k arg1))
-               (debug (list 'SUSPENDING-TASK after-suspend susp-k))
+               (debug 'SUSPENDING-TASK after-suspend susp-k)
                (after-suspend susp-k)))
             ((return)
-             (debug (list 'ENDING-TASK task)))
+             (debug 'ENDING-TASK task))
+            ((exit)
+             (debug 'EXITING-TASK task))
             (else
              (error 'run-fiber-scheduler "Unrecognized return to scheduler"
                     cmd arg0 arg1)))))
-      (debug 'SCHEDULER-TURN-OVER)
-      (debug `(inbox ,*scheduler-inbox*
-                     next ,*scheduler-next*
-                     i/o-fds ,(*scheduler-i/o*)
-                     timers ,*scheduler-timers*)))))
+      (debug 'SCHEDULER 'TURN-OVER
+             'inbox *scheduler-inbox*
+             'next *scheduler-next*
+             'i/o-fds (*scheduler-i/o*)
+             'timers *scheduler-timers*))))
 
 ;;; Operations
 
@@ -289,7 +302,7 @@
              (lp (cdr ops) (fx+ i 1)))))))
 
 (define (suspend callback)
-  (debug "suspending")
+  (debug 'SUSPEND callback)
   (call/cc
     (lambda (susp-k)
       (*scheduler-k* 'suspend callback susp-k))))
@@ -321,11 +334,11 @@
     (let lp ((i start-idx) (j 0))
       (cond
         ((fx=? j (vector-length ops))
+         (debug 'BLOCKING)
          ((suspend
            (lambda (k)
              (define (resume values-thunk)
                (schedule (lambda () (k values-thunk))))
-             (debug "calling block-fn\n")
              (block i resume ops)))))
         ((fx=? i (vector-length ops))
          (lp 0 j))                      ;wraparound
@@ -335,7 +348,7 @@
                  (wrap-fn (op-wrap base-op)))
              (cond ((try-fn) =>
                     (lambda (thunk)
-                      (debug "try succeeding\n")
+                      (debug 'TRY-SUCCESSFUL)
                       (if wrap-fn
                           ((compose wrap-fn thunk))
                           (thunk))))
@@ -361,17 +374,17 @@
             (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
                    (send-try-fn))
                   (else
-                   (debug (list 'TRY 'SENT message))
+                   (debug 'SENDER 'TRY 'SUCCESS message)
                    (vector-set! recv-state 0 'SYNCHED)
                    (resume-recv (lambda () message))
                    values))])))
   (define (send-block-fn resume-send send-state)
     ;; Enqueue this fiber. The receiver will remove us from the queue.
-    (debug "enqueue\n")
+    (debug 'SENDER 'ENQUEUED)
     (enqueue! (channel-sendq ch) `#(,message ,resume-send ,send-state))
     ;; See if someone showed up in the meantime.
     (let retry ()
-      (debug (list 'send-retrying (channel-recvq ch)))
+      (debug 'SENDER 'RETRYING (channel-recvq ch))
       (and (not (queue-empty? (channel-recvq ch)))
            ;;FIXME: find the first not from us
            (match (dequeue! (channel-recvq ch))
@@ -379,7 +392,7 @@
               (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
                      (retry))
                     (else
-                     (debug (list 'BLOCK 'SENT message))
+                     (debug 'SENDER 'RETRY 'SUCCESS message)
                      (vector-set! send-state 0 'SYNCHED)
                      (resume-recv (lambda () message))
                      (resume-send values)
@@ -397,7 +410,7 @@
             (cond ((eq? (vector-ref state 0) 'SYNCHED)
                    (recv-try-fn))
                   (else
-                   (debug (list 'TRY 'RECEIVED val))
+                   (debug 'RECEIVE 'TRY 'SUCCESS val)
                    (vector-set! state 0 'SYNCHED)
                    (resume-sender values)
                    (lambda () val)))])))
@@ -405,9 +418,10 @@
   (define (recv-block-fn resume-recv recv-state)
     ;; There was no sender ready, so this fiber is blocked. Put
     ;; ourselves in the recv queue.
+    (debug 'RECEIVER 'ENQUEUED)
     (enqueue! (channel-recvq ch) `#(,resume-recv ,recv-state))
     (let retry ()
-      (debug (list 'recv-retrying (channel-recvq ch)))
+      (debug 'RECEIVER 'RETRYING (channel-recvq ch))
       ;; FIXME: (choice-operation (put-operation A v) (get-operation
       ;; A)) must not send v to itself.
       (and (not (queue-empty? (channel-sendq ch)))
@@ -417,7 +431,7 @@
               (cond ((eq? (vector-ref send-state 0) 'SYNCHED)
                      (retry))
                     (else
-                     (debug (list 'BLOCK 'RECEIVED val))
+                     (debug 'RECEIVER 'RETRY 'SUCCESS val)
                      (vector-set! recv-state 0 'SYNCHED)
                      (resume-send values)
                      (resume-recv (lambda () val))
@@ -456,23 +470,23 @@
 ;;; File descriptors
 
 (define (wait-for-readable fd)
-  (debug (list 'wait-for-readable fd))
+  (debug 'wait-for-readable fd)
   (assert (fx>=? fd 0))
   (suspend
    (lambda (resume)
      (schedule-for-poll *scheduler-i/o* fd 'read
                         (lambda ()
-                          (debug (list 'now-readable fd))
+                          (debug 'READABLE fd)
                           (resume (lambda () (values))))))))
 
 (define (wait-for-writable fd)
-  (debug (list 'wait-for-writable fd))
+  (debug 'wait-for-writable fd)
   (assert (fx>=? fd 0))
   (suspend
    (lambda (resume)
      (schedule-for-poll *scheduler-i/o* fd 'write
                         (lambda ()
-                          (debug (list 'now-writable fd))
+                          (debug 'WRITABLE fd)
                           (resume (lambda () (values))))))))
 
 ;;; Condition variables

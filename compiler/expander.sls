@@ -1126,6 +1126,7 @@
     (signal-cvar!             fibers)
     (wait-operation           fibers)
     (wait                     fibers)
+    (yield-current-task       fibers)
 
     ($cpuid!                  $x86)
     (cpuid                    $x86)

@@ -35,7 +35,8 @@
     allocate
     machine-type
     init
-    init-set!)
+    init-set!
+    init-get)
   (import
     (except (rnrs) command-line exit
             file-exists? delete-file
@@ -179,4 +180,10 @@
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
     (else
-     (error 'init-set! "Unrecognized key" what value)))))
+     (error 'init-set! "Unrecognized key" what value))))
+
+(define (init-get what)
+  (case what
+    ((exit) *exit*)
+    (else
+     (error 'init-get "Unrecognized key" what)))))

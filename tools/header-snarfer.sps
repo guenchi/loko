@@ -39,8 +39,8 @@
     __NR_lstat
     __NR_mmap
     __NR_open
-    __NR_preadv
-    __NR_pwritev
+    __NR_preadv2
+    __NR_pwritev2
     __NR_read
     __NR_readlink
     __NR_recvfrom

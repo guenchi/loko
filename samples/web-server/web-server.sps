@@ -11,7 +11,8 @@
   (only (loko) port-file-descriptor-set!)
   (loko system fibers)
 
-  ;; XXX: It would be preferable
+  ;; XXX: It would be preferable to package up the syscalls in a nicer
+  ;; library
   (loko system unsafe)
   (loko arch amd64 linux-syscalls)
   (loko arch amd64 linux-numbers))
@@ -35,6 +36,8 @@
                 (cond ((eqv? errno EAGAIN)
                        (wait-for-writable fd)
                        (sendto fd buf start count))
+                      ((eqv? errno EINTR)
+                       (sendto fd buf start count))
                       (else
                        (raise (condition
                                (make-syscall-error 'sendto errno)
@@ -48,6 +51,8 @@
                   (cond ((eqv? errno EAGAIN)
                          (wait-for-readable fd)
                          (recvfrom fd buf start count))
+                        ((eqv? errno EINTR)
+                         (recvfrom fd buf start count))
                         (else
                          (raise (condition
                                  (make-syscall-error 'recvfrom errno)
@@ -58,6 +63,8 @@
                (lambda (errno)
                  (cond ((eqv? errno EAGAIN)
                         (wait-for-readable fd)
+                        (accept fd addr addrlen flags))
+                       ((eqv? errno EINTR)
                         (accept fd addr addrlen flags))
                        (else
                         (raise (condition
@@ -123,6 +130,7 @@
         (newline)
         (display "HTTP/1.1 200 OK\r\n" out)
         (display "Content-Length: 6\r\n" out)
+        ;; (display "Connection: close\r\n" out)
         (display "\r\n" out)
         (display "SCHEME" out)
         (flush-output-port out)
@@ -164,6 +172,7 @@
                                   (close-port in)))
                            (http-client-handler in out peername)
                            (close-port in)))))
+        (yield-current-task)
         (lp))))
   (sys_close sfd))
 

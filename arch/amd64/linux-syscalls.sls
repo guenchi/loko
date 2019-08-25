@@ -17,17 +17,23 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-;;; Thin wrappers around Linux system calls.
+;;; Mostly thin wrappers around Linux system calls
 
 (library (loko arch amd64 linux-syscalls)
   (export
     make-syscall-error
+    syscall-errno-condition?
+    condition-syscall-errno
+    condition-syscall-symbol
+    condition-syscall-message
+
+    add-fdes-finalizer!
 
     sys_accept4
     sys_bind
     sys_clock_getres
     sys_clock_gettime
-    sys_close
+    (rename (sys_close/finalizer sys_close))
     ;; sys_dup, sys_dup2 and sys_dup3: use fcntl
     sys_epoll_create1
     sys_epoll_ctl
@@ -81,6 +87,32 @@
               (make-syscall-error* who errno (car x) (cdr x))))
         (else (make-syscall-error* who errno #f #f))))
 
+;; FIXME: This should be done in (loko libs io), otherwise dynamically
+;; loaded code gets its own finalizers hashtable.
+(define *finalizers* (make-eqv-hashtable))
+(define (add-fdes-finalizer! fdes finalizer)
+  (hashtable-update! *finalizers* fdes
+                     (lambda (old)
+                       (cons finalizer old))
+                     '()))
+
+(define (call-fd-finalizer fd)
+  (cond ((hashtable-ref *finalizers* fd #f)
+         => (lambda (finalizer*)
+              (hashtable-delete! *finalizers* fd)
+              (for-each (lambda (finalizer)
+                          (finalizer fd))
+                        finalizer*)))))
+
+(define sys_close/finalizer
+  (case-lambda
+    ((fd)
+     (call-fd-finalizer fd)
+     (sys_close fd))
+    ((fd k-failure)
+     (call-fd-finalizer fd)
+     (sys_close fd k-failure))))
+
 ;; TODO: extra "safe" variants of syscalls that check bytevector limits
 
 (define-syntax define-syscall
@@ -95,22 +127,35 @@
          #'(define sys_name
              (case-lambda
                [(arg ...)
-                ;; Default: raise errors automatically
+                ;; Default: raise errors automatically and retry on
+                ;; EINTR (except for close).
                 (let ((tmp arg) ...)
                   (let retry ()
                     (let ((v (syscall __NR tmp ...)))
                       (if (fx<=? -4095 v -1)
                           (let ((errno (fx- v)))
+                            ;; If EINTR is returned then the syscall
+                            ;; was interrupted and should be retried.
+                            ;; On Linux, close(2) may return EINTR,
+                            ;; but the fd is closed all the same.
+                            ;:
+                            ;; See http://ewontfix.com/4/ and "Worse
+                            ;; is Better" for a deeper explanation.
                             (if (eqv? errno EINTR)
-                                (retry)   ;see "Worse is Better" for an explanation
+                                (if (eqv? __NR __NR_close)
+                                    0   ;pretend it's all fine
+                                    (retry))
                                 (raise (condition (make-syscall-error 'name errno)
                                                   (make-irritants-condition (list tmp ...))))))
                           v))))]
                [(arg ... k-failure)
-                ;; Let the caller handle errors
+                ;; This does not automatically handle EINTR; that's up
+                ;; to the caller. It could be useful when syscalls are
+                ;; intentionally interrupted.
                 (let ((v (syscall __NR arg ...)))
                   (if (fx<=? -4095 v -1)
-                      (k-failure (fx- v))
+                      (let ((errno (fx- v)))
+                        (k-failure errno))
                       v))]
                #;
                [(arg ... k-failure k-success)
@@ -127,7 +172,7 @@
 (define-syscall (close fd))
 (define-syscall (epoll_create1 flags))
 (define-syscall (epoll_ctl epfd op fd *event))
-(define-syscall (epoll_pwait epfd *events maxevents timeout *sigmask))
+(define-syscall (epoll_pwait epfd *events maxevents timeout *sigmask sigsetsize))
 (define-syscall (exit status))
 (define-syscall (faccessat dfd *filename mode))
 (define-syscall (fcntl fd cmd maybe-arg))
