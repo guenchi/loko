@@ -11,9 +11,7 @@ language.
 ## Current status
 
 * Most of R6RS Scheme is present and accounted for.
-* No SRFIs apart from SRFI 98 are implemented. (In most cases SRFIs
-  will not be added directly, but the support that is needed to use
-  them via [chez-srfi][chez-srfi] will be provided instead).
+* Most SRFIs in [chez-srfi][chez-srfi] are supported.
 * Memory management is limited. The Linux target makes at most 1 GB
   available (hard coded limit, will be fixed some day).
 * Very few Linux system calls are implemented. Basic I/O works, but

@@ -17,6 +17,9 @@ intervention before usage, namely that gdb is not finding the symbol
 `bootstrap_unwind_table`. Update `loko-gdb.py` if stack traces don't
 seem to make any sense.
 
+Scheme objects can get very big. Limit the output with e.g. `set print
+elements 5`.
+
  [gdb]: https://www.gnu.org/software/gdb/
 
 ## Profiling
