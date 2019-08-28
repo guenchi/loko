@@ -57,6 +57,7 @@
     "loko/libs/conditions"
     "loko/libs/enums"
     "loko/libs/time"
+    "pfds/heaps"
     "loko/libs/fibers"
     "loko/libs/io"
     "loko/libs/sorting"

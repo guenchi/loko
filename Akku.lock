@@ -7,6 +7,10 @@
       (git "https://github.com/weinholt/struct-pack.git"))
     (tag "v1.1.1")
     (revision "11b71963793ed4a3bf761efdd83cf2fe123239ee"))
+  ((name "pfds")
+    (location (git "https://github.com/ijp/pfds.git"))
+    (tag "v0.3")
+    (revision "454033f82dac7c0b0ea9e84eed1e8ed316487c78"))
   ((name "machine-code")
     (location
       (git "https://github.com/weinholt/machine-code.git"))

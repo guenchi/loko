@@ -59,6 +59,24 @@
                       (signal-cvar! cvar))))
      (sleep 1.5))))
 
+;; Signal before waiting
+(run-fibers
+ (lambda ()
+   (let ((cvar (make-cvar)))
+     (spawn-fiber (lambda ()
+                    (signal-cvar! cvar)))
+     (sleep 0.5)
+     (wait cvar))))
+
+;; Wait before signal
+(run-fibers
+ (lambda ()
+   (let ((cvar (make-cvar)))
+     (spawn-fiber (lambda ()
+                    (sleep 0.5)
+                    (signal-cvar! cvar)))
+     (wait cvar))))
+
 ;; Only one receiver gets the message
 (run-fibers
  (lambda ()

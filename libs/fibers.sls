@@ -58,6 +58,7 @@
   (import
     (rnrs (6))
     (rnrs mutable-pairs (6))
+    (pfds heaps)
     (loko match)
     (only (loko libs control) print-condition)
     (only (loko libs time) current-ticks)
@@ -93,6 +94,12 @@
 
 (define (queue-empty? q)
   (null? (car q)))
+
+(define (queue-front q)
+  (let ((first-pair (car q)))
+    (if (null? first-pair)
+        (error 'queue-front "queue is empty" q)
+        (car first-pair))))
 ;;-
 
 ;; A single global scheduler per Loko process
@@ -100,23 +107,37 @@
 (define *scheduler-inbox* #f)
 (define *scheduler-next* #f)
 (define *scheduler-i/o* #f)
-(define *scheduler-timers* '())
+(define *scheduler-timers* #f)
+(define *scheduler-running* #f)
 
-(define (debug . x)
-  ;; (write (cons 'fiber: x) (current-error-port))
-  ;; (newline (current-error-port))
-  (values))
+(define-syntax debug
+  (syntax-rules ()
+    [(_ x* ...)
+     (values)]
+    [(_ x* ...)
+     (begin
+       (write (cons 'fiber: (list x* ...))
+              (current-error-port))
+       (newline (current-error-port))
+       (values))]))
+
+(define (init-scheduler)
+  (unless *scheduler-i/o*
+    (set! *scheduler-k* 'sched-inited)
+    (set! *scheduler-inbox* #f)
+    (set! *scheduler-next* (make-queue))
+    (set! *scheduler-i/o* (open-i/o-poller))
+    (set! *scheduler-timers* (make-heap (lambda (x y)
+                                          (fx<? (car x) (car y)))))))
 
 (define (run-fibers init-thunk)
+  (init-scheduler)
   (cond
-    ((not *scheduler-i/o*)
-     (set! *scheduler-k* 'sched-inited)
-     (set! *scheduler-inbox* #f)
-     (set! *scheduler-next* (make-queue))
-     (set! *scheduler-i/o* (open-i/o-poller))
-     (set! *scheduler-timers* '())
+    ((not *scheduler-running*)
+     (set! *scheduler-running* #t)
      (schedule init-thunk)
      (run-fiber-scheduler)
+     (set! *scheduler-running* #f)
      (*scheduler-i/o* 'close #f #f #f)
      (set! *scheduler-i/o* #f))
     (else
@@ -136,7 +157,9 @@
 (define random-u32 (make-xorshift32 2463534242))
 
 (define (spawn-fiber thunk)
-  (debug 'FIBER 'SPAWNING thunk)
+  (unless *scheduler-i/o*
+    (init-scheduler))
+  (debug 'SPAWN thunk)
   (schedule
    (lambda ()
      (guard (exn
@@ -146,7 +169,7 @@
               (newline (current-error-port))
               (print-condition exn (current-error-port))))
        (thunk))))
-  (debug 'FIBER 'SPAWNED))
+  (debug 'SPAWNED))
 
 (define (i/o-poll i/o wakeup-time)
   (i/o wakeup-time))
@@ -165,12 +188,7 @@
          (enqueue! q x))))
 
 (define (schedule-at-time expiry thunk)
-  (set! *scheduler-timers*
-        ;; TODO: priority queues
-        (list-sort
-         (lambda (x y)
-           (< (car x) (car y)))
-         (cons (cons expiry thunk) *scheduler-timers*))))
+  (set! *scheduler-timers* (heap-insert *scheduler-timers* (cons expiry thunk))))
 
 (define (schedule-for-poll i/o fd poll-type thunk)
   (i/o 'add fd poll-type thunk))
@@ -197,12 +215,11 @@
                    ;; We have work pending, so we should
                    ;; not wait if no I/O is available.
                    'no-wait)
-                  ((pair? *scheduler-timers*)
+                  ((not (heap-empty? *scheduler-timers*))
                    ;; We have no work, but we have a timer. Get the
                    ;; earliest wakeup time. That's how long we will
                    ;; wait for I/O.
-                   (fold-left min (caar *scheduler-timers*)
-                              (map car (cdr *scheduler-timers*))))
+                   (car (heap-min *scheduler-timers*)))
                   (else
                    ;; No timeout and no work pending. Let's
                    ;; just wait for some I/O.
@@ -211,18 +228,25 @@
            (ready-for-i/o (i/o-poll *scheduler-i/o* wakeup)))
       (let ((now (current-ticks)))
         (debug 'READY-FOR-I/O ready-for-i/o)
-        (let-values ([(expired pending) (partition (match-lambda
-                                                    [(expiry . _) (fx<=? expiry now)])
-                                                   *scheduler-timers*)])
-          (set! *scheduler-timers* pending)
-          (for-each (lambda (x) (enqueue/push! *scheduler-inbox* (cdr x))) expired)
-          (for-each (lambda (x) (enqueue/push! *scheduler-inbox* x)) ready-for-i/o)
-          (debug 'EXPIRED expired 'PENDING pending)))))
+        (for-each (lambda (x) (enqueue/push! *scheduler-inbox* x)) ready-for-i/o)
+        ;; Schedule expired timers.
+        (let lp ((heap *scheduler-timers*))
+          (cond
+            ((or (heap-empty? heap)
+                 (fx>? (car (heap-min heap)) now))
+             (set! *scheduler-timers* heap))
+            (else
+             (debug 'EXPIRED (heap-min heap))
+             (match (heap-min heap)
+               [(_wakeup-time . thunk)
+                (enqueue! *scheduler-inbox* thunk)
+                (lp (heap-delete-min heap))]))))
+        (debug 'PENDING *scheduler-timers*))))
   (debug 'SCHEDULER-STARTING)
   (do ()
       ((and (queue-empty? *scheduler-next*)
             (i/o-empty? *scheduler-i/o*)
-            (null? *scheduler-timers*)))
+            (heap-empty? *scheduler-timers*)))
     (set! *scheduler-inbox* *scheduler-next*)
     (set! *scheduler-next* (make-queue))
     (debug 'SCHEDULER-TURN)
@@ -237,7 +261,7 @@
                         (lambda (k)
                           (set! *scheduler-k* k)
                           (task)
-                          (set! *scheduler-k* 'sched-inact)
+                          (set! *scheduler-k* 'sched-no-k)
                           (values 'return #f #f)))])
           (debug 'RETURN-FROM-TASK task '=> cmd arg0 arg1)
           (case cmd
@@ -326,6 +350,7 @@
                                  resume)
                              state)
                    (lp (fx+ i 1) (fx+ j 1)))))))))
+  (debug 'PERFORM op)
   (let* ((ops (if (op? op) (vector op) op))
          ;; random start element
          (start-idx (if (fx<=? (vector-length ops) 1)
@@ -338,6 +363,7 @@
          ((suspend
            (lambda (k)
              (define (resume values-thunk)
+               (debug 'RESUMING)
                (schedule (lambda () (k values-thunk))))
              (block i resume ops)))))
         ((fx=? i (vector-length ops))
@@ -364,10 +390,29 @@
      (lambda ()
        (new (make-queue) (make-queue))))))
 
+(define (channel-cleanup ch)
+  ;; A channel operation can be part of a choice operation where
+  ;; another base operation is sync'd. That means that the channel
+  ;; code never sees the sync. TODO: Implement this with nack instead.
+  (define (queue-cleanup q)
+    (let lp ()
+      (when (not (queue-empty? q))
+        (match (queue-front q)
+          [#(_ #('SYNCHED))
+           (dequeue! q)
+           (lp)]
+          [#(_ _ #('SYNCHED))
+           (dequeue! q)
+           (lp)]
+          [x x]))))
+  (queue-cleanup (channel-sendq ch))
+  (queue-cleanup (channel-recvq ch)))
+
 (define (put-operation ch message)
   ;; Try to send a message on a channel without blocking. Succeeds if
   ;; there is a receiver waiting.
   (define (send-try-fn)
+    (channel-cleanup ch)
     (and (not (queue-empty? (channel-recvq ch)))
          (match (dequeue! (channel-recvq ch))
            [#(resume-recv recv-state)
@@ -379,14 +424,15 @@
                    (resume-recv (lambda () message))
                    values))])))
   (define (send-block-fn resume-send send-state)
-    ;; Enqueue this fiber. The receiver will remove us from the queue.
+    ;; Enqueue this fiber. The receiver or the cleanup procedure will
+    ;; remove us from the queue.
     (debug 'SENDER 'ENQUEUED)
     (enqueue! (channel-sendq ch) `#(,message ,resume-send ,send-state))
     ;; See if someone showed up in the meantime.
     (let retry ()
       (debug 'SENDER 'RETRYING (channel-recvq ch))
       (and (not (queue-empty? (channel-recvq ch)))
-           ;;FIXME: find the first not from us
+           ;; FIXME: find the first not from us
            (match (dequeue! (channel-recvq ch))
              [#(resume-recv recv-state)
               (cond ((eq? (vector-ref recv-state 0) 'SYNCHED)
@@ -402,6 +448,7 @@
 (define (get-operation ch)
   ;; Try to receive a message on a channel without blocking.
   (define (recv-try-fn)
+    (channel-cleanup ch)
     (and (not (queue-empty? (channel-sendq ch)))
          (match (dequeue! (channel-sendq ch))
            [#(val resume-sender state)
@@ -513,10 +560,19 @@
 
 (define (wait-operation cvar)
   (define (wait-try-fn)
+    ;; XXX: don't do this as often
+    (cvar-waiting-set! cvar (filter (match-lambda
+                                     [#(_resume #('SYNCHED)) #f]
+                                     [else #t])
+                                    (cvar-waiting cvar)))
     (cond ((cvar-state cvar) values)
           (else #f)))
   (define (wait-block-fn resume-wait state)
-    (cvar-waiting-set! cvar (cons `#(,resume-wait ,state) (cvar-waiting cvar)))
+    (cvar-waiting-set! cvar (cons `#(,resume-wait ,state)
+                                  (filter (match-lambda
+                                           [#(_resume #('SYNCHED)) #f]
+                                           [else #t])
+                                          (cvar-waiting cvar))))
     (when (cvar-state cvar)
       (let ((waiting (cvar-waiting cvar)))
         (cvar-waiting-set! cvar '())
