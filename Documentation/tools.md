@@ -20,6 +20,24 @@ seem to make any sense.
 Scheme objects can get very big. Limit the output with e.g. `set print
 elements 5`.
 
+Traps from the processor are translated into conditions with a
+&program-counter condition, e.g.:
+
+```scheme
+ 1. &assertion &violation &serious
+ 2. &who
+     who: apply
+ 3. &message
+     message: "A non-procedure object was called"
+ 4. &irritants
+     irritants: (#f)
+ 5. &program-counter
+     program-counter: 2380563
+```
+
+You can translate the program counter value to hex and look up the
+trapping instruction with a disassembler.
+
  [gdb]: https://www.gnu.org/software/gdb/
 
 ## Profiling
