@@ -29,21 +29,22 @@
           library-version-mismatch-warning
           library-stale-warning
           file-locator-resolution-error
-          label-binding set-label-binding! remove-location)
+          label-binding set-label-binding! remove-location
+          format)
   (import
     (only (loko libs reader)
           read-annotated annotation? annotation-expression
           annotation-stripped annotation-source
           annotation-source->condition)
     (rnrs)
-    ;; (for (only (chezscheme) record-writer type-descriptor) expand)
+    (for (only (chezscheme) record-writer type-descriptor) expand)
     (rename (only (chezscheme)
                   define-record
                   eval
                   gensym
                   top-level-value set-top-level-value!
                   make-parameter parameterize
-                  pretty-print
+                  pretty-print format
                   void)
             (define-record define-record*)
             (gensym gensym*)
@@ -102,10 +103,10 @@
     [(_ name (field* ...) printer)
      (begin
        (define-record* name (field* ...))
-       #;
-       (record-writer (type-descriptor name)
-                      (lambda (r p wr)
-                        (printer r p))))]
+       (define dummy
+         (record-writer (type-descriptor name)
+                        (lambda (r p wr)
+                          (printer r p)))))]
     [(_ name (field* ...))
      (define-record* name (field* ...))]))
 

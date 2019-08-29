@@ -84,7 +84,6 @@
     (letrec              (core-macro . letrec))
     (letrec*             (core-macro . letrec*))
     (if                  (core-macro . if))
-    (parameterize        (core-macro . parameterize))
     (record-type-descriptor (core-macro . record-type-descriptor))
     (record-constructor-descriptor (core-macro . record-constructor-descriptor))
     (define-struct       (macro . define-struct))
@@ -94,6 +93,7 @@
     (quasisyntax         (macro . quasisyntax))
     (with-syntax         (macro . with-syntax))
     (identifier-syntax   (macro . identifier-syntax))
+    (parameterize        (macro . parameterize))
     (when                (macro . when))
     (unless              (macro . unless))
     (case                (macro . case))
@@ -186,7 +186,6 @@
     (ne          (psyntax null-environment-5)          #t    #f)
     (se          (psyntax scheme-report-environment-5) #t    #f)
     #;(cm          (psyntax modules)                     #t    #f)
-    #;(parameters  (chez parameters)                     #t    #f)
     (r           (rnrs)                                #t    #t)
     (r5          (rnrs r5rs)                           #t    #t)
     (ct          (rnrs control)                        #t    #t)
@@ -1074,6 +1073,8 @@
     (get-output-string         ^)       ;for SRFI 6
     (port-file-descriptor      ^)       ;for SRFI-170
     (port-file-descriptor-set! ^)       ;for SRFI-170
+    (parameterize              ^)       ;Chez-style (not SRFI-39)
+    (make-parameter            ^)       ;Chez-style (not SRFI-39)
 
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)

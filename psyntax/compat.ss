@@ -33,6 +33,7 @@
           read-annotated annotation? annotation-expression
           annotation-stripped annotation-source
           annotation-source->condition)
+    (only (loko) make-parameter parameterize)
     (rnrs)
     (only (psyntax system $bootstrap)
           gensym void eval-core symbol-value set-symbol-value!
@@ -56,37 +57,6 @@
         ;; the port value.
         (read-annotated (current-input-port) file-name))))
 
-  (define make-parameter
-    (case-lambda
-      ((x) (make-parameter x (lambda (x) x)))
-      ((x fender)
-       (assert (procedure? fender))
-       (let ((x (fender x)))
-         (case-lambda
-           (() x)
-           ((v) (set! x (fender v))))))))
-
-  (define-syntax parameterize 
-    (lambda (x)
-      (syntax-case x ()
-        ((_ () b b* ...) (syntax (let () b b* ...)))
-        ((_ ((olhs* orhs*) ...) b b* ...)
-         (with-syntax (((lhs* ...) (generate-temporaries (syntax (olhs* ...))))
-                       ((rhs* ...) (generate-temporaries (syntax (olhs* ...)))))
-           (syntax (let ((lhs* olhs*) ...
-                   (rhs* orhs*) ...)
-               (let ((swap 
-                      (lambda () 
-                        (let ((t (lhs*)))
-                          (lhs* rhs*)
-                          (set! rhs* t))
-                        ...)))
-                 (dynamic-wind 
-                   swap
-                   (lambda () b b* ...)
-                   swap)))))))))
-
-    
   (define (library-version-mismatch-warning name depname filename)
     ;;; please override this in your production implementation
     (display "Warning: inconsistent dependencies: ")

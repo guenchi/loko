@@ -29,6 +29,10 @@
     assertion-violation error
     make-promise force
 
+    ;; Parameters.
+    make-parameter
+    ;;parameterize   ; defined in (psyntax expander)
+
     ;; Internal
     implementation-restriction
     register-error-invoker
@@ -42,6 +46,7 @@
             dynamic-wind
             with-exception-handler raise raise-continuable
             assertion-violation error)
+    (only (loko) parameterize)
     (prefix (only (rnrs) procedure? apply) sys:)
     (loko system $primitives)
     (loko system $host)
@@ -161,25 +166,55 @@
     (after)
     (apply values v)))
 
+;;; Parameters
+
+(define make-parameter
+  (case-lambda
+    ((x)
+     (case-lambda
+       (() x)
+       ((v) (set! x v))))
+    ((x fender)
+     (unless (procedure? fender)
+       (assertion-violation 'make-parameter "Expected a procedure" x fender))
+     (let ((x (fender x)))
+       (case-lambda
+         (() x)
+         ((v) (set! x (fender v))))))))
+
+;; parameterize is a macro in (psyntax expander)
+
+;;; Exceptions
+
+(define (default-exception-handler x)
+  (define EX_SOFTWARE 70)            ;Linux: internal software error
+  (define p (transcoded-port (standard-error-port) (native-transcoder)))
+  (display "An exception has been raised, but no exception handler is installed.\n" p)
+  (print-condition x p)
+  (when (serious-condition? x)
+    (exit EX_SOFTWARE)))
+
+(define *exception-handlers*
+  (make-parameter (list default-exception-handler
+                        (lambda _ (exit 70)))))
+
 (define (with-exception-handler handler thunk)
-  (let ((old handler))
-    (define (swap-handler!)
-      (let ((temp old))
-        (set! old *exception-handler*)
-        (set! *exception-handler* temp)))
-    ;; (pcb-handling-error?-set! (self) #f)
-    (dynamic-wind swap-handler! thunk swap-handler!)))
+  (assert (procedure? handler))
+  (assert (procedure? thunk))
+  (parameterize ([*exception-handlers* (cons handler (*exception-handlers*))])
+    (thunk)))
 
 (define (raise obj)
-  ;; TODO: raise "pops" a handler and calls it.
-  ;; (stack-trace)
-  (*exception-handler* obj)
-  (raise (condition
-          (make-non-continuable-violation))))
+  (let ((handlers (*exception-handlers*)))
+    (parameterize ([*exception-handlers* (cdr handlers)])
+      ((car handlers) obj)
+      (raise (condition
+              (make-non-continuable-violation))))))
 
 (define (raise-continuable obj)
-  ;; TODO: raise "pops" a handler and calls it.
-  (*exception-handler* obj))
+  (let ((handlers (*exception-handlers*)))
+    (parameterize ([*exception-handlers* (cdr handlers)])
+      ((car handlers) obj))))
 
 (define (error who msg . irritants)
   (raise (condition
@@ -276,18 +311,6 @@
          (display "A non-condition object was raised:\n" p)
          (write exn p)
          (newline p))))
-
-(define (default-exception-handler x)
-  (define EX_SOFTWARE 70)            ;Linux: internal software error
-  (define p (current-error-port))
-  ;; TODO: this should do a call/cc to the top of the stack. the
-  ;; after winders have to be run.
-  (flush-output-port (current-output-port))
-  (display "An exception has been raised, but no exception handler is installed.\n" p)
-  (print-condition x p)
-  (exit EX_SOFTWARE))
-
-(define *exception-handler* default-exception-handler)
 
 ;;; Handler for hardware traps and explicit traps in generated code
 
