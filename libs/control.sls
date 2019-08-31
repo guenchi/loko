@@ -225,7 +225,7 @@
 (define (error who msg . irritants)
   (raise (condition
           (make-error)
-          (make-who-condition who)
+          (if who (make-who-condition who) (condition))
           (make-message-condition msg)
           (make-irritants-condition irritants))))
 

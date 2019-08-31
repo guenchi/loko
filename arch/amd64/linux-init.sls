@@ -125,7 +125,7 @@
                           (sys_write STDERR_FILENO (fx+ (bytevector-address bv) start) count))
                         (eol-style lf)))
 
-;; Verify that #AC is working and triggers SIGBUG
+;; Verify that #AC is working and triggers SIGBUS
 (define (linux-init-check-alignment)
   (guard (exn (else #f))
     (get-mem-u32 #x200001)              ;safe way to trigger #AC
@@ -336,7 +336,7 @@
                (exit (if (fixnum? reason) reason (eqv? reason #t)))))
             ((new-process)
              ;; TODO:
-             (set! m* #f))
+             (set! m* 'ok))
             ((boot-loader)
              (set! m* 'linux))
             ((command-line)

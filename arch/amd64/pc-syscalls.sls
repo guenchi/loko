@@ -102,10 +102,10 @@
 ;;; Enable interrupts and wait for an interrupt
     ;; should possibly be monitor/mwait instead
     (%align 8)
-    (%label syscall-hlt)
-    (sti)
-    (hlt)
-    (cli)
+    (%label syscall-hlt)                ;caller has RFLAGS.IF=0
+    (sti)                               ;briefly set RFLAGS.IF=1
+    (hlt)                               ;int-generic runs after this
+    (cli)                               ;set RFLAGS.IF=0 again
     (xor eax eax)
     (sysretq)
 

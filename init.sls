@@ -65,11 +65,14 @@
 (define exit
   (case-lambda
     (()
-     (flush-output-port (current-output-port))
+     (guard (exn (else #f))
+       (flush-output-port (current-output-port)))
      ;; FIXME: run winders
      (*exit* #t))
     ((status)
-     (flush-output-port (current-output-port))
+     (guard (exn (else #f))
+       (flush-output-port (current-output-port)))
+     ;; FIXME: run winders
      (*exit* status))))
 
 (define *open-file-input-port*

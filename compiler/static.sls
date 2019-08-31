@@ -142,6 +142,8 @@
                          '())
                    "loko/arch/amd64/linux-init")
                  '())
+           "pfds/queues/private/condition"          ;temporary
+           "pfds/queues/naive"          ;temporary
            "loko/arch/amd64/process-init"))
         (else '()))
     ,@(if (memq 'eval options)

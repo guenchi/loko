@@ -22,6 +22,16 @@
 (library (loko start)
   (export)
   (import
+    (only (rnrs) call/cc lambda exit)
+    (only (loko libs fibers) run-fibers)
     (only (loko init) init))
 
-(init))
+;; Call the init code from pc-init, linux-init or process-init.
+(init)
+
+;; Ensure that everything from here on (the rest of the libraries and
+;; the top-level) runs with a fiber scheduler.
+(call/cc
+  (lambda (k)
+    (run-fibers k)
+    (exit 0))))

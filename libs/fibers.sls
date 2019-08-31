@@ -26,11 +26,14 @@
 
 ;; The current implementation is heavily dumbed down from Wingo's
 ;; implementation. It is single-threaded, non-preemptive and based on
-;; simple call/cc.
+;; simple call/cc. This can be improved on.
 
 ;; There is also a CML implementation in Scheme 48 that can be used
 ;; for inspiration, but the _Parallel Concurrent ML_ paper is closer
 ;; to this implementation.
+
+;; Another Scheme CML implementation was made by Taylor Campbell:
+;; http://mumble.net/~campbell/darcs/scheme-cml/
 
 ;; Here's CML documentation that can give a clue about what features
 ;; are missing: http://cml.cs.uchicago.edu/pages/cml.html
@@ -104,11 +107,11 @@
 
 ;; A single global scheduler per Loko process
 (define *scheduler-k* 'sched-uninit)
-(define *scheduler-inbox* #f)
-(define *scheduler-next* #f)
+(define *scheduler-inbox*)
+(define *scheduler-next*)
 (define *scheduler-i/o* #f)
-(define *scheduler-timers* #f)
-(define *scheduler-running* #f)
+(define *scheduler-timers*)
+(define *scheduler-running*)
 
 (define-syntax debug
   (syntax-rules ()
@@ -123,12 +126,22 @@
 
 (define (init-scheduler)
   (unless *scheduler-i/o*
+    (set! *scheduler-running* #f)
     (set! *scheduler-k* 'sched-inited)
     (set! *scheduler-inbox* #f)
     (set! *scheduler-next* (make-queue))
     (set! *scheduler-i/o* (open-i/o-poller))
     (set! *scheduler-timers* (make-heap (lambda (x y)
                                           (fx<? (car x) (car y)))))))
+
+(define (deinit-scheduler)
+  (set! *scheduler-k* 'sched-uninit)
+  (set! *scheduler-inbox* #f)
+  (set! *scheduler-next* #f)
+  (*scheduler-i/o* 'close #f #f #f)
+  (set! *scheduler-i/o* #f)
+  (set! *scheduler-timers* #f)
+  (set! *scheduler-running* #f))
 
 (define (run-fibers init-thunk)
   (init-scheduler)
@@ -137,9 +150,7 @@
      (set! *scheduler-running* #t)
      (schedule init-thunk)
      (run-fiber-scheduler)
-     (set! *scheduler-running* #f)
-     (*scheduler-i/o* 'close #f #f #f)
-     (set! *scheduler-i/o* #f))
+     (set! *scheduler-running* #f))
     (else
      (init-thunk))))
 
@@ -193,6 +204,9 @@
 (define (schedule-for-poll i/o fd poll-type thunk)
   (i/o 'add fd poll-type thunk))
 
+(define (schedule-for-int i/o irq thunk)
+  (i/o 'int irq thunk))
+
 (define (yield-current-task)
   (suspend
    (lambda (resume)
@@ -232,8 +246,7 @@
         ;; Schedule expired timers.
         (let lp ((heap *scheduler-timers*))
           (cond
-            ((or (heap-empty? heap)
-                 (fx>? (car (heap-min heap)) now))
+            ((or (heap-empty? heap) (fx>? (car (heap-min heap)) now))
              (set! *scheduler-timers* heap))
             (else
              (debug 'EXPIRED (heap-min heap))
@@ -351,6 +364,11 @@
                              state)
                    (lp (fx+ i 1) (fx+ j 1)))))))))
   (debug 'PERFORM op)
+  (when (and (vector? op) (eqv? (vector-length op) 0))
+    ;; XXX: The correct thing here is probably just to never sync, but
+    ;; that's kind of weird.
+    (assertion-violation 'perform-operation
+                         "Expected to perform at least one operation" op))
   (let* ((ops (if (op? op) (vector op) op))
          ;; random start element
          (start-idx (if (fx<=? (vector-length ops) 1)
@@ -508,6 +526,8 @@
             (else
              (vector-set! state 0 'SYNCHED)
              (resume-sleep values))))
+    ;; FIXME: This doesn't get cleaned automatically in
+    ;; a choice-operation
     (schedule-at-time expiry cthulhu))
   (make-base-operation #f sleep-try-fn sleep-block-fn))
 

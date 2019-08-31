@@ -32,11 +32,17 @@
   (define make-cvar make-condition)
   (define signal-cvar! signal-condition!))
 
-;; Error in a fiber
 (run-fibers
  (lambda ()
-   (spawn-fiber (lambda ()
-                  (error #f "This error is expected")))))
+   (let ((ch (make-channel)))
+     (spawn-fiber (lambda ()
+                    (spawn-fiber (lambda ()
+                                   (put-message ch '1)))
+                    (put-message ch '2)))
+     (let* ((msg0 (get-message ch))
+            (msg1 (get-message ch)))
+       (display (list 'received msg0 msg1))
+       (newline)))))
 
 (run-fibers
  (lambda ()
@@ -301,4 +307,31 @@
    (let ((keys (hashtable-keys ht)))
      (write (cons (vector-length keys) keys)) (newline)
      ;; Normally there are 19 entries, but there could be fewer
-     (assert (> (vector-length keys) 10)))))
+     (assert (> (vector-length keys) 3)))))
+
+;; An error in a fiber does not make everything come crashing down
+(run-fibers
+ (lambda ()
+   (spawn-fiber (lambda ()
+                  (error #f "This error is expected")))))
+
+;; An empty choice never syncs (this implementation actually raises
+;; &assertion).
+(run-fibers
+ (lambda ()
+   (let ((finished (make-cvar)))
+     (spawn-fiber (lambda ()
+                    (perform-operation (choice-operation))
+                    (signal-cvar! finished)))
+     (let ((result
+            (perform-operation
+             (choice-operation (wrap-operation (wait-operation finished)
+                                               (lambda _ 'finished))
+                               (wrap-operation (sleep-operation 1)
+                                               (lambda _ 'slept))))))
+       (write (list 'empty-choice result))
+       (newline)
+       (assert (eq? result 'slept))
+       (display "ok\n")))))
+
+(display "Tests passed\n")

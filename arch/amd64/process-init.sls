@@ -43,7 +43,9 @@
     (except (loko system $host) allocate)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
-    (loko arch amd64 linux-syscalls))
+    (loko arch amd64 linux-syscalls)
+    ;; Temporarily for the UART driver, which should be using ring buffers
+    (pfds queues naive)    )
 
 (define-record-type pid
   (sealed #t) (opaque #f)
@@ -79,7 +81,9 @@
   ($process-yield '(boot-loader)))
 
 (define (new-process)
-  (make-pid ($process-yield '(new-process))))
+  (let ((status ($process-yield (vector 'new-process #f))))
+    (assert (eq? status 'ok))
+    (make-pid (vector-ref status 1))))
 
 (define (process-exit status)
   ($process-yield `(exit ,(pid-value (get-pid))
@@ -113,122 +117,217 @@
     (handle-scheduler-wait-reply vec ($process-yield vec)
                                  'scheduler-wait)))
 
+
+
+
+
+(define *interrupt-cvars* (make-vector 256 #f))
+
+(define (debug-put-u8 b)
+  (define com0 #x3f8)
+  (define i/o-base com0)
+  (define thb (+ i/o-base 0))
+  (define lsr (+ i/o-base 5))
+  (define (put-u8 b)
+    (let lp ()
+      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
+        (lp)))
+    (put-i/o-u8 thb b))
+  (put-u8 b))
+
 (define (handle-scheduler-wait-reply vec reply who)
   ;; The scheduler will update vec.
   (case reply
     ((timeout)
      #f)
     ((message)
-     ;; TODO: put the message in the queue
-     ;; (display "it's a message: ")
-     ;; (write vec)
-     ;; (newline)
-     #f
-     )
+     (let ((msg (vector-ref vec 2)))
+       ;; This is currently just IRQ vector numbers, but can be used to
+       ;; implement message passing between processes.
+       (cond ((and (fixnum? msg) (vector-ref *interrupt-cvars* msg))
+              => signal-cvar!))))
     (else
      (error who "Unknown reply from scheduler" reply))))
 
-;; (define (wait/irq irq timeout)
-;;   ;; XXX: compound message?
-;;   (listen irq #f)
-;;   (scheduler-wait timeout))
-
 (define (enable-irq irq)
   (assert (fx<=? 0 irq 15))
-  ($process-yield `(enable-irq ,irq)))
+  ($process-yield `#(enable-irq ,irq)))
 
-(define (acknowledge-irq/wait irq timeout)
+(define (acknowledge-irq irq)
+  (define timeout 0)
   (assert (fx<=? 0 irq 15))
   (when timeout
-    (assert (fxpositive? timeout)))
+    (assert (not (fxnegative? timeout))))
   (let ((vec (vector 'wait timeout #f)))
-    (handle-scheduler-wait-reply vec ($process-yield `(acknowledge-irq ,irq ,vec))
-                                 'acknowledge-irq/wait)))
+    (vector-set! *interrupt-cvars* irq (make-cvar))
+    (handle-scheduler-wait-reply vec ($process-yield `#(acknowledge-irq ,irq ,vec))
+                                 'acknowledge-irq)))
 
-(define (send-message target message)
-  (assert (fixnum? message))
-  (cond ((pid? target)
-         (let ((ok? ($process-yield `#(send ,(pid-value target)
-                                            ,message))))
-           (unless ok?
-             (error 'send-message "The target PID is dead" target message))))
-        (else
-         (error 'send-message "Unknown target type" target message))))
+(define (interrupt-operation irq)
+  (wait-operation (vector-ref *interrupt-cvars* irq)))
 
-(define (receive-message channel timeout match?)
-  ;; Consume messages from the given channel if they match the
-  ;; predicate. If no message matches, then wait for a message.
-  #f
-  #;
-  (let lp ((point (channel-start channel)))
-    (cond ((channel-end? channel point)
-           (scheduler-wait timeout))
-          ((match? (channel-peek channel point))
-           (channel-dequeue channel point))
-          (else
-           (lp (channel-next channel point)))))
-  )
-
-(define (com0-setup)
-  ;; Start standard input/output on com0
-  (define com0 #x3f8)
-  (define com0-irq 4)
-  (define rbr (+ com0 0))
-  (define thb (+ com0 0))
-  (define ier (+ com0 1))
-  (define fcr (+ com0 2))
-  (define mcr (+ com0 4))
-  (define lsr (+ com0 5))
+(define (uart-driver i/o-base irq read-ch write-ch)
+  (define RBR (fx+ i/o-base 0))
+  (define THB (fx+ i/o-base 0))
+  (define IER (fx+ i/o-base 1))
+  (define IIR (fx+ i/o-base 2))
+  (define FCR (fx+ i/o-base 2))
+  (define LCR (fx+ i/o-base 3))
+  (define MCR (fx+ i/o-base 4))
+  (define LSR (fx+ i/o-base 5))
+  (define MSR (fx+ i/o-base 6))
+  (define SCR (fx+ i/o-base 7))
+  ;; Accessible when LCR[7]=1
+  (define DL (fx+ i/o-base 0))
+  (define DH (fx+ i/o-base 1))
+  (define IIR-INTERRUPT-PENDING #b1)
   (define IER-READ #b01)
   (define IER-R/W #b11)
-  (define LSR-DATA-READY #b1)
+  (define IER-LINE-STATUS #b100)
+  (define IER-MODEM-STATUS #b1000)
+  (define LSR-DATA-READY #b0000001)
+  (define LSR-RBR-EMPTY  #b1000000)
+  (define LSR-THR-EMPTY  #b0100000)
   (define MCR-DTR  #b00000001)
   (define MCR-RTS  #b00000010)
   (define MCR-OUT2 #b00001000)
-  (define FCR-ENABLE   #b00000001)
-  (define FCR-CLEAR-RX #b00000010)
-  (define FCR-CLEAR-TX #b00000100)
-  (define (put-u8 b)
-    (let lp ()
-      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
-        (lp)))
-    (put-i/o-u8 thb b)
-    (when (eqv? b (char->integer #\linefeed))
-      (put-i/o-u8 thb (char->integer #\return))))
-  (define (put bv start count)
-    (do ((end (fx+ start count))
-         (i start (fx+ i 1)))
-        ((fx=? i end) count)
-      (put-u8 (bytevector-u8-ref bv i))))
-  (define timeout (expt 10 9))
-  (define (data-ready?)
-    (not (fxzero? (fxand (get-i/o-u8 lsr) LSR-DATA-READY))))
+  ;; FIFO control
+  (define FCR-ENABLE           #b00000001)
+  (define FCR-CLEAR-RX         #b00000010)
+  (define FCR-CLEAR-TX         #b00000100)
+  (define FCR-TRIGGER-LEVEL-1  #b00000000)
+  (define FCR-TRIGGER-LEVEL-4  #b01000000)
+  (define FCR-TRIGGER-LEVEL-8  #b10000000)
+  (define FCR-TRIGGER-LEVEL-14 #b11000000)
+  (define (ready-to-rx?)
+    (eqv? (fxand (get-i/o-u8 LSR) LSR-DATA-READY) LSR-DATA-READY))
+  (define (ready-to-tx?)
+    (eqv? (fxand (get-i/o-u8 LSR) LSR-THR-EMPTY) LSR-THR-EMPTY))
+  (define (uart-set-baudrate rate)
+    (let ((latch (fxdiv 115200 rate)))
+      (unless (fx<=? 1 latch #xffff)
+        (error 'uart-set-baudrate "Invalid baud rate" rate))
+      (let ((lcr (get-i/o-u8 LCR)))
+        ;; Set the Divisor Latch Access Bit
+        (put-i/o-u8 LCR (fxior lcr #x80))
+        ;; Latch the new baudrate
+        (put-i/o-u8 DL (fxbit-field latch 0 8))
+        (put-i/o-u8 DH (fxbit-field latch 8 16))
+        ;; Clear the DLAB
+        (put-i/o-u8 LCR (fxand lcr #x7f)))))
+  (define (uart-set-protocol bits parity stop)
+    (let ((par (cdr (assq parity '((none . #b000)
+                                   (odd . #b001)
+                                   (even . #b011)
+                                   (mark . #b101)
+                                   (space . #b111)))))
+          (bits (cdr (assq bits '((5 . #b00)
+                                  (6 . #b01)
+                                  (7 . #b10)
+                                  (8 . #b11)))))
+          (stop (if (eqv? stop 1) 0 1)))
+      (put-i/o-u8 LCR (fxior (fxarithmetic-shift-left par 3)
+                             (fxarithmetic-shift-left stop 2)
+                             bits))))
+  (define (uart-handle-irq)
+    (let ((iir (get-i/o-u8 IIR)))
+      (put-i/o-u8 IER 0)
+      (when (eqv? (fxand iir IIR-INTERRUPT-PENDING) 0)
+        (case (fxand (fxarithmetic-shift-right iir 1) #b111)
+          [(#b010 #b110)
+           ;; There is data to read. #b110 = time-out
+           (let loop ()
+             (when (ready-to-rx?)
+               (if (not rx-head)
+                   (set! rx-head (get-i/o-u8 RBR))
+                   (set! rx-buf (enqueue rx-buf (get-i/o-u8 RBR))))
+               (loop)))]
+          [(#b000)
+           (get-i/o-u8 MSR)]
+          [(#b001)
+           ;; It's ok to write now
+           (let loop ()
+             (when (and (not (queue-empty? tx-buf))
+                        (= (fxand (get-i/o-u8 LSR) #b100000) #b100000))
+               (let-values ([(b q) (dequeue tx-buf)])
+                 (put-i/o-u8 THB b)
+                 (set! tx-buf q))
+               (loop)))]
+          [(#b011)
+           ;; Receiver Line Status Interrupt
+           (get-i/o-u8 LSR)]
+          (else #f)))))
+  (define (uart-init)
+    (uart-set-protocol 8 'none 1)
+    (uart-set-baudrate 9600)
+    (put-i/o-u8 MCR (fxior MCR-DTR MCR-RTS MCR-OUT2))
+    (put-i/o-u8 FCR (fxior FCR-TRIGGER-LEVEL-4 FCR-CLEAR-RX FCR-CLEAR-TX FCR-ENABLE))
+    (put-i/o-u8 IER 0))
+  (define tx-buf (make-queue))
+  (define rx-buf (make-queue))
+  (define rx-head #f)                   ;not the most elegant solution
 
-  (enable-irq com0-irq)
-  (put-i/o-u8 ier 0)
-  (put-i/o-u8 mcr (fxior MCR-DTR MCR-RTS MCR-OUT2))
-  (put-i/o-u8 fcr FCR-ENABLE)
-  ($init-standard-ports
-   (lambda (bv start count)
-     ;; XXX: this should not be inside the port, this should be the
-     ;; main loop. The response to the IRQ really needs to be fast,
-     ;; because if the FIFO is filled, then data is going to be
-     ;; lost. There also should be an IRQ on TX, and the code should
-     ;; look at the interrupt cause. Also, the eol-style is cr
-     (let lp ()
-       (put-i/o-u8 ier IER-READ)
-       (let ((msg (acknowledge-irq/wait com0-irq timeout)))
-         (put-i/o-u8 ier 0)
-         (do ((start start (fx+ start 1))
-              (count count (fx- count 1))
-              (k 0 (fx+ k 1)))
-             ((or (fxzero? count)
-                  (not (data-ready?)))
-              (if (fxzero? k)
-                  (lp)                ;no data, try again
-                  k))
-           (bytevector-u8-set! bv start (get-i/o-u8 rbr))))))
-   put put (eol-style crlf)))
+  (uart-init)
+  (enable-irq irq)
+  (uart-handle-irq)
+  (acknowledge-irq irq)
+
+  (do () ((not 'ever-stop))
+    (if (queue-empty? tx-buf)
+        (put-i/o-u8 IER (fxior IER-READ IER-LINE-STATUS IER-MODEM-STATUS))
+        (put-i/o-u8 IER (fxior IER-R/W IER-LINE-STATUS IER-MODEM-STATUS)))
+    (match (perform-operation
+            (choice-operation
+             (wrap-operation (interrupt-operation irq)
+                             (lambda _ 'int))
+             (if (fx>=? (queue-length tx-buf) 64)
+                 (choice-operation)
+                 (wrap-operation (get-operation write-ch)
+                                 (lambda (x) (cons 'tx x))))
+             (if (not rx-head)
+                 (choice-operation)
+                 (wrap-operation (put-operation read-ch rx-head)
+                                 (lambda _ 'rx)))))
+      ['int
+       (uart-handle-irq)
+       (acknowledge-irq irq)]
+      ['rx
+       ;; We've passed on a byte received from the UART
+       (cond ((queue-empty? rx-buf)
+              (set! rx-head #f))
+             (else
+              (let-values ([(b q) (dequeue rx-buf)])
+                (set! rx-head b)
+                (set! rx-buf q))))]
+      [('tx . byte)
+       ;; We've received a byte to transmit to the UART
+       (cond ((ready-to-tx?)
+              (put-i/o-u8 THB byte))
+             (else
+              (set! tx-buf (enqueue tx-buf byte))))])))
+
+(define (pc-com0-setup)
+  ;; Start standard input/output on COM1
+  (define com1 #x3f8)
+  (define com1-irq 4)
+  (define com2 #x2f8)
+  (define com2-irq 3)
+  (let ((read-ch (make-channel))
+        (write-ch (make-channel)))
+    (spawn-fiber (lambda ()
+                   (uart-driver com1 com1-irq read-ch write-ch)))
+    (let ((read (lambda (bv start count)
+                  (assert (fx>=? count 1))
+                  (let ((b (get-message read-ch)))
+                    (bytevector-u8-set! bv start b))
+                  1))
+          (write (lambda (bv start count)
+                   (do ((end (fx+ start count))
+                        (i start (fx+ i 1)))
+                       ((fx=? i end) count)
+                     ;; TODO: Send all bytes in one put
+                     (put-message write-ch (bytevector-u8-ref bv i))))))
+      ($init-standard-ports read write write (eol-style crlf)))))
 
 ;; Hook up a minimal /boot filesystem consisting of the multiboot
 ;; modules.
@@ -283,18 +382,19 @@
   (define pc-poll
     (case-lambda
       (()
-       0)
+       ;; TODO: Count the number of IRQs being waited on
+       1)
       ((wakeup)                ;wakeup = no-wait / forever / <timeout>
        (if (eq? wakeup 'no-wait)
            0                            ;nothing to do
            (let ((timeout
                   (cond ((eq? wakeup 'no-wait) 0)
-                        ((eq? wakeup 'forever) 60000)
+                        ((eq? wakeup 'forever) 10000)
                         (else
                          ;; Let's wait until the wakeup time. It
                          ;; doesn't matter if we wait shorter.
                          (max 0 (min (- wakeup (pc-current-ticks))
-                                     60000))))))
+                                     10000))))))
              (if (not (fx>? timeout 0))
                  0                      ;even more nothing to do
                  (scheduler-wait (* #e1e6 timeout)))))
@@ -685,23 +785,15 @@
                   (lambda () (linux-get-time-resolution CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'current-time (lambda () (linux-get-time CLOCK_REALTIME)))
   (time-init-set! 'current-time-resolution (lambda () (linux-get-time-resolution CLOCK_REALTIME)))
-  (time-init-set! 'current-ticks linux-current-ticks)
-  ;; (display "PID: ")
-  ;; (write (pid-value (get-pid)))
-  ;; (newline)
-  (let ((bg-process (new-process)))
-    (when (and bg-process (pid-value bg-process))
-      (display "Started in the background: ")
-      (write (pid-value bg-process))
-      (newline))))
+  (time-init-set! 'current-ticks linux-current-ticks))
 
 (define (process-init)
-  (define (nanosleep seconds)
-    (assert (fx>=? seconds 0))
-    (scheduler-wait seconds)
-    (if #f #f))
+  ;; (define (nanosleep seconds)
+  ;;   (assert (fx>=? seconds 0))
+  ;;   (scheduler-wait seconds)
+  ;;   (if #f #f))
   (init-set! 'exit process-exit)
-  (time-init-set! 'nanosleep nanosleep)
+  ;; (time-init-set! 'nanosleep nanosleep)
   (init-set! 'allocate allocate)
   (init-set! 'command-line (get-command-line))
   (init-set! 'environment-variables (get-environment))
@@ -721,7 +813,7 @@
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)
-          (com0-setup)
+          (pc-com0-setup)
           (pc-setup-boot-filesystem))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))

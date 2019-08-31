@@ -109,24 +109,18 @@
         (exit 1)])]
     [(exec-name (or "--script" "--program") fn . rest)
      (init-set! 'command-line (cons fn rest))
-     (let ((old-exit (init-get 'exit)))
-       (init-set! 'exit exit-current-task)
-       (run-fibers
-        (lambda ()
-          (run-program fn)))
-       (init-set! 'exit old-exit))]
+     (run-program fn)
+     (flush-output-port (current-output-port))
+     (exit 0)]
     [(exec-name "--compile" sps-fn "--output" out-fn)
      (compile-program out-fn sps-fn '())]
     [(exec-name)
-     (let ((old-exit (init-get 'exit)))
-       (init-set! 'exit exit-current-task)
-       (run-fibers
-        (lambda ()
-          (banner)
-          (repl)))
-       (init-set! 'exit old-exit))
+     (banner)
+     (repl)
+     (flush-output-port (current-output-port))
      ;; All polite Schemes say good bye
-     (display "Sabbaṁ pahāya gamanīyaṁ.\n")]
+     (display "Sabbaṁ pahāya gamanīyaṁ.\n")
+     (exit 0)]
     [args
      (display "Fatal: unrecognized Loko command line:\n" (current-error-port))
      (write args (current-error-port))
