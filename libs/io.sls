@@ -428,14 +428,21 @@
 (define (get-bytevector-n port n)
   ;; TODO: first try to empty the buffer, then use the source
   ;; directly.
-  (if (port-eof? port)
-      (eof-object)
-      (call-with-bytevector-output-port
-        (lambda (out)
-          (let lp ((n n))
-            (unless (or (eqv? n 0) (port-eof? port))
-              (put-u8 out (get-u8 port))
-              (lp (fx- n 1))))))))
+  (let ((buf (make-bytevector n)))
+    (let lp ((i 0))
+      (if (fx=? n i)
+          buf
+          (let ((b (get-u8 port)))
+            (cond
+              ((eof-object? b)
+               (if (eqv? i 0)
+                   (eof-object)
+                   (let ((ret (make-bytevector i)))
+                     (bytevector-copy! buf 0 ret 0 i)
+                     ret)))
+              (else
+               (bytevector-u8-set! buf i b)
+               (lp (fx+ i 1)))))))))
 
 ;; get-bytevector-n!
 
