@@ -2086,7 +2086,7 @@
        ;; they are permitted at CPL=3 (but not under Linux).
        ;; (emit '(cli))
        (with-new-frame ((env))
-         (emit '(call $tmp-sti)))
+         (emit '(call $tmp-cli)))
        (cg-void ctxt))
       (($enable-interrupts)
        ;; (emit '(sti))

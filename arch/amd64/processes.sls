@@ -30,7 +30,7 @@
     (loko system unsafe)
     (loko system $primitives)
     (loko system $host)
-    (only (loko system $x86) $enable-interrupts)
+    (only (loko system $x86) $enable-interrupts $disable-interrupts)
     (only (loko libs context) CPU-VECTOR:SCHEDULER-RUNNING?
           CPU-VECTOR:SCHEDULER-SP))
 
@@ -114,9 +114,10 @@
     ;; (display "Yielding back to SCHED-SP=")
     ;; (display (number->string sched-sp 16))
     ;; (newline)
-    (when (fxzero? sched-sp)
+    (when (eqv? sched-sp 0)
       (error '$process-yield "The scheduler tried to yield"))
-    ;; ($disable-interrupts)
+    ;; IRQs should be disabled when the scheduler is running
+    ($disable-interrupts)
     ($processor-data-set! CPU-VECTOR:SCHEDULER-RUNNING? #t) ;currently yielding
     (let ((msg ($switch-stack sched-sp msg)))
       ($processor-data-set! CPU-VECTOR:SCHEDULER-RUNNING? #f) ;no longer yielding
