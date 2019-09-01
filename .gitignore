@@ -8,3 +8,4 @@
 *~
 .akku
 .gdb_history
+/config.sls
