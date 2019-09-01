@@ -5,11 +5,11 @@
 * [Built-in libraries](builtins.md)
 * [Concurrency](concurrency.md)
 * [Roadmap](roadmap.md)
-* [Tools-support in Loko](tools.md)
+* [Tools-support in Loko](tools.md) (debugging, profiling, etc)
 
 Loko internals:
 
-* [Interrupts][interrupts.md]
+* [Interrupts](interrupts.md)
 
 ## Target documentation
 

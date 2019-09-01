@@ -43,7 +43,21 @@ format of the returned forms should not be relied on.
 
 ### Procedure: (disassemble *procedure*)
 
-Print the disassembly of *procedure*.
+Print the disassembly of *procedure*. Example:
+
+```scheme
+> (disassemble car)
+Disassembly for #<procedure car .akku/lib/loko/libs/pairs.loko.sls:3224>
+
+  entry:
+   206E00 83F8F8       (cmp eax #xFFFFFFF8)
+   206E03 0F8505000000 (jnz L0)
+ ; (set! rax (car rdi))
+   206E09 488B47FE     (mov rax (mem64+ rdi #x-2))
+   206E0D C3           (ret)
+  L0:
+   206E0E E96DA2FFFF   (jmp (+ rip #x-5D93))
+```
 
 ### Procedure: (machine-type)
 
@@ -51,11 +65,58 @@ The machine type that Loko is running on. This is a vector where the
 first element is the CPU type (`amd64`) and the second is the OS
 (`linux` or `loko`).
 
-### Procedure: (time *thunk*)
+### Syntax: (time *expr*)
+
+Run the procedure *thunk* once with no arguments and print some
+numbers of memory allocation and elapsed time.
 
 ### Procedure: (time-it *what thunk*)
 
+This is the procedural version of `time`.
+
 ### Procedure: (time-it* *what iterations thunk*)
+
+Run *thunk* repeatedly *iterations* times and print some bogus
+statistics. The aim is that this procedure should be the best way to
+do micro benchmarks. Example:
+
+```scheme
+> (time-it* "fx+" 10000000 (lambda () (fx+ x 1)))
+Timing fx+ to find the minimum cycle time:
+New minimum is 1819 cycles with 10000000 iterations to go.
+...
+New minimum is 234 cycles with 6257346 iterations to go.
+
+  The cycle count varied between 234 and 83160784
+  (Arithmetic mean)      µ  = 248.75
+  (Standard deviation)   σ  = 24.33
+  (Population variance)  σ² = 592.08
+                    min x_i = µ-.61σ
+  Used 9736890 samples (263110 outliers discarded).
+234
+> (time-it* "+" 10000000 (lambda () (+ x 1)))
+Timing + to find the minimum cycle time:
+New minimum is 1751 cycles with 10000000 iterations to go.
+...
+New minimum is 240 cycles with 9968540 iterations to go.
+
+  The cycle count varied between 240 and 84141254
+  (Arithmetic mean)      µ  = 252.96
+  (Standard deviation)   σ  = 30.46
+  (Population variance)  σ² = 927.82
+                    min x_i = µ-.43σ
+  Used 9979862 samples (20138 outliers discarded).
+240
+```
+
+Note that cp0 will optimize the thunk before it runs, so you may end
+up benchmarking something other than what you thought. Check with
+`expand/optimize`. If the code is entered in the REPL then you also
+measure the overhead of `eval`.
+
+Modern computers are notoriously difficult to get any consistent
+results from. An improvement in cycles could be because the code
+slightly moved in memory.
 
 ### Procedure: (open-output-string)
 
@@ -84,6 +145,36 @@ on the port.
 ### Procedure: (gensym)
 
 Generate an uninterned symbol.
+
+### Procedure: (make-parameter *default-value [fender]*)
+
+Create a new parameter object. Parameters are typically used to
+implement dynamically scoped variables together with `parameterize`. A
+parameter's current value can be queried by calling it with no
+arguments and its value can be modified by calling it with one
+argument, the new value.
+
+The optional *fender* procedure is applied to the value whenever the
+parameter is modified. The return value of *fender* is used in place
+of the new value. A typical use of this procedure is to do some type
+checks on the new value.
+
+### Syntax: (parameterize ([name value] ...) body ...)
+
+Parameterize rebinds the parameter *name* to *value* for the dynamic
+extent of *body*. This means that while *body* is running, *name* will
+be set to *value* (possibly filtered by a fender).
+
+Whenever the program leaves the body, either by a normal return or a
+non-local exit (such as in a `guard` expression or by calling a
+continuation created by `call/cc`), the value is reset to the value it
+has outside of the body. If control reenters body, as in a call to a
+continuation created inside the body, the parameter will return to the
+value established by `parameterize`.
+
+Although it has the same name, this syntax is a faster variant that is
+not fully compatible with SRFI-39. This variant is very common in
+Scheme implementations and matches the one used in e.g. Chez Scheme.
 
 ## (loko system unsafe)
 

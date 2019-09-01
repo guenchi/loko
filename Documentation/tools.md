@@ -46,6 +46,9 @@ Loko can be profiled with Linux [perf][perf].
 
  [perf]: https://perf.wiki.kernel.org/index.php/Main_Page
 
+Some micro benchmarks can be done with the built-in procedure
+`time-it*`.
+
 ## Memory checking
 
 It's possible to run Loko in [Valgrind][valgrind]. Valgrind does not
