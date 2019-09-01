@@ -55,7 +55,7 @@
     make-transcoder native-transcoder
     transcoder-codec transcoder-eol-style
     transcoder-error-handling-mode
-    #;bytevector->string #;string->bytevector
+    bytevector->string string->bytevector
 
     eof-object eof-object?
 
@@ -65,21 +65,21 @@
     set-port-position! close-port
     call-with-port
 
-    input-port? port-eof? #;open-file-input-port open-bytevector-input-port
+    input-port? port-eof? open-bytevector-input-port
     open-string-input-port standard-input-port current-input-port
     make-custom-binary-input-port make-custom-textual-input-port
-    get-u8 lookahead-u8 get-bytevector-n ;;get-bytevector-n!
+    get-u8 lookahead-u8 get-bytevector-n get-bytevector-n!
     get-bytevector-some get-bytevector-all
     get-char lookahead-char get-string-n get-string-n! get-string-all
     get-line
     output-port? flush-output-port output-port-buffer-mode
-    #;open-file-output-port open-bytevector-output-port
+    open-bytevector-output-port
     call-with-bytevector-output-port open-string-output-port
     call-with-string-output-port standard-output-port
     standard-error-port current-output-port current-error-port
     make-custom-binary-output-port make-custom-textual-output-port
     put-u8 put-bytevector put-char put-string put-datum
-    ;; #;open-file-input/output-port make-custom-binary-input/output-port
+    ;; make-custom-binary-input/output-port
     ;; make-custom-textual-input/output-port
     call-with-input-file call-with-output-file with-input-from-file
     with-output-to-file open-input-file open-output-file
@@ -107,7 +107,7 @@
             port-position port-has-set-port-position!?
             set-port-position! close-port
             call-with-port
-            input-port? port-eof? #;open-file-input-port open-bytevector-input-port
+            input-port? port-eof? open-bytevector-input-port
             open-string-input-port standard-input-port current-input-port
             make-custom-binary-input-port make-custom-textual-input-port
             get-u8 lookahead-u8 get-bytevector-n get-bytevector-n!
@@ -115,13 +115,13 @@
             get-char lookahead-char get-string-n get-string-n! get-string-all
             get-line get-datum
             output-port? flush-output-port output-port-buffer-mode
-            #;open-file-output-port open-bytevector-output-port
+            open-bytevector-output-port
             call-with-bytevector-output-port open-string-output-port
             call-with-string-output-port standard-output-port
             standard-error-port current-output-port current-error-port
             make-custom-binary-output-port make-custom-textual-output-port
             put-u8 put-bytevector put-char put-string put-datum
-            #;open-file-input/output-port make-custom-binary-input/output-port
+            make-custom-binary-input/output-port
             make-custom-textual-input/output-port
             call-with-input-file call-with-output-file with-input-from-file
             with-output-to-file open-input-file open-output-file
@@ -183,7 +183,14 @@
 (define (native-transcoder)
   %native-transcoder)
 
-;; TODO: bytevector->string string->bytevector
+(define (bytevector->string bytevector transcoder)
+  (get-string-all (open-bytevector-input-port bytevector transcoder)))
+
+(define (string->bytevector string transcoder)
+  (let-values ([(p extract) (open-bytevector-output-port transcoder)])
+    (put-string p string)
+    (flush-output-port p)
+    (extract)))
 
 (define (eof-object) (sys:eof-object))
 
@@ -240,10 +247,12 @@
               (fxbit-field (port-flags p) 3 5)))
 
 (define (transcoded-port p tc)
-  (assert (transcoder? tc))
   (unless (and (binary-port? p) (port-buffer p))
     (assertion-violation 'transcoded-port
-                         "The first parameter must be an open binary port" p))
+                         "Expected an open binary port as the first argument" p tc))
+  (unless (transcoder? tc)
+    (assertion-violation 'transcoded-port
+                         "Expected a transcoder as the second argument" p tc))
   (let* ((eol-flags (case (transcoder-eol-style tc)
                       ((none) 0)      ;XXX: needed or not?
                       ((lf) 1)
@@ -350,15 +359,20 @@
 
 ;; open-file-input-port is defined elsewhere.
 
-(define (open-bytevector-input-port bv)
-  (define (read! bv start count) 0)
-  (define (port-position) 0)
-  (define (set-position! pos) #f)
-  (assert (bytevector? bv))
-  (make-port "*bytevector*" #f #b10
-             #f read! port-position set-position! #f #f #f
-             bv 0 (bytevector-length bv) 0 #f
-             'block))
+(define open-bytevector-input-port
+  (case-lambda
+    ((bv)
+     (open-bytevector-input-port bv #f))
+    ((bv tc)
+     (define (read! bv start count) 0)
+     (define (port-position) 0)
+     (define (set-position! pos) #f)
+     (assert (bytevector? bv))
+     (let ((p (make-port "*bytevector*" #f #b10
+                         #f read! port-position set-position! #f #f #f
+                         bv 0 (bytevector-length bv) 0 #f
+                         'block)))
+       (if tc (transcoded-port p tc) p)))))
 
 (define (open-string-input-port string)
   (define (read! str start count) 0)
@@ -428,6 +442,9 @@
 (define (get-bytevector-n port n)
   ;; TODO: first try to empty the buffer, then use the source
   ;; directly.
+  (unless (fx>=? n 0)
+    (assertion-violation 'get-bytevector-n
+                         "Expected a non-negative count" port n))
   (let ((buf (make-bytevector n)))
     (let lp ((i 0))
       (if (fx=? n i)
@@ -444,7 +461,30 @@
                (bytevector-u8-set! buf i b)
                (lp (fx+ i 1)))))))))
 
-;; get-bytevector-n!
+(define (get-bytevector-n! port buf start count)
+  (unless (and (fixnum? start) (not (fxnegative? start))
+               (fixnum? count) (not (fxnegative? count)))
+    (assertion-violation 'get-bytevector-n!
+                         "Expected an exact, non-negative start and count"
+                         port buf start count))
+  (let ((end (fx+ start count)))
+    (unless (fx>=? (bytevector-length buf) end)
+      (assertion-violation 'get-bytevector-n!
+                           "Expected a bytevector that is at least start+count long"
+                           port buf start count))
+    (let lp ((i start))
+      (if (fx=? i end)
+          count
+          (let ((b (get-u8 port)))
+            (cond
+              ((eof-object? b)
+               (let ((consumed (fx- i start)))
+                 (if (eqv? consumed 0)
+                     (eof-object)
+                     consumed)))
+              (else
+               (bytevector-u8-set! buf i b)
+               (lp (fx+ i 1)))))))))
 
 (define (get-bytevector-some p)
   (if (port-eof? p)                   ;XXX: Hmm.
