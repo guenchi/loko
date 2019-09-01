@@ -54,10 +54,7 @@
 
     ;; Seemingly not exported in Guile. It has them, but the arguments
     ;; are ports.
-    wait-for-readable wait-for-writable
-
-    ;; Internals
-    run-fiber-scheduler)
+    wait-for-readable wait-for-writable)
   (import
     (rnrs (6))
     (rnrs mutable-pairs (6))

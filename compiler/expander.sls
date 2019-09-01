@@ -1109,7 +1109,6 @@
     (wrap-operation           fibers)
     (choice-operation         fibers)
     (perform-operation        fibers)
-    (make-base-operation      fibers)
     (make-channel             fibers)
     (channel?                 fibers)
     (put-operation            fibers)
@@ -1127,6 +1126,7 @@
     (wait-operation           fibers)
     (wait                     fibers)
     (yield-current-task       fibers)
+    (exit-current-task        fibers)
 
     ($cpuid!                  $x86)
     (cpuid                    $x86)
