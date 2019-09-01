@@ -38,6 +38,11 @@ The division magic, and many other wonderful hacks, is from the
 excellent book Hacker's Delight by Henry S. Warren, Jr. (foreword by
 one Guy L. Steele, Jr.!)
 
+The fibers library is loosely based on _Parallel Concurrent ML_ by
+John Reppy, Claudio V. Russo and Yingqi Xiao. The API is based on
+Guile fibers by Andy Wingo and the implementation is closely related
+to his blog post _a new concurrent ml_.
+
 Thanks also to Abdulaziz Ghuloum for _An Incremental Approach to
 Compiler Construction_, which helped me consolidate the Scheme
 compiler experience I had accumulated through experimentation.

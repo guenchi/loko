@@ -47,7 +47,8 @@ test:
   script:
     - make .akku/env
     - echo '(exit 0)' | ./loko.out
-    - cd samples/bga-graphics; make LOKO=../../loko.out
+    - .akku/env ./loko.out --program tests/test-fibers.sps
+    - (cd samples/bga-graphics; make LOKO=../../loko.out)
   artifacts:
     paths:
       - loko.out

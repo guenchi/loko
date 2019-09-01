@@ -5,5 +5,5 @@
   (synopsis "R6RS Scheme compiler for Linux and PCs")
   (authors "Göran Weinholt")
   (license "AGPL-3.0-or-later")
-  (depends ("machine-code" "^2.1.0"))
+  (depends ("pfds" "^0.3.0") ("machine-code" "^2.1.0"))
 )

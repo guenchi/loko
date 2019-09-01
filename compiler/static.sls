@@ -51,13 +51,16 @@
     "loko/libs/control"
     "loko/utils"
     "loko/match"
+    "loko/init"
     "loko/libs/hashtables"
     "loko/libs/symbols"
     "loko/libs/conditions"
     "loko/libs/enums"
+    "loko/libs/time"
+    "pfds/heaps"
+    "loko/libs/fibers"
     "loko/libs/io"
     "loko/libs/sorting"
-    "loko/libs/time"
     ,@(if (memq 'eval options)
           '("psyntax/compat"
             "psyntax/internal"
@@ -78,7 +81,6 @@
             "loko/compiler/expander"
             "loko/repl")
           '())
-    "loko/init"
     "struct/pack"
     ,@(if (memq 'main options)
           '("loko/main")
@@ -140,6 +142,8 @@
                          '())
                    "loko/arch/amd64/linux-init")
                  '())
+           "pfds/queues/private/condition"          ;temporary
+           "pfds/queues/naive"          ;temporary
            "loko/arch/amd64/process-init"))
         (else '()))
     ,@(if (memq 'eval options)

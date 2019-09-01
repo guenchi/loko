@@ -189,7 +189,7 @@
 
 ;;; Stack-Segment Fault
     (%label fault-SS*)
-    ;; As far as I can tell, This can only be the result of
+    ;; As far as I can tell, this can only be the result of
     ;; referencing a non-canonical pointer with RBP as base
     ;; register.
     (mov rax (mem64+ rsp 8))
@@ -248,14 +248,13 @@
     ,@(cdr idt-entries)
     (%align 16)
     (%label int-generic)
-    ,@(let ((preempt (vector 'preempt))
-            (iret (vector 'iret)))
+    ,@(let ((iret (vector 'iret)))
         `((pop (mem64+ fs ,(* 8 CPU-VECTOR:LAST-INTERRUPT-VECTOR))) ;save vector number
-          (cmp (mem64+ fs ,(* 8 CPU-VECTOR:SCHEDULER-SP)) 0) ;is the scheduler running?
-          ;; TODO: must not preempt if the process is in CPL=0 (syscall)
-          (je ,iret)
+          (cmp (mem64+ fs ,(* 8 CPU-VECTOR:SCHEDULER-SP)) 0)
+          (je ,iret)                    ;scheduler running, don't preempt
+          (test (mem64+ rsp 16) ,(RFLAGS-IOPL 3))
+          (jz ,iret)                    ;CPL=0, don't preempt
 
-          (%label ,preempt)
           ;; Preempt the current process.
           (push rbp)
           (mov rbp rsp)      ;remember rsp
@@ -284,6 +283,8 @@
                                reg)))
                  all-registers)
           (push interrupts:resume)
+          ;; (mov al ,(char->integer #\p))
+          ;; (out #xe9 al)
 
           ;; RCX->RIP, R11->RFLAGS, IA32_STAR[63:48]+16->CS,
           ;; IA32_STAR[63:48]+8->SS.
@@ -302,6 +303,10 @@
           ;; happen immediately after IRETQ and before CLI if RFLAGS
           ;; is not modified here. TODO: use sysretq instead?
           (%label ,iret)
+          ;; (push rax)
+          ;; (mov al ,(char->integer #\h))
+          ;; (out #xe9 al)
+          ;; (pop rax)
           (and (mem64+ rsp 16) ,(fxnot (RFLAGS IF))) ;CLI
           (iretq)))
 

@@ -25,6 +25,8 @@
 ;; This libary is responsible for reading the boot loader data,
 ;; starting up processes and doing process scheduling.
 
+;; Fibers do not work fully here.
+
 ;;; TODO: mmap must be able to manage virtual addresses itself (like
 ;;; Linux's mmap). Make it so the address can be a type of address
 ;;; instead: 'low-1MB, 'low-4GB or 'full-64bit ?
@@ -49,6 +51,16 @@
 ;; Boot modules.
 ;; (("filename" (args ...) base-address length) ...)
 (define *boot-modules* '())
+
+(define-syntax debug
+  (syntax-rules ()
+    [(_ x* ...)
+     (values)]
+    [(_ x* ...)
+     (begin
+       (write (list x* ...) (current-error-port))
+       (newline (current-error-port))
+       (values))]))
 
 ;; Loko syscalls
 (define (sys_hlt) (syscall -1))
@@ -155,10 +167,10 @@
 
 (define (init-early-serial-driver)
   ;; Trivial early serial driver
-  (define com0 #x3f8)
-  (define rbr (+ com0 0))
-  (define thb (+ com0 0))
-  (define lsr (+ com0 5))
+  (define debugcon #xe9)
+  (define com1 #x3f8)
+  (define thb (+ com1 0))
+  (define lsr (+ com1 5))
   (define (serial-put-u8 b)
     (let lp ()
       (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
@@ -169,16 +181,16 @@
          (i start (fx+ i 1)))
         ((fx=? i end) count)
       (serial-put-u8 (bytevector-u8-ref bv i))))
-  ($init-standard-ports (lambda (bv start count)
-                          (let lp ()
-                            (when (fxzero? (fxand (get-i/o-u8 lsr) #b1))
-                              (lp)))
-                          (bytevector-u8-set! bv start (get-i/o-u8 rbr))
-                          1)
-                        serial-put serial-put
+  (define (debug-put bv start count)
+    (do ((end (fx+ start count))
+         (i start (fx+ i 1)))
+        ((fx=? i end) count)
+      (put-i/o-u8 debugcon (bytevector-u8-ref bv i))))
+  ($init-standard-ports (lambda _ 0)
+                        debug-put debug-put
                         (eol-style crlf)))
 
-;;; Interrupt controller code
+;;; PIC Interrupt controller code (i8259)
 
 ;; Intel reserves the first 32 interrupt vectors for exceptions
 ;; and such. Let's put the legacy IRQs immediately after that.
@@ -193,12 +205,13 @@
   (define cmd base)
   (define data (fx+ base 1))
   (define icw3 (if (fx=? base picm)
-                   #b100          ;IRQ2 has a slave
-                   2))            ;slave ID
-  (put-i/o-u8 cmd #b10001)       ;ICW1: ICW4 needed
-  (put-i/o-u8 data idt-offset)   ;ICW2: vector address
-  (put-i/o-u8 data icw3)         ;ICW3
-  (put-i/o-u8 data #b1))         ;ICW4: Intel Architecture
+                   #b100                ;IRQ2 has a slave
+                   2))                  ;slave ID
+  (put-i/o-u8 cmd #b10001)              ;ICW1: ICW4 needed, edge-triggered
+  (put-i/o-u8 data idt-offset)          ;ICW2: vector address
+  (put-i/o-u8 data icw3)                ;ICW3
+  (put-i/o-u8 data #b1)                 ;ICW4: Intel Architecture
+  (OCW3 base 'set #f #f))               ;OCW3: special mask mode
 
 (define (OCW1 base m)
   ;; Used to mask IRQs
@@ -207,22 +220,22 @@
 (define (OCW2 base rotate? specific? eoi? level)
   ;; Used to acknowledge IRQs
   (put-i/o-u8 base (fxior (if rotate?   #b10000000 0)
-                           (if specific? #b1000000 0)
-                           (if eoi?      #b100000 0)
-                           (fxand level #b111))))
+                          (if specific? #b1000000 0)
+                          (if eoi?      #b100000 0)
+                          (fxand level #b111))))
 
 (define (OCW3 base special-mask-mode poll? reg)
   ;; Used to read IRR/ISR
   (put-i/o-u8 base (fxior (if poll?   #b100 0)
-                           (case reg
-                             ((ir) #b10)
-                             ((is) #b11)
-                             (else 0))
-                           (case special-mask-mode
-                             ((set)   #b1100000)
-                             ((reset) #b1000000)
-                             (else #f))
-                           #b1000)))
+                          (case reg
+                            ((ir) #b10)
+                            ((is) #b11)
+                            (else 0))
+                          (case special-mask-mode
+                            ((set)   #b1100000)
+                            ((reset) #b1000000)
+                            (else 0))
+                          #b1000)))
 
 (define (pic-mask base mask)
   ;; Bit 0 in the mask is IRQ 0 (or IRQ 8).
@@ -240,6 +253,22 @@
          (OCW2 pics #t #t #t irq)
          (OCW2 picm #f #t #t 2))))
 
+;; Read the In-Service Register, which says which IRQs are currently
+;; being serviced, i.e. they were not acknowledged yet.
+(define (pic-get-isr)
+  (OCW3 picm #f #f 'is)
+  (OCW3 pics #f #f 'is)
+  (fxior (fxarithmetic-shift (get-i/o-u8 pics) 8)
+         (get-i/o-u8 picm)))
+
+;; Read the Interrupt Request Register, which says which IRQs are
+;; pending to be sent.
+(define (pic-get-irr)
+  (OCW3 picm #f #f 'ir)
+  (OCW3 pics #f #f 'ir)
+  (fxior (fxarithmetic-shift (get-i/o-u8 pics) 8)
+         (get-i/o-u8 picm)))
+
 (define (pic-enable irq)
   (cond ((fx<? irq 8)
          (let ((bit (fxarithmetic-shift-left 1 irq)))
@@ -249,6 +278,8 @@
          (let ((bit (fxarithmetic-shift-left 1 (fx- irq 8))))
            (set! *pics-mask* (fxand *pics-mask* (fxnot bit)))
            (pic-mask pics *pics-mask*)))))
+
+;;; Advanced PIC
 
 ;; Interrupt vector numbers. The spurious vector has the three lower
 ;; bits set to #b111.
@@ -470,6 +501,7 @@
 ;; Pid 0 for Loko on PC
 (define (pc-scheduler cpu-freq interval dma-allocate)
   ;; FIXME: passing in dma-allocate here is ugly.
+  (define DEBUG #f)
   (define *runq* #f)
   (define *waitq* '())
   (define *irq-vectors* (make-vector 256 #f))
@@ -490,39 +522,32 @@
     (let ((IRQ ($processor-data-ref CPU-VECTOR:LAST-INTERRUPT-VECTOR)))
       ($processor-data-set! CPU-VECTOR:LAST-INTERRUPT-VECTOR #f)
       IRQ))
+  (define (handle-irq)
+    (let ((vec (get-saved-irq!)))
+      ;; First make runnable any process that was waiting for this
+      ;; IRQ. If a runnable process would receive an IRQ then it must
+      ;; be queued as a message.
 
-  ;; Start the boot process.
-  (let ((boot (make-pcb 1 ($process-start 1))))
-    (set! *runq* (pcb-link! *runq* boot))
-    (hashtable-set! *pids* (pcb-pid boot) boot))
-
-  (let loop ()
-    (define current-time (rdtsc)) ;FIXME: can wrap
-    (let ((IRQ (get-saved-irq!)))
-      ;; First make runnable any process that was
-      ;; waiting for this IRQ. If a runnable process
-      ;; would receive an IRQ then it must be queued as
-      ;; a message.
-
-      ;; TODO: if there is an IRQ destined for a runnable
-      ;; process, then it must be queued.
-      (when (fixnum? IRQ)
-        #;
-        (cond ((eqv? IRQ (+ PIC1-vector-offset 7))
-               ;; TODO: check ISR to see if it was really IRQ7
-               ;; If it was not, do nothing.
-               )
-              ((eqv? IRQ (+ PIC2-vector-offset 7))
-               ;; TODO: check ISR to see if it was really IRQ15
-               ;; If it was not, then ACK irq 2 (cascade).
-               ))
-        (cond ((eqv? IRQ APIC-vector-timer)
+      (when (fixnum? vec)
+        (cond ((and (eqv? vec (+ PIC1-vector-offset 7))
+                    (not (fxbit-set? (pic-get-isr) 7)))
+               ;; Spurious IRQ7
+               #f)
+              ((and (eqv? vec (+ PIC1-vector-offset 15))
+                    (not (fxbit-set? (pic-get-isr) 15)))
+               ;; Spurious IRQ15 from pics, but picm thinks IRQ 2
+               ;; actually happened so it needs to be acked.
+               (pic-ack 2))
+              ((eqv? vec APIC-vector-timer)
                (apic-EOI))
-              ((vector-ref *irq-vectors* IRQ) =>
+              ((vector-ref *irq-vectors* vec) =>
                (lambda (pcb)
                  ;; TODO: IRQ sharing
-                 (pcb-enqueue-message! pcb IRQ)))
-              ((eqv? IRQ APIC-vector-spurious)
+                 (when DEBUG
+                   (write (list 'irq vec))
+                   (newline))
+                 (pcb-enqueue-message! pcb (fx- vec PIC1-vector-offset))))
+              ((eqv? vec APIC-vector-spurious)
                ;; XXX: if the spurious interrupts come
                ;; without end, then probably an
                ;; interrupt in the APIC has not received
@@ -532,14 +557,11 @@
                #f)
               (else
                ;; TODO: disable the IRQ
-               (display "nobody was interested in interrupt ")
-               (display IRQ)
-               (newline)
-               ))))
-
-    ;; TODO: this implementation of the wait queue
-    ;; conses too much and is O(n) in the number of
-    ;; sleeping processes.
+               (display (cons 'sirq vec))
+               (newline))))))
+  (define (handle-wait-queue current-time)
+    ;; TODO: this implementation of the wait queue conses too much and
+    ;; is O(n) in the number of sleeping processes.
     (unless (null? *waitq*)
       ;; Make runnable any process where there is a
       ;; message in the queue or the wakeup time is in
@@ -577,7 +599,160 @@
                                (pcb-wakeup-set! pcb #f)
                                (pcb-msg-set! pcb 'timeout)
                                #f))))
-                    *waitq*)))
+                    *waitq*))))
+  (define (handle-message pcb msg current-time)
+    ;; These messages should be cleaned up already by wrappers around
+    ;; $process-yield, so no error catching is necessary here.
+    (when DEBUG
+      (cond ((equal? msg '(current-ticks))
+             (display #\T)
+             (flush-output-port (current-output-port)))
+            (else
+             (debug (fxdiv (rdtsc) (fxdiv cpu-freq 1000))
+                    (pcb-pid pcb) 'isr (number->string (pic-get-isr) 2)
+                    'irr (number->string (pic-get-irr) 2)
+                    'msg: msg))))
+    (when (vector? msg)
+      (case (vector-ref msg 0)
+        ((send)
+         (let ((recipient (vector-ref msg 1))
+               (msg (vector-ref msg 2)))
+           (cond ((hashtable-ref *pids* recipient #f) =>
+                  (lambda (target)
+                    (pcb-enqueue-message! target msg)
+                    (pcb-msg-set! pcb 'ok)))
+                 (else
+                  ;; There is no such process...
+                  (pcb-msg-set! pcb #f)))))
+        ((wait)
+         ;; TODO: if the queue is not empty, then take a message
+         ;; immediately
+         (let ((timeout (vector-ref msg 1)))
+           (cond ((null? (pcb-queue pcb))
+                  (when timeout
+                    ;; Minimum wait in nanoseconds, unless awoken by a
+                    ;; message.
+                    (let ((wakeup (+ current-time
+                                     (nanoseconds->TSC cpu-freq timeout))))
+                      (pcb-wakeup-set! pcb wakeup)))
+                  ;; The process is now waiting.
+                  (pcb-status-set! pcb 'wait)
+                  (pcb-wait-vector-set! pcb msg)
+                  (set! *runq* (pcb-unlink! pcb))
+                  (set! *waitq* (cons pcb *waitq*)))
+                 (else
+                  (let ((wv msg))
+                    (vector-set! wv 1 timeout)
+                    (vector-set! wv 2 (pcb-dequeue-message! pcb))
+                    (pcb-msg-set! pcb 'message))))))
+        ((allocate)
+         (let ((type (vector-ref msg 1))
+               (size (vector-ref msg 2))
+               (mask (vector-ref msg 3)))
+           ;; Allocate a consecutive memory region. TODO: jot down
+           ;; this area as allocated to this process, and free it when
+           ;; the process dies. If the process is a PCI device driver
+           ;; then disconnect it from the memory bus first. Or just
+           ;; have a big old process that takes care of stuff like
+           ;; that.
+           (case type
+             ((dma)
+              (let-values ([(cpu dma) (dma-allocate size mask)])
+                (cond (cpu
+                       (vector-set! msg 4 cpu)
+                       (vector-set! msg 5 dma)
+                       (pcb-msg-set! pcb 'ok))
+                      (else
+                       (pcb-msg-set! pcb #f)))))
+             (else
+              (display "Bad allocate message: ")
+              (write msg)
+              (newline)))))
+
+        ;;; IRQs
+        ((enable-irq)
+         (let ((irq (vector-ref msg 1)))
+           (pic-enable irq)
+           ;; XXX: Only one pcb per interrupt
+           (cond ((fx<? irq 8)
+                  (vector-set! *irq-vectors*
+                               (+ PIC1-vector-offset irq)
+                               pcb))
+                 ((fx<? irq 16)
+                  (vector-set! *irq-vectors*
+                               (+ PIC2-vector-offset (fx- irq 8))
+                               pcb)))
+           (pcb-msg-set! pcb 'ok)))
+        ((acknowledge-irq)
+         (let ((irq (vector-ref msg 1)))
+           (pic-ack irq)
+           (handle-message pcb (vector-ref msg 2) current-time)))
+
+        ;;; Processes
+        ((new-process)
+         (let* ((pid *next-pid*)
+                (sp ($process-start pid))
+                (npcb (make-pcb pid sp)))
+           ;; (display "new process\n")
+           (set! *runq* (pcb-link! *runq* npcb))
+           (hashtable-set! *pids* pid npcb)
+           (pcb-msg-set! pcb 'ok)
+           (vector-set! msg 1 pid)
+           (set! *next-pid* (+ *next-pid* 1))))
+
+        (else
+         (display "Bad message: ")
+         (write msg)
+         (newline)
+         (pcb-msg-set! pcb 'error))))
+    ;; Old message types (should be migrated to vectors, since the
+    ;; vectors allow a response to be given with vector-set! while the
+    ;; status of the call itself is set with pcb-msg-set!)
+    (when (pair? msg)
+      (case (car msg)
+        ((get-pid)
+         (pcb-msg-set! pcb (pcb-pid pcb)))
+        ((exit)
+         ;; XXX: `reason` is a condition object, but using the types
+         ;; from the other process.
+         (let ((target (cadr msg))
+               (reason (caddr msg)))
+           ;; TODO: well...
+           (display "process exited: ")
+           (display (list target reason))
+           (newline)
+           (when (eqv? (pcb-pid pcb) target)
+             ;; XXX: free the resources etc,
+             ;; remove from *irq-vectors*
+             (hashtable-set! *pids* (pcb-pid pcb) #f)
+             (set! *runq* (pcb-unlink! pcb)))))
+        ((boot-loader)
+         (pcb-msg-set! pcb 'multiboot))
+        ((command-line)
+         ;; XXX: command-line, environment and boot-modules are
+         ;; extremely iffy. The process must immediately copy the
+         ;; variables to its own storage.
+         (pcb-msg-set! pcb (command-line)))
+        ((environment)
+         (pcb-msg-set! pcb (get-environment-variables)))
+        ((boot-modules)
+         (pcb-msg-set! pcb *boot-modules*))
+        ((current-ticks)
+         (pcb-msg-set! pcb (fxdiv (rdtsc) (fxdiv cpu-freq 1000))))
+        (else
+         (display "bad message: ")
+         (write msg)
+         (newline)))))
+
+  ;; Start the boot process.
+  (let ((boot (make-pcb 1 ($process-start 1))))
+    (set! *runq* (pcb-link! *runq* boot))
+    (hashtable-set! *pids* (pcb-pid boot) boot))
+
+  (let scheduler-loop ()
+    (define current-time (rdtsc)) ;FIXME: can wrap
+    (handle-irq)
+    (handle-wait-queue current-time)
 
     ;; TODO: set the timeout based on the next wakeup
     (write-timer-initial-count interval)
@@ -587,161 +762,36 @@
            (cond ((null? *waitq*)
                   (error 'scheduler "The last process has exited"))
                  (else
-                  ;; Wait for an interrupt
+                  ;; Wait for an interrupt. In the scheduler, this is
+                  ;; the only place where interrupts can happen while
+                  ;; the scheduler is running.
+                  (when DEBUG
+                    (display #\H)
+                    (flush-output-port (current-output-port)))
                   (sys_hlt)
-                  (loop))))
+                  (scheduler-loop))))
           (else
            ;; Schedule the next runnable process
+           (when DEBUG
+             (display #\R)
+             (flush-output-port (current-output-port)))
            (let* ((pcb *runq*)
                   (msg ($switch-stack (pcb-sp pcb) (pcb-msg pcb))))
              ;; (write-timer-vector LVT-MASK)
              (pcb-sp-set! pcb (get-saved-sp!))
              (unless (eq? msg 'preempted)
                (pcb-msg-set! pcb #f))
-
-             ;; These messages should be cleaned up
-             ;; already by wrappers around $process-yield,
-             ;; so no error catching is necessary here.
-             (let lp ((msg msg))
-               (when (vector? msg)
-                 (case (vector-ref msg 0)
-                   ((send)
-                    (let ((recipient (vector-ref msg 1))
-                          (msg (vector-ref msg 2)))
-                      (cond ((hashtable-ref *pids* recipient #f) =>
-                             (lambda (target)
-                               (pcb-enqueue-message! target msg)
-                               (pcb-msg-set! pcb 'ok)))
-                            (else
-                             ;; There is no such process...
-                             (pcb-msg-set! pcb #f)))))
-                   ((wait)
-                    ;; TODO: if the queue is not empty,
-                    ;; then take a message immediately
-                    (let ((timeout (vector-ref msg 1)))
-                      (cond ((null? (pcb-queue pcb))
-                             (when timeout
-                               ;; Minimum wait in nanoseconds,
-                               ;; unless awoken by a message.
-                               (let ((wakeup (+ current-time
-                                                (nanoseconds->TSC cpu-freq timeout))))
-                                 (pcb-wakeup-set! pcb wakeup)))
-                             ;; The process is now waiting.
-                             (pcb-status-set! pcb 'wait)
-                             (pcb-wait-vector-set! pcb msg)
-                             (set! *runq* (pcb-unlink! pcb))
-                             (set! *waitq* (cons pcb *waitq*)))
-                            (else
-                             (let ((wv msg))
-                               (vector-set! wv 1 timeout)
-                               (vector-set! wv 2 (pcb-dequeue-message! pcb))
-                               (pcb-msg-set! pcb 'message))))))
-                   ((allocate)
-                    (let ((type (vector-ref msg 1))
-                          (size (vector-ref msg 2))
-                          (mask (vector-ref msg 3)))
-                      ;; Allocate a consecutive memory
-                      ;; region. TODO: jot down this
-                      ;; area as allocated to this
-                      ;; process, and free it when the
-                      ;; process dies. If the process is
-                      ;; a PCI device driver then
-                      ;; disconnect it from the memory
-                      ;; bus first. Or just have a big
-                      ;; old process that takes care of
-                      ;; stuff like that.
-                      (case type
-                        ((dma)
-                         (let-values (((cpu dma)
-                                       (dma-allocate size mask)))
-                           (cond (cpu
-                                  (vector-set! msg 4 cpu)
-                                  (vector-set! msg 5 dma)
-                                  (pcb-msg-set! pcb 'ok))
-                                 (else
-                                  (pcb-msg-set! pcb #f)))))
-                        (else
-                         (display "Bad allocate message: ")
-                         (write msg)
-                         (newline)))))
-                   (else
-                    (display "Bad message: ")
-                    (write msg)
-                    (newline))))
-               ;; Old message types
-               (when (pair? msg)
-                 (case (car msg)
-                   ((enable-irq)
-                    (let ((irq (cadr msg)))
-                      (pic-enable irq)
-                      (cond ((fx<? irq 8)
-                             (vector-set! *irq-vectors*
-                                          (+ PIC1-vector-offset irq)
-                                          pcb))
-                            ((fx<? irq 16)
-                             (vector-set! *irq-vectors*
-                                          (+ PIC2-vector-offset (fx- irq 8))
-                                          pcb)))
-                      (pcb-msg-set! pcb 'ok)))
-                   ((acknowledge-irq)
-                    (let ((irq (cadr msg))
-                          (k (caddr msg)))
-                      (pic-ack irq)
-                      (lp k)))
-
-                   ((new-process)
-                    (let* ((pid *next-pid*)
-                           (sp ($process-start pid))
-                           (npcb (make-pcb pid sp)))
-                      ;; (display "new process\n")
-                      (set! *runq* (pcb-link! *runq* npcb))
-                      (hashtable-set! *pids* pid npcb)
-                      (pcb-msg-set! pcb pid)
-                      (set! *next-pid* (+ *next-pid* 1))))
-                   ((get-pid)
-                    (pcb-msg-set! pcb (pcb-pid pcb)))
-                   ((exit)
-                    ;; XXX: `reason` is a condition
-                    ;; object, but using the types from
-                    ;; the other process.
-                    (let ((target (cadr msg))
-                          (reason (caddr msg)))
-                      ;; TODO: well...
-                      (display "process exited: ")
-                      (display (list target reason))
-                      (newline)
-                      (when (eqv? (pcb-pid pcb) target)
-                        ;; XXX: free the resources etc,
-                        ;; remove from *irq-vectors*
-                        (hashtable-set! *pids* (pcb-pid pcb) #f)
-                        (set! *runq* (pcb-unlink! pcb)))))
-                   ((boot-loader)
-                    (pcb-msg-set! pcb 'multiboot))
-                   ((command-line)
-                    ;; XXX: command-line, environment and boot-modules
-                    ;; are extremely iffy. Process must immediately
-                    ;; copy the variables to its own storage.
-                    (pcb-msg-set! pcb (command-line)))
-                   ((environment)
-                    (pcb-msg-set! pcb (get-environment-variables)))
-                   ((boot-modules)
-                    (pcb-msg-set! pcb *boot-modules*))
-                   (else
-                    (display "bad message: ")
-                    (write msg)
-                    (newline)))))
-
+             (handle-message pcb msg current-time)
              (when *runq*
                ;; TODO: it would be better to always
                ;; have a process in *runq*, and let that
                ;; process be the "idle" process.
                (set! *runq* (pcb-next *runq*)))
-             (loop))))))
+             (scheduler-loop))))))
 
 ;;; Multiboot initialization
 
 (define (pc-init)
-  ;; XXX: print is just for debugging
   (define (print . x) (for-each display x) (newline))
   (define (mem64 a)
     ;; Read a u64 from memory

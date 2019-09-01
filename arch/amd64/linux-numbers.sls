@@ -8,20 +8,28 @@
 (library (loko arch amd64 linux-numbers)
   (export
     errno-list
+    __NR_accept4
     __NR_arch_prctl
+    __NR_bind
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
+    __NR_connect
     __NR_epoll_create1
     __NR_epoll_ctl
     __NR_epoll_pwait
     __NR_epoll_wait
     __NR_exit
     __NR_faccessat
+    __NR_fcntl
     __NR_fork
     __NR_fstat
     __NR_getdents64
+    __NR_getpeername
+    __NR_getsockname
+    __NR_getsockopt
     __NR_ioctl
+    __NR_listen
     __NR_lseek
     __NR_lstat
     __NR_mmap
@@ -30,12 +38,20 @@
     __NR_pwritev
     __NR_read
     __NR_readlink
+    __NR_recvfrom
+    __NR_recvmsg
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
+    __NR_sendmsg
+    __NR_sendto
+    __NR_setsockopt
     __NR_shmat
+    __NR_shutdown
     __NR_sigaltstack
-    __NR_signalfd
+    __NR_signalfd4
+    __NR_socket
+    __NR_socketpair
     __NR_stat
     __NR_timer_create
     __NR_timer_settime
@@ -251,6 +267,9 @@
     TCSANOW
     TCSADRAIN
     TCSAFLUSH
+    SIG_BLOCK
+    SIG_UNBLOCK
+    SIG_SETMASK
     SIGHUP
     SIGINT
     SIGQUIT
@@ -351,7 +370,15 @@
     SHM_REMAP
     CLOCK_REALTIME
     CLOCK_MONOTONIC
+    CLOCK_PROCESS_CPUTIME_ID
     CLOCK_THREAD_CPUTIME_ID
+    CLOCK_MONOTONIC_RAW
+    CLOCK_REALTIME_COARSE
+    CLOCK_MONOTONIC_COARSE
+    CLOCK_BOOTTIME
+    CLOCK_REALTIME_ALARM
+    CLOCK_BOOTTIME_ALARM
+    CLOCK_TAI
     sizeof-itimerspec
     offsetof-itimerspec-it_interval
     offsetof-itimerspec-it_value
@@ -403,6 +430,12 @@
     O_SYNC
     O_PATH
     O_TMPFILE
+    F_DUPFD
+    F_DUPFD_CLOEXEC
+    F_GETFD
+    F_SETFD
+    F_GETFL
+    F_SETFL
     AT_SYMLINK_NOFOLLOW
     AT_REMOVEDIR
     AT_SYMLINK_FOLLOW
@@ -436,6 +469,10 @@
     EPOLLWAKEUP
     EPOLLONESHOT
     EPOLLET
+    EPOLL_CLOEXEC
+    EPOLL_CTL_ADD
+    EPOLL_CTL_DEL
+    EPOLL_CTL_MOD
     SEEK_SET
     SEEK_CUR
     SEEK_END
@@ -466,6 +503,122 @@
     S_IFBLK
     S_IFIFO
     S_IFSOCK
+    sizeof-sockaddr_in6
+    offsetof-sockaddr_in6-sin6_family
+    offsetof-sockaddr_in6-sin6_port
+    offsetof-sockaddr_in6-sin6_flowinfo
+    offsetof-sockaddr_in6-sin6_addr
+    offsetof-sockaddr_in6-sin6_scope_id
+    sizeof-sockaddr_un
+    offsetof-sockaddr_un-sun_family
+    offsetof-sockaddr_un-sun_path
+    sizeof-sockaddr_in
+    offsetof-sockaddr_in-sin_family
+    offsetof-sockaddr_in-sin_port
+    offsetof-sockaddr_in-sin_addr
+    IPPROTO_IP
+    IPPROTO_ICMP
+    IPPROTO_TCP
+    IPPROTO_UDP
+    IPPROTO_SCTP
+    TCP_NODELAY
+    TCP_MAXSEG
+    TCP_CORK
+    TCP_KEEPIDLE
+    TCP_KEEPINTVL
+    TCP_KEEPCNT
+    TCP_SYNCNT
+    TCP_LINGER2
+    TCP_DEFER_ACCEPT
+    TCP_WINDOW_CLAMP
+    TCP_INFO
+    TCP_QUICKACK
+    TCP_CONGESTION
+    TCP_MD5SIG
+    TCP_THIN_LINEAR_TIMEOUTS
+    TCP_THIN_DUPACK
+    TCP_USER_TIMEOUT
+    TCP_REPAIR
+    TCP_REPAIR_QUEUE
+    TCP_QUEUE_SEQ
+    TCP_REPAIR_OPTIONS
+    TCP_FASTOPEN
+    TCP_TIMESTAMP
+    TCP_NOTSENT_LOWAT
+    TCP_CC_INFO
+    TCP_SAVE_SYN
+    TCP_SAVED_SYN
+    TCP_REPAIR_WINDOW
+    TCP_FASTOPEN_CONNECT
+    TCP_ULP
+    TCP_MD5SIG_EXT
+    TCP_FASTOPEN_KEY
+    TCP_FASTOPEN_NO_COOKIE
+    TCP_ZEROCOPY_RECEIVE
+    TCP_INQ
+    SOL_SOCKET
+    SO_DEBUG
+    SO_REUSEADDR
+    SO_TYPE
+    SO_ERROR
+    SO_DONTROUTE
+    SO_BROADCAST
+    SO_SNDBUF
+    SO_RCVBUF
+    SO_SNDBUFFORCE
+    SO_RCVBUFFORCE
+    SO_KEEPALIVE
+    SO_OOBINLINE
+    SO_NO_CHECK
+    SO_PRIORITY
+    SO_LINGER
+    SO_BSDCOMPAT
+    SO_REUSEPORT
+    AF_UNSPEC
+    AF_LOCAL
+    AF_INET
+    AF_AX25
+    AF_NETROM
+    AF_INET6
+    AF_PACKET
+    AF_CAN
+    SOCK_STREAM
+    SOCK_DGRAM
+    SOCK_RAW
+    SOCK_SEQPACKET
+    SOCK_CLOEXEC
+    SOCK_NONBLOCK
+    SHUT_RD
+    SHUT_WR
+    SHUT_RDWR
+    SOL_IP
+    SOL_TCP
+    SOL_UDP
+    SOL_IPV6
+    SOL_AX25
+    SOL_NETROM
+    SOL_PACKET
+    MSG_OOB
+    MSG_PEEK
+    MSG_DONTROUTE
+    MSG_CTRUNC
+    MSG_PROBE
+    MSG_TRUNC
+    MSG_DONTWAIT
+    MSG_EOR
+    MSG_WAITALL
+    MSG_FIN
+    MSG_SYN
+    MSG_CONFIRM
+    MSG_RST
+    MSG_ERRQUEUE
+    MSG_NOSIGNAL
+    MSG_MORE
+    MSG_WAITFORONE
+    MSG_BATCH
+    MSG_ZEROCOPY
+    MSG_FASTOPEN
+    MSG_CMSG_CLOEXEC
     EX_OK
     EX_USAGE
     EX_DATAERR
@@ -490,20 +643,28 @@
      (define-syntax name (identifier-syntax v)))))
 
 ;;; asm/unistd.h
+(define-inlined __NR_accept4 288)
 (define-inlined __NR_arch_prctl 158)
+(define-inlined __NR_bind 49)
 (define-inlined __NR_clock_getres 229)
 (define-inlined __NR_clock_gettime 228)
 (define-inlined __NR_close 3)
+(define-inlined __NR_connect 42)
 (define-inlined __NR_epoll_create1 291)
 (define-inlined __NR_epoll_ctl 233)
 (define-inlined __NR_epoll_pwait 281)
 (define-inlined __NR_epoll_wait 232)
 (define-inlined __NR_exit 60)
 (define-inlined __NR_faccessat 269)
+(define-inlined __NR_fcntl 72)
 (define-inlined __NR_fork 57)
 (define-inlined __NR_fstat 5)
 (define-inlined __NR_getdents64 217)
+(define-inlined __NR_getpeername 52)
+(define-inlined __NR_getsockname 51)
+(define-inlined __NR_getsockopt 55)
 (define-inlined __NR_ioctl 16)
+(define-inlined __NR_listen 50)
 (define-inlined __NR_lseek 8)
 (define-inlined __NR_lstat 6)
 (define-inlined __NR_mmap 9)
@@ -512,12 +673,20 @@
 (define-inlined __NR_pwritev 296)
 (define-inlined __NR_read 0)
 (define-inlined __NR_readlink 89)
+(define-inlined __NR_recvfrom 45)
+(define-inlined __NR_recvmsg 47)
 (define-inlined __NR_rt_sigaction 13)
 (define-inlined __NR_rt_sigprocmask 14)
 (define-inlined __NR_rt_sigreturn 15)
+(define-inlined __NR_sendmsg 46)
+(define-inlined __NR_sendto 44)
+(define-inlined __NR_setsockopt 54)
 (define-inlined __NR_shmat 30)
+(define-inlined __NR_shutdown 48)
 (define-inlined __NR_sigaltstack 131)
-(define-inlined __NR_signalfd 282)
+(define-inlined __NR_signalfd4 289)
+(define-inlined __NR_socket 41)
+(define-inlined __NR_socketpair 53)
 (define-inlined __NR_stat 4)
 (define-inlined __NR_timer_create 222)
 (define-inlined __NR_timer_settime 223)
@@ -753,6 +922,9 @@
 (define-inlined TCSAFLUSH 2)
 
 ;;; asm/signal.h
+(define-inlined SIG_BLOCK 0)
+(define-inlined SIG_UNBLOCK 1)
+(define-inlined SIG_SETMASK 2)
 (define-inlined SIGHUP 1)
 (define-inlined SIGINT 2)
 (define-inlined SIGQUIT 3)
@@ -865,7 +1037,15 @@
 ;;; linux/time.h
 (define-inlined CLOCK_REALTIME 0)
 (define-inlined CLOCK_MONOTONIC 1)
+(define-inlined CLOCK_PROCESS_CPUTIME_ID 2)
 (define-inlined CLOCK_THREAD_CPUTIME_ID 3)
+(define-inlined CLOCK_MONOTONIC_RAW 4)
+(define-inlined CLOCK_REALTIME_COARSE 5)
+(define-inlined CLOCK_MONOTONIC_COARSE 6)
+(define-inlined CLOCK_BOOTTIME 7)
+(define-inlined CLOCK_REALTIME_ALARM 8)
+(define-inlined CLOCK_BOOTTIME_ALARM 9)
+(define-inlined CLOCK_TAI 11)
 (define-inlined sizeof-itimerspec 32)
 (define-inlined offsetof-itimerspec-it_interval 0)
 (define-inlined offsetof-itimerspec-it_value 16)
@@ -921,6 +1101,12 @@
 (define-inlined O_SYNC #o4010000)
 (define-inlined O_PATH #o10000000)
 (define-inlined O_TMPFILE #o20200000)
+(define-inlined F_DUPFD 0)
+(define-inlined F_DUPFD_CLOEXEC 1030)
+(define-inlined F_GETFD 1)
+(define-inlined F_SETFD 2)
+(define-inlined F_GETFL 3)
+(define-inlined F_SETFL 4)
 (define-inlined AT_SYMLINK_NOFOLLOW #x100)
 (define-inlined AT_REMOVEDIR #x200)
 (define-inlined AT_SYMLINK_FOLLOW #x400)
@@ -958,6 +1144,10 @@
 (define-inlined EPOLLWAKEUP #x20000000)
 (define-inlined EPOLLONESHOT #x40000000)
 (define-inlined EPOLLET #x80000000)
+(define-inlined EPOLL_CLOEXEC 524288)
+(define-inlined EPOLL_CTL_ADD 1)
+(define-inlined EPOLL_CTL_DEL 2)
+(define-inlined EPOLL_CTL_MOD 3)
 
 ;;; linux/fs.h
 (define-inlined SEEK_SET 0)
@@ -994,6 +1184,132 @@
 (define-inlined S_IFBLK #o60000)
 (define-inlined S_IFIFO #o10000)
 (define-inlined S_IFSOCK #o140000)
+
+;;; linux/in6.h
+(define-inlined sizeof-sockaddr_in6 28)
+(define-inlined offsetof-sockaddr_in6-sin6_family 0)
+(define-inlined offsetof-sockaddr_in6-sin6_port 2)
+(define-inlined offsetof-sockaddr_in6-sin6_flowinfo 4)
+(define-inlined offsetof-sockaddr_in6-sin6_addr 8)
+(define-inlined offsetof-sockaddr_in6-sin6_scope_id 24)
+
+;;; linux/un.h
+(define-inlined sizeof-sockaddr_un 110)
+(define-inlined offsetof-sockaddr_un-sun_family 0)
+(define-inlined offsetof-sockaddr_un-sun_path 2)
+
+;;; linux/in.h
+(define-inlined sizeof-sockaddr_in 16)
+(define-inlined offsetof-sockaddr_in-sin_family 0)
+(define-inlined offsetof-sockaddr_in-sin_port 2)
+(define-inlined offsetof-sockaddr_in-sin_addr 4)
+(define-inlined IPPROTO_IP 0)
+(define-inlined IPPROTO_ICMP 1)
+(define-inlined IPPROTO_TCP 6)
+(define-inlined IPPROTO_UDP 17)
+(define-inlined IPPROTO_SCTP 132)
+
+;;; linux/tcp.h
+(define-inlined TCP_NODELAY 1)
+(define-inlined TCP_MAXSEG 2)
+(define-inlined TCP_CORK 3)
+(define-inlined TCP_KEEPIDLE 4)
+(define-inlined TCP_KEEPINTVL 5)
+(define-inlined TCP_KEEPCNT 6)
+(define-inlined TCP_SYNCNT 7)
+(define-inlined TCP_LINGER2 8)
+(define-inlined TCP_DEFER_ACCEPT 9)
+(define-inlined TCP_WINDOW_CLAMP 10)
+(define-inlined TCP_INFO 11)
+(define-inlined TCP_QUICKACK 12)
+(define-inlined TCP_CONGESTION 13)
+(define-inlined TCP_MD5SIG 14)
+(define-inlined TCP_THIN_LINEAR_TIMEOUTS 16)
+(define-inlined TCP_THIN_DUPACK 17)
+(define-inlined TCP_USER_TIMEOUT 18)
+(define-inlined TCP_REPAIR 19)
+(define-inlined TCP_REPAIR_QUEUE 20)
+(define-inlined TCP_QUEUE_SEQ 21)
+(define-inlined TCP_REPAIR_OPTIONS 22)
+(define-inlined TCP_FASTOPEN 23)
+(define-inlined TCP_TIMESTAMP 24)
+(define-inlined TCP_NOTSENT_LOWAT 25)
+(define-inlined TCP_CC_INFO 26)
+(define-inlined TCP_SAVE_SYN 27)
+(define-inlined TCP_SAVED_SYN 28)
+(define-inlined TCP_REPAIR_WINDOW 29)
+(define-inlined TCP_FASTOPEN_CONNECT 30)
+(define-inlined TCP_ULP 31)
+(define-inlined TCP_MD5SIG_EXT 32)
+(define-inlined TCP_FASTOPEN_KEY 33)
+(define-inlined TCP_FASTOPEN_NO_COOKIE 34)
+(define-inlined TCP_ZEROCOPY_RECEIVE 35)
+(define-inlined TCP_INQ 36)
+
+;;; asm/socket.h
+(define-inlined SOL_SOCKET 1)
+(define-inlined SO_DEBUG 1)
+(define-inlined SO_REUSEADDR 2)
+(define-inlined SO_TYPE 3)
+(define-inlined SO_ERROR 4)
+(define-inlined SO_DONTROUTE 5)
+(define-inlined SO_BROADCAST 6)
+(define-inlined SO_SNDBUF 7)
+(define-inlined SO_RCVBUF 8)
+(define-inlined SO_SNDBUFFORCE 32)
+(define-inlined SO_RCVBUFFORCE 33)
+(define-inlined SO_KEEPALIVE 9)
+(define-inlined SO_OOBINLINE 10)
+(define-inlined SO_NO_CHECK 11)
+(define-inlined SO_PRIORITY 12)
+(define-inlined SO_LINGER 13)
+(define-inlined SO_BSDCOMPAT 14)
+(define-inlined SO_REUSEPORT 15)
+(define-inlined AF_UNSPEC 0)
+(define-inlined AF_LOCAL 1)
+(define-inlined AF_INET 2)
+(define-inlined AF_AX25 3)
+(define-inlined AF_NETROM 6)
+(define-inlined AF_INET6 10)
+(define-inlined AF_PACKET 17)
+(define-inlined AF_CAN 29)
+(define-inlined SOCK_STREAM 1)
+(define-inlined SOCK_DGRAM 2)
+(define-inlined SOCK_RAW 3)
+(define-inlined SOCK_SEQPACKET 5)
+(define-inlined SOCK_CLOEXEC #x80000)
+(define-inlined SOCK_NONBLOCK #x800)
+(define-inlined SHUT_RD 0)
+(define-inlined SHUT_WR 1)
+(define-inlined SHUT_RDWR 2)
+(define-inlined SOL_IP 0)
+(define-inlined SOL_TCP 6)
+(define-inlined SOL_UDP 17)
+(define-inlined SOL_IPV6 41)
+(define-inlined SOL_AX25 257)
+(define-inlined SOL_NETROM 259)
+(define-inlined SOL_PACKET 263)
+(define-inlined MSG_OOB 1)
+(define-inlined MSG_PEEK 2)
+(define-inlined MSG_DONTROUTE 4)
+(define-inlined MSG_CTRUNC 8)
+(define-inlined MSG_PROBE 10)
+(define-inlined MSG_TRUNC 20)
+(define-inlined MSG_DONTWAIT 40)
+(define-inlined MSG_EOR 80)
+(define-inlined MSG_WAITALL 100)
+(define-inlined MSG_FIN 200)
+(define-inlined MSG_SYN 400)
+(define-inlined MSG_CONFIRM 800)
+(define-inlined MSG_RST 1000)
+(define-inlined MSG_ERRQUEUE 2000)
+(define-inlined MSG_NOSIGNAL 4000)
+(define-inlined MSG_MORE 8000)
+(define-inlined MSG_WAITFORONE 10000)
+(define-inlined MSG_BATCH 40000)
+(define-inlined MSG_ZEROCOPY 4000000)
+(define-inlined MSG_FASTOPEN 20000000)
+(define-inlined MSG_CMSG_CLOEXEC 40000000)
 
 ;;; sysexits.h
 (define-inlined EX_OK 0)

@@ -37,7 +37,8 @@
     implementation-restriction
     register-error-invoker
     print-condition
-    assertion-error)
+    assertion-error
+    current-winders)
   (import
     (except (rnrs)
             procedure?
@@ -97,6 +98,11 @@
 ;;; Continuations, dynamic-wind, exceptions.
 
 (define *winders* '())
+
+(define current-winders
+  (case-lambda
+    (() *winders*)
+    ((winders) (set! *winders* winders))))
 
 ;; TODO: look at june-92-meeting.ps.gz
 
@@ -219,7 +225,7 @@
 (define (error who msg . irritants)
   (raise (condition
           (make-error)
-          (make-who-condition who)
+          (if who (make-who-condition who) (condition))
           (make-message-condition msg)
           (make-irritants-condition irritants))))
 

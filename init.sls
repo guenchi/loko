@@ -30,11 +30,13 @@
     open-file-input-port
     open-file-output-port
     open-file-input/output-port
+    open-i/o-poller
     $mmap
     allocate
     machine-type
     init
-    init-set!)
+    init-set!
+    init-get)
   (import
     (except (rnrs) command-line exit
             file-exists? delete-file
@@ -63,11 +65,14 @@
 (define exit
   (case-lambda
     (()
-     (flush-output-port (current-output-port))
+     (guard (exn (else #f))
+       (flush-output-port (current-output-port)))
      ;; FIXME: run winders
      (*exit* #t))
     ((status)
-     (flush-output-port (current-output-port))
+     (guard (exn (else #f))
+       (flush-output-port (current-output-port)))
+     ;; FIXME: run winders
      (*exit* status))))
 
 (define *open-file-input-port*
@@ -119,6 +124,13 @@
     ((x y z w)
      (*open-file-input/output-port* x y z w))))
 
+(define *open-i/o-poller*
+  (lambda x
+    (apply error 'open-i/o-poller
+           "No open-i/o-poller has been installed" x)))
+(define (open-i/o-poller)
+  (*open-i/o-poller*))
+
 (define *file-exists?*
   (lambda (filename)
     #f))
@@ -166,8 +178,15 @@
     ((delete-file) (set! *delete-file* value))
     ((open-file-input-port) (set! *open-file-input-port* value))
     ((open-file-output-port) (set! *open-file-output-port* value))
+    ((open-i/o-poller) (set! *open-i/o-poller* value))
     ((allocate) (set! *allocate* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
     (else
-     (error 'init-set! "Unrecognized key" what value)))))
+     (error 'init-set! "Unrecognized key" what value))))
+
+(define (init-get what)
+  (case what
+    ((exit) *exit*)
+    (else
+     (error 'init-get "Unrecognized key" what)))))

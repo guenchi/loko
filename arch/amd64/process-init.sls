@@ -24,18 +24,13 @@
 ;; communicates with other processes (and its scheduler) by using
 ;; $process-yield.
 
-;; It is important that a Loko process never performs a blocking
-;; system call (i.e. a process should always be preemptable). So a
-;; process can't do open/read/write itself, but must use message
-;; passing to get that functionality.
-
-;; TODO: almost all the code here should be someplace else, e.g. in
-;; modules. The online compiler must be working first though.
+;; Blocking syscalls should be kept out of here.
 
 (library (loko arch amd64 process-init)
   (export)
   (import
     (except (rnrs) command-line exit)
+    (rnrs mutable-pairs)
     (srfi :98 os-environment-variables)
     (loko match)
     (loko system unsafe)
@@ -44,10 +39,13 @@
     (only (loko libs io) $init-standard-ports $port-buffer-mode-set!
           port-file-descriptor-set!)
     (only (loko libs time) time-init-set!)
+    (loko libs fibers)
     (except (loko system $host) allocate)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
-    (loko arch amd64 linux-syscalls))
+    (loko arch amd64 linux-syscalls)
+    ;; Temporarily for the UART driver, which should be using ring buffers
+    (pfds queues naive)    )
 
 (define-record-type pid
   (sealed #t) (opaque #f)
@@ -83,11 +81,16 @@
   ($process-yield '(boot-loader)))
 
 (define (new-process)
-  (make-pid ($process-yield '(new-process))))
+  (let ((status ($process-yield (vector 'new-process #f))))
+    (assert (eq? status 'ok))
+    (make-pid (vector-ref status 1))))
 
 (define (process-exit status)
   ($process-yield `(exit ,(pid-value (get-pid))
                          ,status)))
+
+(define (pc-current-ticks)
+  ($process-yield '(current-ticks)))
 
 (define (allocate type size mask)
   (assert (eq? type 'dma))
@@ -102,137 +105,229 @@
           (dma-addr (vector-ref v 5)))
       (values cpu-addr dma-addr))))
 
-(define (wait timeout)
+(define (scheduler-wait ns-timeout)
   ;; TODO: this message should take a number back from the scheduler
   ;; that indicates for how long it slept. This is so that if the
   ;; process is awoken by an uninteresting message it can go back to
   ;; sleeping with the original timeout without asking the scheduler
   ;; for the current time.
-  (when timeout
-    (assert (fxpositive? timeout)))
-  (let ((vec (vector 'wait timeout #f)))
-    (handle-wait-reply vec ($process-yield vec))))
+  (when ns-timeout
+    (assert (fxpositive? ns-timeout)))
+  (let ((vec (vector 'wait ns-timeout #f)))
+    (handle-scheduler-wait-reply vec ($process-yield vec)
+                                 'scheduler-wait)))
 
-(define (handle-wait-reply vec reply)
+
+
+
+
+(define *interrupt-cvars* (make-vector 256 #f))
+
+(define (debug-put-u8 b)
+  (define com0 #x3f8)
+  (define i/o-base com0)
+  (define thb (+ i/o-base 0))
+  (define lsr (+ i/o-base 5))
+  (define (put-u8 b)
+    (let lp ()
+      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
+        (lp)))
+    (put-i/o-u8 thb b))
+  (put-u8 b))
+
+(define (handle-scheduler-wait-reply vec reply who)
   ;; The scheduler will update vec.
   (case reply
     ((timeout)
      #f)
     ((message)
-     ;; TODO: put the message in the queue
-     ;; (display "it's a message: ")
-     ;; (write vec)
-     ;; (newline)
-     #f
-     )
+     (let ((msg (vector-ref vec 2)))
+       ;; This is currently just IRQ vector numbers, but can be used to
+       ;; implement message passing between processes.
+       (cond ((and (fixnum? msg) (vector-ref *interrupt-cvars* msg))
+              => signal-cvar!))))
     (else
-     (error 'wait "Unknown reply from scheduler" reply)))
-  )
-
-#;
-(define (listen fd mask)
-  ($process-yield `(listen ,fd ,mask)))
-
-;; (define (wait/irq irq timeout)
-;;   ;; XXX: compound message?
-;;   (listen irq #f)
-;;   (wait timeout))
+     (error who "Unknown reply from scheduler" reply))))
 
 (define (enable-irq irq)
   (assert (fx<=? 0 irq 15))
-  ($process-yield `(enable-irq ,irq)))
+  ($process-yield `#(enable-irq ,irq)))
 
-(define (acknowledge-irq/wait irq timeout)
+(define (acknowledge-irq irq)
+  (define timeout 0)
   (assert (fx<=? 0 irq 15))
   (when timeout
-    (assert (fxpositive? timeout)))
+    (assert (not (fxnegative? timeout))))
   (let ((vec (vector 'wait timeout #f)))
-    (handle-wait-reply vec ($process-yield `(acknowledge-irq ,irq ,vec)))))
+    (vector-set! *interrupt-cvars* irq (make-cvar))
+    (handle-scheduler-wait-reply vec ($process-yield `#(acknowledge-irq ,irq ,vec))
+                                 'acknowledge-irq)))
 
-(define (send-message target message)
-  (assert (fixnum? message))
-  (cond ((pid? target)
-         (let ((ok? ($process-yield `#(send ,(pid-value target)
-                                            ,message))))
-           (unless ok?
-             (error 'send-message "The target PID is dead" target message))))
-        (else
-         (error 'send-message "Unknown target type" target message))))
+(define (interrupt-operation irq)
+  (wait-operation (vector-ref *interrupt-cvars* irq)))
 
-(define (receive-message channel timeout match?)
-  ;; Consume messages from the given channel if they match the
-  ;; predicate. If no message matches, then wait for a message.
-  #f
-  #;
-  (let lp ((point (channel-start channel)))
-    (cond ((channel-end? channel point)
-           (wait timeout))
-          ((match? (channel-peek channel point))
-           (channel-dequeue channel point))
-          (else
-           (lp (channel-next channel point)))))
-  )
-
-(define (com0-setup)
-  ;; Start standard input/output on com0
-  (define com0 #x3f8)
-  (define com0-irq 4)
-  (define rbr (+ com0 0))
-  (define thb (+ com0 0))
-  (define ier (+ com0 1))
-  (define fcr (+ com0 2))
-  (define mcr (+ com0 4))
-  (define lsr (+ com0 5))
+(define (uart-driver i/o-base irq read-ch write-ch)
+  (define RBR (fx+ i/o-base 0))
+  (define THB (fx+ i/o-base 0))
+  (define IER (fx+ i/o-base 1))
+  (define IIR (fx+ i/o-base 2))
+  (define FCR (fx+ i/o-base 2))
+  (define LCR (fx+ i/o-base 3))
+  (define MCR (fx+ i/o-base 4))
+  (define LSR (fx+ i/o-base 5))
+  (define MSR (fx+ i/o-base 6))
+  (define SCR (fx+ i/o-base 7))
+  ;; Accessible when LCR[7]=1
+  (define DL (fx+ i/o-base 0))
+  (define DH (fx+ i/o-base 1))
+  (define IIR-INTERRUPT-PENDING #b1)
   (define IER-READ #b01)
   (define IER-R/W #b11)
-  (define LSR-DATA-READY #b1)
+  (define IER-LINE-STATUS #b100)
+  (define IER-MODEM-STATUS #b1000)
+  (define LSR-DATA-READY #b0000001)
+  (define LSR-RBR-EMPTY  #b1000000)
+  (define LSR-THR-EMPTY  #b0100000)
   (define MCR-DTR  #b00000001)
   (define MCR-RTS  #b00000010)
   (define MCR-OUT2 #b00001000)
-  (define FCR-ENABLE   #b00000001)
-  (define FCR-CLEAR-RX #b00000010)
-  (define FCR-CLEAR-TX #b00000100)
-  (define (put-u8 b)
-    (let lp ()
-      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
-        (lp)))
-    (put-i/o-u8 thb b)
-    (when (eqv? b (char->integer #\linefeed))
-      (put-i/o-u8 thb (char->integer #\return))))
-  (define (put bv start count)
-    (do ((end (fx+ start count))
-         (i start (fx+ i 1)))
-        ((fx=? i end) count)
-      (put-u8 (bytevector-u8-ref bv i))))
-  (define timeout (expt 10 9))
-  (define (data-ready?)
-    (not (fxzero? (fxand (get-i/o-u8 lsr) LSR-DATA-READY))))
+  ;; FIFO control
+  (define FCR-ENABLE           #b00000001)
+  (define FCR-CLEAR-RX         #b00000010)
+  (define FCR-CLEAR-TX         #b00000100)
+  (define FCR-TRIGGER-LEVEL-1  #b00000000)
+  (define FCR-TRIGGER-LEVEL-4  #b01000000)
+  (define FCR-TRIGGER-LEVEL-8  #b10000000)
+  (define FCR-TRIGGER-LEVEL-14 #b11000000)
+  (define (ready-to-rx?)
+    (eqv? (fxand (get-i/o-u8 LSR) LSR-DATA-READY) LSR-DATA-READY))
+  (define (ready-to-tx?)
+    (eqv? (fxand (get-i/o-u8 LSR) LSR-THR-EMPTY) LSR-THR-EMPTY))
+  (define (uart-set-baudrate rate)
+    (let ((latch (fxdiv 115200 rate)))
+      (unless (fx<=? 1 latch #xffff)
+        (error 'uart-set-baudrate "Invalid baud rate" rate))
+      (let ((lcr (get-i/o-u8 LCR)))
+        ;; Set the Divisor Latch Access Bit
+        (put-i/o-u8 LCR (fxior lcr #x80))
+        ;; Latch the new baudrate
+        (put-i/o-u8 DL (fxbit-field latch 0 8))
+        (put-i/o-u8 DH (fxbit-field latch 8 16))
+        ;; Clear the DLAB
+        (put-i/o-u8 LCR (fxand lcr #x7f)))))
+  (define (uart-set-protocol bits parity stop)
+    (let ((par (cdr (assq parity '((none . #b000)
+                                   (odd . #b001)
+                                   (even . #b011)
+                                   (mark . #b101)
+                                   (space . #b111)))))
+          (bits (cdr (assq bits '((5 . #b00)
+                                  (6 . #b01)
+                                  (7 . #b10)
+                                  (8 . #b11)))))
+          (stop (if (eqv? stop 1) 0 1)))
+      (put-i/o-u8 LCR (fxior (fxarithmetic-shift-left par 3)
+                             (fxarithmetic-shift-left stop 2)
+                             bits))))
+  (define (uart-handle-irq)
+    (let ((iir (get-i/o-u8 IIR)))
+      (put-i/o-u8 IER 0)
+      (when (eqv? (fxand iir IIR-INTERRUPT-PENDING) 0)
+        (case (fxand (fxarithmetic-shift-right iir 1) #b111)
+          [(#b010 #b110)
+           ;; There is data to read. #b110 = time-out
+           (let loop ()
+             (when (ready-to-rx?)
+               (if (not rx-head)
+                   (set! rx-head (get-i/o-u8 RBR))
+                   (set! rx-buf (enqueue rx-buf (get-i/o-u8 RBR))))
+               (loop)))]
+          [(#b000)
+           (get-i/o-u8 MSR)]
+          [(#b001)
+           ;; It's ok to write now
+           (let loop ()
+             (when (and (not (queue-empty? tx-buf))
+                        (= (fxand (get-i/o-u8 LSR) #b100000) #b100000))
+               (let-values ([(b q) (dequeue tx-buf)])
+                 (put-i/o-u8 THB b)
+                 (set! tx-buf q))
+               (loop)))]
+          [(#b011)
+           ;; Receiver Line Status Interrupt
+           (get-i/o-u8 LSR)]
+          (else #f)))))
+  (define (uart-init)
+    (uart-set-protocol 8 'none 1)
+    (uart-set-baudrate 9600)
+    (put-i/o-u8 MCR (fxior MCR-DTR MCR-RTS MCR-OUT2))
+    (put-i/o-u8 FCR (fxior FCR-TRIGGER-LEVEL-4 FCR-CLEAR-RX FCR-CLEAR-TX FCR-ENABLE))
+    (put-i/o-u8 IER 0))
+  (define tx-buf (make-queue))
+  (define rx-buf (make-queue))
+  (define rx-head #f)                   ;not the most elegant solution
 
-  (enable-irq com0-irq)
-  (put-i/o-u8 ier 0)
-  (put-i/o-u8 mcr (fxior MCR-DTR MCR-RTS MCR-OUT2))
-  (put-i/o-u8 fcr FCR-ENABLE)
-  ($init-standard-ports
-   (lambda (bv start count)
-     ;; XXX: this should not be inside the port, this should be the
-     ;; main loop. The response to the IRQ really needs to be fast,
-     ;; because if the FIFO is filled, then data is going to be
-     ;; lost. There also should be an IRQ on TX, and the code should
-     ;; look at the interrupt cause. Also, the eol-style is cr
-     (let lp ()
-       (put-i/o-u8 ier IER-READ)
-       (let ((msg (acknowledge-irq/wait com0-irq timeout)))
-         (put-i/o-u8 ier 0)
-         (do ((start start (fx+ start 1))
-              (count count (fx- count 1))
-              (k 0 (fx+ k 1)))
-             ((or (fxzero? count)
-                  (not (data-ready?)))
-              (if (fxzero? k)
-                  (lp)                ;no data, try again
-                  k))
-           (bytevector-u8-set! bv start (get-i/o-u8 rbr))))))
-   put put (eol-style crlf)))
+  (uart-init)
+  (enable-irq irq)
+  (uart-handle-irq)
+  (acknowledge-irq irq)
+
+  (do () ((not 'ever-stop))
+    (if (queue-empty? tx-buf)
+        (put-i/o-u8 IER (fxior IER-READ IER-LINE-STATUS IER-MODEM-STATUS))
+        (put-i/o-u8 IER (fxior IER-R/W IER-LINE-STATUS IER-MODEM-STATUS)))
+    (match (perform-operation
+            (choice-operation
+             (wrap-operation (interrupt-operation irq)
+                             (lambda _ 'int))
+             (if (fx>=? (queue-length tx-buf) 64)
+                 (choice-operation)
+                 (wrap-operation (get-operation write-ch)
+                                 (lambda (x) (cons 'tx x))))
+             (if (not rx-head)
+                 (choice-operation)
+                 (wrap-operation (put-operation read-ch rx-head)
+                                 (lambda _ 'rx)))))
+      ['int
+       (uart-handle-irq)
+       (acknowledge-irq irq)]
+      ['rx
+       ;; We've passed on a byte received from the UART
+       (cond ((queue-empty? rx-buf)
+              (set! rx-head #f))
+             (else
+              (let-values ([(b q) (dequeue rx-buf)])
+                (set! rx-head b)
+                (set! rx-buf q))))]
+      [('tx . byte)
+       ;; We've received a byte to transmit to the UART
+       (cond ((ready-to-tx?)
+              (put-i/o-u8 THB byte))
+             (else
+              (set! tx-buf (enqueue tx-buf byte))))])))
+
+(define (pc-com0-setup)
+  ;; Start standard input/output on COM1
+  (define com1 #x3f8)
+  (define com1-irq 4)
+  (define com2 #x2f8)
+  (define com2-irq 3)
+  (let ((read-ch (make-channel))
+        (write-ch (make-channel)))
+    (spawn-fiber (lambda ()
+                   (uart-driver com1 com1-irq read-ch write-ch)))
+    (let ((read (lambda (bv start count)
+                  (assert (fx>=? count 1))
+                  (let ((b (get-message read-ch)))
+                    (bytevector-u8-set! bv start b))
+                  1))
+          (write (lambda (bv start count)
+                   (do ((end (fx+ start count))
+                        (i start (fx+ i 1)))
+                       ((fx=? i end) count)
+                     ;; TODO: Send all bytes in one put
+                     (put-message write-ch (bytevector-u8-ref bv i))))))
+      ($init-standard-ports read write write (eol-style crlf)))))
 
 ;; Hook up a minimal /boot filesystem consisting of the multiboot
 ;; modules.
@@ -283,11 +378,36 @@
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port))
 
+(define (pc-open-i/o-poller)
+  (define pc-poll
+    (case-lambda
+      (()
+       ;; TODO: Count the number of IRQs being waited on
+       1)
+      ((wakeup)                ;wakeup = no-wait / forever / <timeout>
+       (if (eq? wakeup 'no-wait)
+           0                            ;nothing to do
+           (let ((timeout
+                  (cond ((eq? wakeup 'no-wait) 0)
+                        ((eq? wakeup 'forever) 10000)
+                        (else
+                         ;; Let's wait until the wakeup time. It
+                         ;; doesn't matter if we wait shorter.
+                         (max 0 (min (- wakeup (pc-current-ticks))
+                                     10000))))))
+             (if (not (fx>? timeout 0))
+                 0                      ;even more nothing to do
+                 (scheduler-wait (* #e1e6 timeout)))))
+       '())
+      ((cmd . x)
+       (unless (eq? cmd 'close)
+         (apply error 'pc-poll "Unhandled command" x)))))
+  pc-poll)
+
 (define (linux-process-setup)
-  ;; TODO: this is NOT what should happen. There should be message
-  ;; passing and things like that. Basically none of these syscalls
-  ;; should be here, they should be implemented by passing messages
-  ;; to the scheduler.
+  ;; TODO: The syscalls that never return EAGAIN should be put on a
+  ;; worker thread.
+  (define NULL 0)
   (define (filename->c-string who fn)
     (string-for-each
      (lambda (c)
@@ -315,57 +435,65 @@
   (define (file-exists? filename)
     ;; XXX: This follows symlinks.
     (define F_OK 0)
-    (let ((fn (filename->c-string 'file-exists? filename)))
-      (eqv? 0
-            (sys_faccessat AT_FDCWD
-                           (bytevector-address fn) F_OK
-                           (lambda (errno)
-                             (cond ((eqv? errno ENOENT) #f)
-                                   ;; These are arguable. They hide errors in
-                                   ;; some way.
-                                   ((eqv? errno EACCES) #f)
-                                   ((eqv? errno ENOTDIR) #f)
-                                   (else
-                                    (raise
-                                      (condition
-                                       (make-who-condition 'file-exists?)
-                                       (make-message-condition "Error while checking if the file exists")
-                                       (make-irritants-condition (list filename))
-                                       (make-syscall-i/o-error errno filename #f)
-                                       (make-syscall-error 'faccessat errno))))))))))
+    (let* ((fn (filename->c-string 'file-exists? filename))
+           (status
+            (let retry ()
+              (sys_faccessat AT_FDCWD
+                             (bytevector-address fn) F_OK
+                             (lambda (errno)
+                               (cond ((eqv? errno ENOENT) #f)
+                                     ;; These are arguable. They hide errors in
+                                     ;; some way.
+                                     ((eqv? errno EACCES) #f)
+                                     ((eqv? errno ENOTDIR) #f)
+                                     ((eqv? errno EINTR) (retry))
+                                     (else
+                                      (raise
+                                        (condition
+                                         (make-who-condition 'file-exists?)
+                                         (make-message-condition "Error while checking if the file exists")
+                                         (make-irritants-condition (list filename))
+                                         (make-syscall-i/o-error errno filename #f)
+                                         (make-syscall-error 'faccessat errno))))))))))
+      (eqv? 0 status)))
   (define (open-file-input-port filename file-options buffer-mode maybe-transcoder)
     ;; TODO: what of file-options needs to be used?
     (define who 'open-file-input-port)
     (assert (buffer-mode? buffer-mode))
     (let* ((fn (filename->c-string 'open-file-input-port filename))
-           (fd (sys_open (bytevector-address fn)
-                         (bitwise-ior O_NOCTTY O_LARGEFILE)
-                         0
-                         (lambda (errno)
-                           (raise (condition
-                                   (make-who-condition who)
-                                   (make-message-condition "Could not open file")
-                                   (make-irritants-condition (list filename))
-                                   (make-syscall-i/o-error errno filename #f)
-                                   (make-syscall-error 'open errno))))))
+           (fd (let retry ()
+                 (sys_open (bytevector-address fn)
+                           (bitwise-ior O_NOCTTY O_LARGEFILE O_NONBLOCK)
+                           0
+                           (lambda (errno)
+                             (if (eqv? errno EINTR)
+                                 (retry)
+                                 (raise (condition
+                                         (make-who-condition who)
+                                         (make-message-condition "Could not open file")
+                                         (make-irritants-condition (list filename))
+                                         (make-syscall-i/o-error errno filename #f)
+                                         (make-syscall-error 'open errno))))))))
            (position 0))
       (define (handle-read-error errno)
-        (if (eqv? errno EINTR)
-            'retry
-            (raise
-              (condition
-               (make-syscall-i/o-error errno filename #f)
-               (make-syscall-error 'read errno)))))
+        (raise
+          (condition
+           (make-syscall-i/o-error errno filename #f)
+           (make-syscall-error 'read errno))))
       (define (read! bv start count)
-        ;; Reading should be done in another thread...
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-        (let ((status (sys_read fd (fx+ (bytevector-address bv) start) count
-                                handle-read-error)))
-          (cond ((eqv? status 'retry)
-                 (read! bv start count))
-                (else
-                 (set! position (+ position status))
-                 status))))
+        (let ((status (let retry ()
+                        (sys_read fd (fx+ (bytevector-address bv) start) count
+                                  (lambda (errno)
+                                    (cond ((eqv? errno EAGAIN)
+                                           (wait-for-readable fd)
+                                           (retry))
+                                          ((eqv? errno EINTR)
+                                           (retry))
+                                          (else
+                                           (handle-read-error errno))))))))
+          (set! position (+ position status))
+          status))
       ;; TODO! pwrite/pread
       (define (get-position)
         position)
@@ -378,7 +506,7 @@
         ;; done in another thread. Linux always closes the fd even
         ;; if this fails with EINTR.
         (sys_close fd (lambda (errno)
-                        (unless (eqv? errno (- EINTR))
+                        (unless (eqv? errno EINTR)
                           (raise
                             (make-who-condition 'close-port)
                             (make-message-condition "Error while closing the file")
@@ -399,18 +527,21 @@
     (define no-truncate (enum-set-member? 'no-truncate file-options))
     (assert (buffer-mode? buffer-mode))
     (let* ((fn (filename->c-string 'open-file-output-port filename))
-           (fd (sys_open (bytevector-address fn)
-                         (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY
-                                      (if no-create 0 O_CREAT)
-                                      (if (and no-fail (not no-truncate)) O_TRUNC 0))
-                         #o644
-                         (lambda (errno)
-                           (raise (condition
-                                   (make-who-condition who)
-                                   (make-message-condition "Could not open file")
-                                   (make-irritants-condition (list filename))
-                                   (make-syscall-i/o-error errno filename #f)
-                                   (make-syscall-error 'open errno))))))
+           (fd (let retry ()
+                 (sys_open (bytevector-address fn)
+                           (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY O_NONBLOCK
+                                        (if no-create 0 O_CREAT)
+                                        (if (and no-fail (not no-truncate)) O_TRUNC 0))
+                           #o644
+                           (lambda (errno)
+                             (if (eqv? errno EAGAIN)
+                                 (retry)
+                                 (raise (condition
+                                         (make-who-condition who)
+                                         (make-message-condition "Could not open file")
+                                         (make-irritants-condition (list filename))
+                                         (make-syscall-i/o-error errno filename #f)
+                                         (make-syscall-error 'open errno))))))))
            (position 0))
       (define (handle-write-error errno)
         (if (eqv? errno EINTR)
@@ -421,20 +552,26 @@
                (make-syscall-error 'write errno)))))
       (define (write! bv start count)
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-        (let ((status (sys_write fd (fx+ (bytevector-address bv) start) count
-                                 handle-write-error)))
-          (cond ((eqv? status 'retry)
-                 (write! bv start count))
-                (else
-                 (set! position (+ position status))
-                 status))))
+        (let ((status
+               (let retry ()
+                 (sys_write fd (fx+ (bytevector-address bv) start) count
+                            (lambda (errno)
+                              (cond ((eqv? errno EAGAIN)
+                                     (wait-for-writable fd)
+                                     (retry))
+                                    ((eqv? errno EINTR)
+                                     (retry))
+                                    (else
+                                     (handle-write-error errno))))))))
+          (set! position (+ position status))
+          status))
       (define (get-position)
         position)
       #;(define (set-position! off)
           #f)
       (define (close)
         (sys_close fd (lambda (errno)
-                        (unless (eqv? errno (- EINTR))
+                        (unless (eqv? errno EINTR)
                           (raise
                             (make-who-condition 'close-port)
                             (make-message-condition "Error while closing the file")
@@ -447,27 +584,193 @@
         (if maybe-transcoder
             (transcoded-port p maybe-transcoder)
             p))))
+  (define (linux-open-i/o-poller)
+    (define (poll-type->events poll-type)
+      ;; TODO: EPOLLPRI     ;out of band data
+      (fxior (case poll-type
+               ((read) EPOLLIN)
+               ((write) EPOLLOUT)
+               (else 0))
+             (fxior EPOLLRDHUP           ;peer closed
+                    EPOLLERR EPOLLHUP    ;can't be unset
+                    EPOLLET              ;event-triggered
+                    EPOLLONESHOT)))      ;one event only
+    (define (epoll_ctl epfd op fd events user-data)
+      (if (eqv? op EPOLL_CTL_DEL)
+          (sys_epoll_ctl epfd EPOLL_CTL_DEL fd NULL)
+          (let ((event (make-bytevector sizeof-epoll_event)))
+            (bytevector-u32-native-set! event 0 events)
+            (bytevector-u32-native-set! event 4 user-data)
+            (sys_epoll_ctl epfd op fd (bytevector-address event)))))
+    (let* ((epfd (sys_epoll_create1 EPOLL_CLOEXEC))
+           (maxevents 10)
+           (events (make-bytevector (* maxevents sizeof-epoll_event)))
+           (fds (make-eqv-hashtable))
+           (num-waiting 0)
+           (who 'linux-i/o-poller))
+      (define epoller
+        (case-lambda
+          (()
+           num-waiting)
+          ((wakeup)            ;wakeup = no-wait / forever / <timeout>
+           (let ((n (if (and (eqv? (hashtable-size fds) 0)
+                             (eq? wakeup 'no-wait))
+                        0               ;nothing to do
+                        (let ((timeout
+                               (cond ((eq? wakeup 'no-wait) 0)
+                                     ((eq? wakeup 'forever) -1)
+                                     (else
+                                      ;; Let's wait until the wakeup
+                                      ;; time. It doesn't matter if we
+                                      ;; wait shorter.
+                                      (max 0 (min (- wakeup (linux-current-ticks))
+                                                  60000))))))
+                          (if (and (eqv? (hashtable-size fds) 0)
+                                   (not (fx>=? timeout 0)))
+                              0  ;even more nothing to do
+                              ;; TODO: Ask pid 0 to do the polling.
+                              ;; Pid 0 can have its own epoll that we
+                              ;; put this epoll inside.
+                              (sys_epoll_pwait epfd (bytevector-address events) maxevents
+                                               timeout NULL 0))))))
+             (do ((i 0 (fx+ i 1))
+                  (offset 0 (fx+ offset sizeof-epoll_event))
+                  (ret '()
+                       (let ((events (bytevector-u32-native-ref events (fx+ offset offsetof-epoll_event-events)))
+                             (fd (bytevector-u32-native-ref events (fx+ offset offsetof-epoll_event-data))))
+                         (match (hashtable-ref fds fd #f)
+                           [(and #(readers writers) fd-data)
+                            ;; XXX: This never deletes fds from the
+                            ;; epoll set.
+                            (let ((wakeup
+                                   (cond ((not (eqv? 0 (fxand events (fxior EPOLLRDHUP EPOLLERR EPOLLHUP))))
+                                          ;; Notify everyone about errors
+                                          (vector-set! fd-data 0 '())
+                                          (vector-set! fd-data 1 '())
+                                          (append readers writers))
+                                         ((not (eqv? 0 (fxand events (fxior EPOLLIN EPOLLPRI))))
+                                          (vector-set! fd-data 0 '())
+                                          readers)
+                                         ((not (eqv? 0 (fxand events EPOLLOUT)))
+                                          (vector-set! fd-data 1 '())
+                                          writers)
+                                         (else
+                                          (error who "Unknown event on fd" epfd fd events)))))
+                              (cond ((and (null? (vector-ref fd-data 0))
+                                          (null? (vector-ref fd-data 1)))
+                                     #f)
+                                    ((pair? (vector-ref fd-data 1))
+                                     (epoll_ctl epfd EPOLL_CTL_MOD fd (poll-type->events 'write) fd))
+                                    ((pair? (vector-ref fd-data 0))
+                                     (epoll_ctl epfd EPOLL_CTL_MOD fd (poll-type->events 'read) fd)))
+                              (append wakeup ret))]
+                           [else
+                            (error who "Event on unknown fd" epfd fd)]))))
+                 ((fx=? i n)
+                  (set! num-waiting (fx- num-waiting (length ret)))
+                  ret))))
+          ((cmd fd poll-type user-value)
+           (case cmd
+             ((add)
+              ;; Add a file descriptor to the epoll set. Need to be
+              ;; careful if the fd is already in there. Two fibers can
+              ;; be waiting for the same fd.
+              (let ((old-fd-data (hashtable-ref fds fd #f)))
+                (match (or old-fd-data (vector '() '()))
+                  [(and #(readers writers) fd-data)
+                   (set! num-waiting (+ num-waiting 1))
+                   (if (eq? poll-type 'read)
+                       (vector-set! fd-data 0 (cons user-value readers))
+                       (vector-set! fd-data 1 (cons user-value writers)))
+                   (let* ((read-events (if (null? (vector-ref fd-data 0))
+                                           0
+                                           (poll-type->events 'read)))
+                          (write-events (if (null? (vector-ref fd-data 1))
+                                            0
+                                            (poll-type->events 'write)))
+                          (events (fxior read-events write-events)))
+                     (cond ((not old-fd-data)
+                            ;; XXX: closed fds are automatically
+                            ;; removed from the epoll set.
+                            (add-fdes-finalizer! fd (lambda (fd)
+                                                      (hashtable-delete! fds fd)))
+                            (hashtable-set! fds fd fd-data)
+                            (epoll_ctl epfd EPOLL_CTL_ADD fd events fd))
+                           ((or (not (boolean=? (null? readers) (null? (vector-ref fd-data 0))))
+                                (not (boolean=? (null? writers) (null? (vector-ref fd-data 1)))))
+                            ;; The events mask has changed
+                            (epoll_ctl epfd EPOLL_CTL_MOD fd events fd))))])))
+             ((close)
+              (sys_close epfd))
+             (else
+              (error who "Unhandled command" cmd))))))
+      epoller))
+  (define (linux-current-ticks)
+    ;; TODO: See if CLOCK_MONOTONIC_COARSE and the vDSO is better for this
+    (let* ((x (make-bytevector sizeof-timespec))
+           (_ (sys_clock_gettime CLOCK_BOOTTIME (bytevector-address x)))
+           (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
+           (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
+      (fx+ (fx* seconds 1000)
+           (fxdiv nanoseconds #e1e+6))))
   (define (linux-get-time clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_gettime clock (bytevector-address x)))
+           (_ (sys_clock_gettime clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
   (define (linux-get-time-resolution clock)
     (let* ((x (make-bytevector sizeof-timespec))
-           (status (sys_clock_getres clock (bytevector-address x)))
+           (_ (sys_clock_getres clock (bytevector-address x)))
            (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
            (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
       (values seconds nanoseconds)))
+  (define (sys$read fd bv start count)
+    (assert (fx<=? (fx+ start count) (bytevector-length bv)))
+    (let retry ()
+      (sys_read fd (fx+ (bytevector-address bv) start) count
+                (lambda (errno)
+                  (cond ((eqv? errno EAGAIN)
+                         (wait-for-readable fd)
+                         (retry))
+                        ((eqv? errno EINTR)
+                         (retry))
+                        (else
+                         (raise
+                           (condition (make-syscall-error 'read errno)
+                                      (make-irritants-condition
+                                       (list fd 'bv start count))))))))))
+  (define (sys$write fd bv start count)
+    (assert (fx<=? (fx+ start count) (bytevector-length bv)))
+    (let retry ()
+      (sys_write fd (fx+ (bytevector-address bv) start) count
+                 (lambda (errno)
+                   (cond ((eqv? errno EAGAIN)
+                          (wait-for-writable fd)
+                          (retry))
+                         ((eqv? errno EINTR)
+                          (retry))
+                         (else
+                          (raise
+                            (condition (make-syscall-error 'write errno)
+                                       (make-irritants-condition
+                                        (list fd 'bv start count))))))))))
+  ;; XXX: Potential trouble here: https://cr.yp.to/unix/nonblock.html
+  (define (set-fd-nonblocking fd)
+    (let ((prev (sys_fcntl fd F_GETFL 0)))
+      (when (eqv? 0 (fxand O_NONBLOCK prev))
+        (sys_fcntl fd F_SETFL (fxior O_NONBLOCK prev)))))
+  (set-fd-nonblocking STDIN_FILENO)
+  (set-fd-nonblocking STDOUT_FILENO)
+  (set-fd-nonblocking STDERR_FILENO)
   ($init-standard-ports (lambda (bv start count)
-                          (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_read STDIN_FILENO (fx+ (bytevector-address bv) start) count))
+                          ;; TODO: For Linux 4.14+, use preadv2() with
+                          ;; RWF_NOWAIT.
+                          (sys$read STDIN_FILENO bv start count))
                         (lambda (bv start count)
-                          (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_write STDOUT_FILENO (fx+ (bytevector-address bv) start) count))
+                          (sys$write STDOUT_FILENO bv start count))
                         (lambda (bv start count)
-                          (assert (fx<=? (fx+ start count) (bytevector-length bv)))
-                          (sys_write STDERR_FILENO (fx+ (bytevector-address bv) start) count))
+                          (sys$write STDERR_FILENO bv start count))
                         (eol-style lf))
   (port-file-descriptor-set! (current-input-port) STDIN_FILENO)
   (port-file-descriptor-set! (current-output-port) STDOUT_FILENO)
@@ -475,51 +778,42 @@
   (init-set! 'file-exists? file-exists?)
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
+  (init-set! 'open-i/o-poller linux-open-i/o-poller)
   (time-init-set! 'cumulative-process-time
                   (lambda () (linux-get-time CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'cumulative-process-time-resolution
                   (lambda () (linux-get-time-resolution CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'current-time (lambda () (linux-get-time CLOCK_REALTIME)))
   (time-init-set! 'current-time-resolution (lambda () (linux-get-time-resolution CLOCK_REALTIME)))
-  ;; (display "PID: ")
-  ;; (write (pid-value (get-pid)))
-  ;; (newline)
-  (let ((bg-process (new-process)))
-    (when (and bg-process (pid-value bg-process))
-      (display "Started in the background: ")
-      (write (pid-value bg-process))
-      (newline))))
+  (time-init-set! 'current-ticks linux-current-ticks))
 
 (define (process-init)
-  ;; XXX: this is temporary. It should actually use message passing
-  ;; to get a closure or something for startup.
-  (define (print . x) (for-each display x) (newline))
-  (define (nanosleep seconds)
-    (assert (fx>=? seconds 0))
-    (wait seconds)
-    (if #f #f))
+  ;; (define (nanosleep seconds)
+  ;;   (assert (fx>=? seconds 0))
+  ;;   (scheduler-wait seconds)
+  ;;   (if #f #f))
   (init-set! 'exit process-exit)
-  (time-init-set! 'nanosleep nanosleep)
+  ;; (time-init-set! 'nanosleep nanosleep)
   (init-set! 'allocate allocate)
   (init-set! 'command-line (get-command-line))
   (init-set! 'environment-variables (get-environment))
   (case (get-boot-loader)
     ((linux)
      (init-set! 'machine-type '#(amd64 linux))
-     ;; FIXME: This needs to receive a procedure to start
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)
-          ;; FIXME: Needs to use IPC for port communication
           (linux-process-setup))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))
     ((multiboot)
      (init-set! 'machine-type '#(amd64 loko))
+     (init-set! 'open-i/o-poller pc-open-i/o-poller)
+     (time-init-set! 'current-ticks pc-current-ticks)
      (let ((pid (get-pid)))
        (case (pid-value pid)
          ((1)
-          (com0-setup)
+          (pc-com0-setup)
           (pc-setup-boot-filesystem))
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))

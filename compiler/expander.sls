@@ -221,6 +221,7 @@
     ($compat     (loko compat)                         #t    #t)
     (time        (loko system time)                    #t    #t)
     (lsu         (loko system unsafe)                  #t    #t)
+    (fibers      (loko system fibers)                  #t    #t)
     ($p          (loko system $primitives)             #f    #t)
     ($x86        (loko system $x86)                    #f    #t)
 
@@ -976,7 +977,7 @@
     (interaction-environment                    ^)
     (load                                       ^)
     ;;;
-    (void                     $boot)
+    (void                     $boot ^)
     (gensym                   $boot ^)
     (symbol-value             $boot)
     (set-symbol-value!        $boot)
@@ -1091,6 +1092,7 @@
     (time-second              time)
     (time-nanosecond          time)
     (time-resolution          time)
+    (current-ticks            time)
 
     ;; The (loko system unsafe) library
     (get-i/o-u8    lsu) (get-i/o-u16    lsu) (get-i/o-u32    lsu)
@@ -1100,6 +1102,31 @@
     (put-mem-u8    lsu) (put-mem-u16    lsu) (put-mem-u32    lsu) (put-mem-s61 lsu)
     (syscall       lsu)
     (bytevector-address lsu)
+
+    ;; The (loko system fibers) library
+    (run-fibers               fibers)
+    (spawn-fiber              fibers)
+    (wrap-operation           fibers)
+    (choice-operation         fibers)
+    (perform-operation        fibers)
+    (make-channel             fibers)
+    (channel?                 fibers)
+    (put-operation            fibers)
+    (get-operation            fibers)
+    (put-message              fibers)
+    (get-message              fibers)
+    (sleep-operation          fibers)
+    (timer-operation          fibers)
+    (sleep                    fibers)
+    (wait-for-readable        fibers)
+    (wait-for-writable        fibers)
+    (make-cvar                fibers)
+    (cvar?                    fibers)
+    (signal-cvar!             fibers)
+    (wait-operation           fibers)
+    (wait                     fibers)
+    (yield-current-task       fibers)
+    (exit-current-task        fibers)
 
     ($cpuid!                  $x86)
     (cpuid                    $x86)
@@ -1160,10 +1187,10 @@
     ($boot-loader-type        $p)
     ($linker-address          $p)     ;link-time access to linker symbols
     ($heap-remaining          $p)     ;for the time-it procedure
-    ;; ($current-closure         $p)
     ($stack-pointer           $p)     ;for stack traces
     ($get-mem-object          $p)     ;also for stack traces
     ($object->fixnum          $p)
+    ;; ($current-closure         $p)
 
     ;; Hack for speeding up self-compilation
     (compiler-passes     compiler)
