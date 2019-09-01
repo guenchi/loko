@@ -84,15 +84,19 @@ overridden using the `LOKO_SOURCE` environment variable.
 ## Contact
 
 * [Loko Scheme on GitLab issues](https://gitlab.com/weinholt/loko/issues)
-* The IRC channel `#loko` on Freenode.
+* The IRC channel `#loko` on Freenode, but `#scheme` also works if the
+  subject is about Scheme in general.
 * The Usenet group comp.lang.scheme, available through any Usenet
-  provider, e.g. [Eternal September](http://www.eternal-september.org/).
+  provider,
+  e.g. [Eternal September](http://www.eternal-september.org/). I would
+  like for Scheme communities to be less fragmented, so I'm not going
+  to wait with setting up a separate mailing list.
 * The [Loko Scheme](https://scheme.fail/) website.
 
 ## License
 
 **Work is pending to formulate an exception to this license. For now,
-there is no exception. See https://gitlab.com/weinholt/loko/issues/2.**
+there is no exception. See https://gitlab.com/weinholt/loko/issues/2/.**
 
 **The samples/ directory is covered by a different license.**
 

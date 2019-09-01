@@ -189,7 +189,7 @@
 
 ;;; Stack-Segment Fault
     (%label fault-SS*)
-    ;; As far as I can tell, This can only be the result of
+    ;; As far as I can tell, this can only be the result of
     ;; referencing a non-canonical pointer with RBP as base
     ;; register.
     (mov rax (mem64+ rsp 8))

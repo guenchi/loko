@@ -53,19 +53,11 @@ that it should work more or less the same across all targets.
   is fairly useful since it means that not all software has to be
   rewritten to run on Loko.
 
-* Loko needs a scheduler and inter-process communication.
+* Loko needs an improved scheduler and inter-process communication.
 
 * Loko needs large improvements to its memory management. Currently
   Loko allocates a statically sized heap and stack to each internal
   process.
-
-* Epoll()-based green threads, isolated processes, fibers or similar
-  for the Linux target. Could be based on the same ideas that are in
-  Swish. Most Scheme code is written to run single-threaded and it
-  would be good to keep this code working and useful. Threads with
-  shared data are a big source of bugs. It would be really good if
-  threads were not needed or were delegated to only those use cases
-  where they are truly necessary.
 
 * Improvements to the compiler are always good. As in Chez Scheme, it
   would be preferable if optimizations "paid their way". Work to do

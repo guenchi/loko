@@ -184,3 +184,144 @@ Read *n* units of u8, u16 or u32, respectively, from I/O bus address
 *busaddr* and write them to memory starting at linear address *addr*.
 
 Returns unspecified values.
+
+## (loko system fibers)
+
+Fibers are a form of lightweight concurrency based on Concurrent ML.
+For an overview, see [Concurrency in Loko Scheme][concurrency.md].
+
+### Procedure: (spawn-fiber *thunk*)
+
+Create a new fiber that will start running *thunk*.
+
+### Procedure: (make-channel)
+
+Create a new channel. Channels are places where two fibers can
+rendezvous to exchange a message. There is no buffering in a channel.
+
+### Procedure: (channel? *obj*)
+
+True if *obj* is a channel.
+
+### Procedure: (put-message *ch obj*)
+
+Put the message *obj* on the channel *ch*. Blocks until another fiber
+picks up the message. Returns unspecified values.
+
+### Procedure: (get-message *ch*)
+
+Get a message from the channel *ch*. Blocks until another fiber
+has arrived with a message. Returns the message.
+
+### Procedure: (sleep *t*)
+
+Block the fiber for *t* seconds.
+
+### Procedure: (put-operation *ch obj*)
+
+Returns an operation object that represents putting the message *obj*
+on the channel *ch*.
+
+### Procedure: (get-operation *ch*)
+
+Returns an operation object that represents getting a message from the
+channel *ch*.
+
+### Procedure: (wrap-operation *op f*)
+
+Returns an operation object that is the same as the operation *op*,
+except that the values a wrapped by the procedure *f*.
+
+### Procedure: (sleep-operation *t*)
+
+Returns an operation object that represents waiting until *t* seconds
+have passed from the time of the call to this procedure.
+
+### Procedure: (timer-operation *a*)
+
+Return an operation object that represents waiting until absolute time
+*a* (in internal time units).
+
+### Procedure: (choice-operation *op …*)
+
+Returns an operation object that represents a choice between the given
+operations *op …*. If multiple operations can be performed then one is
+selected non-deterministically.
+
+It is not an error to call this procedure with no arguments. It is in
+fact a useful construction when gathering operations.
+
+If `wrap-operation` is used on a choice operation then every operation
+will be wrapped.
+
+### Procedure: (perform-operation *op*)
+
+Perform the operation *op*, possibly blocking the fiber until the
+operation is ready.
+
+With `choice-operation` and `perform-operation` it's possible to write
+code that waits for one of several operations. This can be something
+simple like waiting for a message with a timeout:
+
+```scheme
+(perform-operation (get-operation ch) (sleep-operation 1))
+```
+
+This will wait for a message on the channel *ch* for up to one second.
+In order to distinguish between a message and a timeout,
+`wrap-operation` is used:
+
+```scheme
+(perform-operation
+ (choice-operation
+  (wrap-operation (get-operation ch) (lambda (x) (cons 'msg x)))
+  (wrap-operation (sleep-operation 1) (lambda _ 'timeout))))
+```
+
+This code will either return `(msg . x)` where *x* is the received
+message; but if more than one second passes without a message it
+returns `timeout`.
+
+The object returned from `choice-operation` can be returned from a
+procedure, stored in a data structure, sent over a channel, etc.
+
+### Procedure: (make-cvar)
+
+Make a new *condition variable* (in Concurrent ML's terminology).
+
+### Procedure: (cvar? *obj*)
+
+True if *obj* is a condition variable.
+
+### Procedure: (signal-cvar! *cvar*)
+
+Signal the condition variable *cvar*, unblocking any fibers that are
+waiting for it.
+
+### Procedure: (wait *cvar*)
+
+Wait for the condition variable *cvar* to be signalled, blocking until
+it is.
+
+### Procedure: (wait-operation *cvar*)
+
+Return an operation that represents waiting for the condition variable
+*cvar* to be signalled.
+
+### Procedure: (yield-current-task)
+
+Yield the current task and and let another fiber run. This is
+generally not needed in I/O-bound programs, but is provided to let
+CPU-bound programs cooperate and voluntarily let other fibers run.
+
+### Procedure: (exit-current-task)
+
+Stops the running fiber.
+
+### Procedure: (run-fibers *init-thunk*)
+
+Provided for compatibility with Guile. It runs the procedure
+*init-thunk* in the fibers scheduler. This procedure can return
+earlier in Loko than in does in Guile. Guile provides it because
+fibers are not an integrated feature in its runtime, so it needs
+an entry point for when to start and stop the fibers facility.

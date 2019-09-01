@@ -3,8 +3,13 @@
 ## Index
 
 * [Built-in libraries](builtins.md)
+* [Concurrency](concurrency.md)
 * [Roadmap](roadmap.md)
 * [Tools-support in Loko](tools.md)
+
+Loko internals:
+
+* [Interrupts][interrupts.md]
 
 ## Target documentation
 
@@ -21,4 +26,3 @@ The `amd64` targets are a bit unusual in that they require that the
 system supports alignment checking. This allows Loko to generate fast
 code for many common Scheme procedures. Some older emulators do not
 support alignment checking.
-
