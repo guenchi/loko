@@ -11,6 +11,9 @@
     __NR_accept4
     __NR_arch_prctl
     __NR_bind
+    __NR_chdir
+    __NR_chmod
+    __NR_chown
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
@@ -19,32 +22,55 @@
     __NR_epoll_ctl
     __NR_epoll_pwait
     __NR_epoll_wait
+    __NR_execve
+    __NR_execveat
     __NR_exit
     __NR_faccessat
+    __NR_fchdir
+    __NR_fchmodat
+    __NR_fchownat
     __NR_fcntl
     __NR_fork
     __NR_fstat
+    __NR_ftruncate
+    __NR_futimesat
+    __NR_getcwd
     __NR_getdents64
     __NR_getpeername
+    __NR_getpid
+    __NR_getppid
+    __NR_getrandom
+    __NR_getsid
     __NR_getsockname
     __NR_getsockopt
     __NR_ioctl
+    __NR_lchown
+    __NR_linkat
     __NR_listen
     __NR_lseek
     __NR_lstat
+    __NR_mkdirat
+    __NR_mknodat
     __NR_mmap
     __NR_open
+    __NR_pipe2
     __NR_preadv
+    __NR_preadv2
     __NR_pwritev
+    __NR_pwritev2
     __NR_read
-    __NR_readlink
+    __NR_readlinkat
     __NR_recvfrom
     __NR_recvmsg
+    __NR_renameat2
+    __NR_rmdir
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
     __NR_sendmsg
     __NR_sendto
+    __NR_setpgid
+    __NR_setsid
     __NR_setsockopt
     __NR_shmat
     __NR_shutdown
@@ -53,8 +79,13 @@
     __NR_socket
     __NR_socketpair
     __NR_stat
+    __NR_symlinkat
     __NR_timer_create
     __NR_timer_settime
+    __NR_truncate
+    __NR_uname
+    __NR_unlinkat
+    __NR_utimensat
     __NR_wait4
     __NR_write
     EPERM
@@ -503,6 +534,8 @@
     S_IFBLK
     S_IFIFO
     S_IFSOCK
+    GRND_NONBLOCK
+    GRND_RANDOM
     sizeof-sockaddr_in6
     offsetof-sockaddr_in6-sin6_family
     offsetof-sockaddr_in6-sin6_port
@@ -646,6 +679,9 @@
 (define-inlined __NR_accept4 288)
 (define-inlined __NR_arch_prctl 158)
 (define-inlined __NR_bind 49)
+(define-inlined __NR_chdir 80)
+(define-inlined __NR_chmod 90)
+(define-inlined __NR_chown 92)
 (define-inlined __NR_clock_getres 229)
 (define-inlined __NR_clock_gettime 228)
 (define-inlined __NR_close 3)
@@ -654,32 +690,55 @@
 (define-inlined __NR_epoll_ctl 233)
 (define-inlined __NR_epoll_pwait 281)
 (define-inlined __NR_epoll_wait 232)
+(define-inlined __NR_execve 59)
+(define-inlined __NR_execveat 322)
 (define-inlined __NR_exit 60)
 (define-inlined __NR_faccessat 269)
+(define-inlined __NR_fchdir 81)
+(define-inlined __NR_fchmodat 268)
+(define-inlined __NR_fchownat 260)
 (define-inlined __NR_fcntl 72)
 (define-inlined __NR_fork 57)
 (define-inlined __NR_fstat 5)
+(define-inlined __NR_ftruncate 77)
+(define-inlined __NR_futimesat 261)
+(define-inlined __NR_getcwd 79)
 (define-inlined __NR_getdents64 217)
 (define-inlined __NR_getpeername 52)
+(define-inlined __NR_getpid 39)
+(define-inlined __NR_getppid 110)
+(define-inlined __NR_getrandom 318)
+(define-inlined __NR_getsid 124)
 (define-inlined __NR_getsockname 51)
 (define-inlined __NR_getsockopt 55)
 (define-inlined __NR_ioctl 16)
+(define-inlined __NR_lchown 94)
+(define-inlined __NR_linkat 265)
 (define-inlined __NR_listen 50)
 (define-inlined __NR_lseek 8)
 (define-inlined __NR_lstat 6)
+(define-inlined __NR_mkdirat 258)
+(define-inlined __NR_mknodat 259)
 (define-inlined __NR_mmap 9)
 (define-inlined __NR_open 2)
+(define-inlined __NR_pipe2 293)
 (define-inlined __NR_preadv 295)
+(define-inlined __NR_preadv2 327)
 (define-inlined __NR_pwritev 296)
+(define-inlined __NR_pwritev2 328)
 (define-inlined __NR_read 0)
-(define-inlined __NR_readlink 89)
+(define-inlined __NR_readlinkat 267)
 (define-inlined __NR_recvfrom 45)
 (define-inlined __NR_recvmsg 47)
+(define-inlined __NR_renameat2 316)
+(define-inlined __NR_rmdir 84)
 (define-inlined __NR_rt_sigaction 13)
 (define-inlined __NR_rt_sigprocmask 14)
 (define-inlined __NR_rt_sigreturn 15)
 (define-inlined __NR_sendmsg 46)
 (define-inlined __NR_sendto 44)
+(define-inlined __NR_setpgid 109)
+(define-inlined __NR_setsid 112)
 (define-inlined __NR_setsockopt 54)
 (define-inlined __NR_shmat 30)
 (define-inlined __NR_shutdown 48)
@@ -688,8 +747,13 @@
 (define-inlined __NR_socket 41)
 (define-inlined __NR_socketpair 53)
 (define-inlined __NR_stat 4)
+(define-inlined __NR_symlinkat 266)
 (define-inlined __NR_timer_create 222)
 (define-inlined __NR_timer_settime 223)
+(define-inlined __NR_truncate 76)
+(define-inlined __NR_uname 63)
+(define-inlined __NR_unlinkat 263)
+(define-inlined __NR_utimensat 280)
 (define-inlined __NR_wait4 61)
 (define-inlined __NR_write 1)
 
@@ -1184,6 +1248,10 @@
 (define-inlined S_IFBLK #o60000)
 (define-inlined S_IFIFO #o10000)
 (define-inlined S_IFSOCK #o140000)
+
+;;; linux/random.h
+(define-inlined GRND_NONBLOCK 1)
+(define-inlined GRND_RANDOM 2)
 
 ;;; linux/in6.h
 (define-inlined sizeof-sockaddr_in6 28)

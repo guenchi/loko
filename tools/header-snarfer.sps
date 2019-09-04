@@ -16,6 +16,9 @@
     __NR_accept4
     __NR_arch_prctl
     __NR_bind
+    __NR_chdir
+    __NR_chmod
+    __NR_chown
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
@@ -24,32 +27,55 @@
     __NR_epoll_ctl
     __NR_epoll_pwait
     __NR_epoll_wait
+    __NR_execve
+    __NR_execveat
     __NR_exit
     __NR_faccessat
+    __NR_fchdir
+    __NR_fchmodat
+    __NR_fchownat
     __NR_fcntl
     __NR_fork
     __NR_fstat
+    __NR_ftruncate
+    __NR_futimesat
+    __NR_getcwd
     __NR_getdents64
     __NR_getpeername
+    __NR_getpid
+    __NR_getppid
+    __NR_getrandom
+    __NR_getsid
     __NR_getsockname
     __NR_getsockopt
     __NR_ioctl
+    __NR_lchown
+    __NR_linkat
     __NR_listen
     __NR_lseek
     __NR_lstat
+    __NR_mkdirat
+    __NR_mknodat
     __NR_mmap
     __NR_open
+    __NR_pipe2
+    __NR_preadv
     __NR_preadv2
+    __NR_pwritev
     __NR_pwritev2
     __NR_read
-    __NR_readlink
+    __NR_readlinkat
     __NR_recvfrom
     __NR_recvmsg
+    __NR_renameat2
+    __NR_rmdir
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
     __NR_sendmsg
     __NR_sendto
+    __NR_setpgid
+    __NR_setsid
     __NR_setsockopt
     __NR_shmat
     __NR_shutdown
@@ -58,8 +84,13 @@
     __NR_socket
     __NR_socketpair
     __NR_stat
+    __NR_symlinkat
     __NR_timer_create
     __NR_timer_settime
+    __NR_truncate
+    __NR_uname
+    __NR_unlinkat
+    __NR_utimensat
     __NR_wait4
     __NR_write
 
@@ -526,6 +557,10 @@
     S_IFBLK
     S_IFIFO
     S_IFSOCK
+
+    (c-include "linux/random.h")
+    GRND_NONBLOCK
+    GRND_RANDOM
 
     (c-include "linux/in6.h")
     (struct sockaddr_in6 sin6_family sin6_port sin6_flowinfo
