@@ -1,0 +1,11 @@
+#!r6rs ; -*- mode: scheme; coding: utf-8 -*-
+(import (akku format manifest))
+
+(akku-package ("loko-lspci" "0.0.0-alpha.0")
+  (synopsis "Sample lspci for Loko")
+  (authors "Göran Weinholt")
+  (license "MIT")
+  (depends ("loko-drivers"
+            (version "0.0.0")
+            (location (git "https://gitlab.com/weinholt/loko-drivers"))
+            (revision "96e5c707011d6453b64c9d87d31e763351121a8f"))))
