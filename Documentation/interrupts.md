@@ -1,5 +1,16 @@
 # Interrupt handling in Loko Scheme
 
+## In brief
+
+Loko in essence treats device drivers as communicating sequential
+processes. IRQs from devices are treated as messages sent from the
+device to the driver. Requests to configure the device or transfer
+data between the device and the rest of the system is also done with
+messages. Device drivers are not fundamentally different from other
+Scheme programs.
+
+## Historical background
+
 This document uses the term *interrupt* to denote an interruption in
 the processor's normal execution sequence; *IRQ* to denote an
 interrupt from a hardware device and *trap* to denote an interrupt
@@ -73,10 +84,10 @@ driver, reset the device to its normal state, then enable the IRQ in
 the interrupt controller. An ISR is a special piece of code that must
 be prepared to run at potentially any time (except when interrupts are
 disabled). Usually there is a priority order on IRQs so that they can
-in turn be interrupted by higher-priority IRQs. Either way, when the
+in turn be interrupted by higher-priority IRQs. Either way, when an
 IRQ arrives the driver quickly services the hardware. In the UART
-example it would read the byte from the UART and place it in a
-software controlled buffer.
+example it would read a byte from the UART and place it in a software
+controlled buffer.
 
 In this way of doing things, there are unfortunately severe
 restrictions on what can be done in an ISR. An ISR runs in "interrupt
@@ -87,7 +98,7 @@ code can run in interrupt context is difficult.
 
 For this reason, Loko does not run driver code in ISRs. The ISRs are
 instead minimal pieces of code that cooperate with the process
-scheduler to make the driver's process runnable. The IRQ is sent as a
+scheduler to make the driver's process runnable. An IRQ is sent as a
 message to the process and it handles it at its leisure.
 
 This approach is somewhat experimental, and may have some problems
