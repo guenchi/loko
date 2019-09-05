@@ -1138,8 +1138,11 @@
     (valgrind                 $host)
     (garbage-collection-count $host)
     (nanosleep                $host)
-    (allocate                 $host)
     (stack-trace              $host)
+    (allocate                 $host)
+    (enable-irq               $host)
+    (acknowledge-irq          $host)
+    (wait-irq-operation       $host)
 
     ;; The (loko system $primitives) library
     ($bootstrap-symbols       $p)

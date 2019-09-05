@@ -12,7 +12,7 @@ all: $(PROGRAM) pci.ids
 .akku/env:
 	akku install
 
-$(PROGRAM): $(PROGRAM).sps $(LOKO)
+$(PROGRAM): $(PROGRAM).sps $(LOKO) .akku/env
 	LOKO_SOURCE=$(LOKO_SOURCE) .akku/env $(LOKO) --compile $< --output $@
 
 pci.ids:

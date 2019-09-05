@@ -20,14 +20,16 @@
 ;;; Process-specific initialization
 
 ;; This library is responsible for initializing all processes (except
-;; schedulers). This is equivalent to user-space processes. It
-;; communicates with other processes (and its scheduler) by using
-;; $process-yield.
+;; schedulers). These are preemptible Loko processes. It communicates
+;; with other processes (and its scheduler) by using $process-yield.
 
 ;; Blocking syscalls should be kept out of here.
 
 (library (loko arch amd64 process-init)
-  (export)
+  (export
+    enable-irq
+    acknowledge-irq
+    wait-irq-operation)
   (import
     (except (rnrs) command-line exit)
     (rnrs mutable-pairs)
@@ -40,7 +42,8 @@
           port-file-descriptor-set!)
     (only (loko libs time) time-init-set!)
     (loko libs fibers)
-    (except (loko system $host) allocate)
+    (except (loko system $host) allocate
+            enable-irq acknowledge-irq wait-irq-operation)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
     (loko arch amd64 linux-syscalls)
@@ -117,23 +120,9 @@
     (handle-scheduler-wait-reply vec ($process-yield vec)
                                  'scheduler-wait)))
 
-
-
-
+;;; IRQ support
 
 (define *interrupt-cvars* (make-vector 256 #f))
-
-(define (debug-put-u8 b)
-  (define com0 #x3f8)
-  (define i/o-base com0)
-  (define thb (+ i/o-base 0))
-  (define lsr (+ i/o-base 5))
-  (define (put-u8 b)
-    (let lp ()
-      (when (fxzero? (fxand (get-i/o-u8 lsr) #b100000))
-        (lp)))
-    (put-i/o-u8 thb b))
-  (put-u8 b))
 
 (define (handle-scheduler-wait-reply vec reply who)
   ;; The scheduler will update vec.
@@ -163,9 +152,10 @@
     (handle-scheduler-wait-reply vec ($process-yield `#(acknowledge-irq ,irq ,vec))
                                  'acknowledge-irq)))
 
-(define (interrupt-operation irq)
+(define (wait-irq-operation irq)
   (wait-operation (vector-ref *interrupt-cvars* irq)))
 
+;; Fiber based UART driver that uses IRQs
 (define (uart-driver i/o-base irq read-ch write-ch)
   (define RBR (fx+ i/o-base 0))
   (define THB (fx+ i/o-base 0))
@@ -278,7 +268,7 @@
         (put-i/o-u8 IER (fxior IER-R/W IER-LINE-STATUS IER-MODEM-STATUS)))
     (match (perform-operation
             (choice-operation
-             (wrap-operation (interrupt-operation irq)
+             (wrap-operation (wait-irq-operation irq)
                              (lambda _ 'int))
              (if (fx>=? (queue-length tx-buf) 64)
                  (choice-operation)
