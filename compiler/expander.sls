@@ -1139,7 +1139,8 @@
     (garbage-collection-count $host)
     (nanosleep                $host)
     (stack-trace              $host)
-    (allocate                 $host)
+
+    (dma-allocate             $host)
     (enable-irq               $host)
     (acknowledge-irq          $host)
     (wait-irq-operation       $host)

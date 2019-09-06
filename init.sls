@@ -32,7 +32,7 @@
     open-file-input/output-port
     open-i/o-poller
     $mmap
-    allocate
+    dma-allocate
     machine-type
     init
     init-set!
@@ -152,11 +152,11 @@
 (define ($mmap start len type)
   (*mmap* start len type))
 
-(define *allocate*
-  (lambda _ (error 'allocate "No allocate procedure installed")))
-(define (allocate type size mask)
-  ;; Memory allocation.
-  (*allocate* type size mask))
+(define *dma-allocate*
+  (lambda _ (error 'dma-allocate "No dma-allocate procedure installed")))
+(define (dma-allocate size mask)
+  ;; DMA memory allocation.
+  (*dma-allocate* size mask))
 
 (define *init*
   (lambda _ (error 'start "No start procedure installed")))
@@ -179,7 +179,7 @@
     ((open-file-input-port) (set! *open-file-input-port* value))
     ((open-file-output-port) (set! *open-file-output-port* value))
     ((open-i/o-poller) (set! *open-i/o-poller* value))
-    ((allocate) (set! *allocate* value))
+    ((dma-allocate) (set! *dma-allocate* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
     (else

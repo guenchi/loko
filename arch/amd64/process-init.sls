@@ -42,7 +42,7 @@
           port-file-descriptor-set!)
     (only (loko libs time) time-init-set!)
     (loko libs fibers)
-    (except (loko system $host) allocate
+    (except (loko system $host) dma-allocate
             enable-irq acknowledge-irq wait-irq-operation)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
@@ -95,18 +95,15 @@
 (define (pc-current-ticks)
   ($process-yield '(current-ticks)))
 
-(define (allocate type size mask)
-  (assert (eq? type 'dma))
+(define (process-dma-allocate size mask)
   (assert (fx=? size 4096))
   (assert (fixnum? mask))             ;#xfffff000 is a nice mask
-  (let* ((v `#(allocate ,type ,size ,mask #f #f))
+  (let* ((v `#(allocate ,size ,mask #f))
          (s ($process-yield v)))
     (unless (eq? s 'ok)
-      (error 'allocate "Memory allocation failed"
-             type size mask))
-    (let ((cpu-addr (vector-ref v 4))
-          (dma-addr (vector-ref v 5)))
-      (values cpu-addr dma-addr))))
+      (error 'dma-allocate "Memory allocation failed" size mask))
+    (let ((cpu-addr (vector-ref v 3)))
+      cpu-addr)))
 
 (define (scheduler-wait ns-timeout)
   ;; TODO: this message should take a number back from the scheduler
@@ -784,7 +781,7 @@
   ;;   (if #f #f))
   (init-set! 'exit process-exit)
   ;; (time-init-set! 'nanosleep nanosleep)
-  (init-set! 'allocate allocate)
+  (init-set! 'dma-allocate process-dma-allocate)
   (init-set! 'command-line (get-command-line))
   (init-set! 'environment-variables (get-environment))
   (case (get-boot-loader)

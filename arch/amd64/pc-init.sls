@@ -646,28 +646,18 @@
                     (vector-set! wv 2 (pcb-dequeue-message! pcb))
                     (pcb-msg-set! pcb 'message))))))
         ((allocate)
-         (let ((type (vector-ref msg 1))
-               (size (vector-ref msg 2))
-               (mask (vector-ref msg 3)))
+         (let ((size (vector-ref msg 1))
+               (mask (vector-ref msg 2)))
            ;; Allocate a consecutive memory region. TODO: jot down
            ;; this area as allocated to this process, and free it when
            ;; the process dies. If the process is a PCI device driver
-           ;; then disconnect it from the memory bus first. Or just
-           ;; have a big old process that takes care of stuff like
-           ;; that.
-           (case type
-             ((dma)
-              (let-values ([(cpu dma) (dma-allocate size mask)])
-                (cond (cpu
-                       (vector-set! msg 4 cpu)
-                       (vector-set! msg 5 dma)
-                       (pcb-msg-set! pcb 'ok))
-                      (else
-                       (pcb-msg-set! pcb #f)))))
-             (else
-              (display "Bad allocate message: ")
-              (write msg)
-              (newline)))))
+           ;; then disconnect it from the memory bus first.
+           (cond ((dma-allocate size mask) =>
+                  (lambda (addr)
+                    (vector-set! msg 3 addr)
+                    (pcb-msg-set! pcb 'ok)))
+                 (else
+                  (pcb-msg-set! pcb #f)))))
 
         ;;; IRQs
         ((enable-irq)
@@ -1203,15 +1193,15 @@
     ;; TODO: unmap and invalidate tlb
     #f)
 
-  (define (dma-allocate size mask)
+  (define (pc-dma-allocate size mask)
     ;; TODO: more than one page, natural alignment, move other pages
-    ;; if none are free, use non-identity mapped pages, have
-    ;; get-4K-zero-page allocate >4GB pages before using low pages.
-    ;; FIXME: This only looks at the first area.
+    ;; if none are free, have get-4K-zero-page allocate >4GB pages
+    ;; before using low pages. FIXME: This only looks at the first
+    ;; area.
     (assert (eqv? size 4096))
     ;; (print "DMA allocate: " (list 'size size 'mask mask '*available* *available*))
     (if (null? *available*)
-        (values #f #f)
+        #f
         (let* ((a (car *available*))
                (page (area-base a))
                (nbase (fx+ page 4096)))
@@ -1226,10 +1216,10 @@
              (longmode-mmap page 4096 'identity)
              ;; XXX: I got lazy and these two values now have to be
              ;; the same.
-             (values page page))
+             page)
             (else
              ;; (print "no physical pages with the requested mask are available")
-             (values #f #f))))))
+             #f)))))
 
   ;; (print-full-table)
 
@@ -1403,7 +1393,7 @@
       (write-timer-divide apic-divisor)
 
       (print "Booting application processors...")
-      (let-values ([(&cpu &dma) (dma-allocate 4096 #x000ff000)])
+      (let ([temp-page (pc-dma-allocate 4096 #x000ff000)])
         (define (busywait seconds)
           (let* ((start (rdtsc))
                  (target (+ start (nanoseconds->TSC cpu-freq (* seconds #e1e9)))))
@@ -1412,13 +1402,12 @@
                 (unless (and (> current start)
                              (> current target))
                   (lp))))))
-        (assert (eqv? &cpu &dma))
         ;; TODO: after this, when all CPUs have booted, free the page
-        (print "AP boot page: #x" (and &cpu (number->string &cpu 16)))
-        (when &cpu
-          (boot-application-processors &cpu APIC:ICR-low busywait))
+        (print "AP boot page: #x" (and temp-page (number->string temp-page 16)))
+        (when temp-page
+          (boot-application-processors temp-page APIC:ICR-low busywait))
         (newline)
-        (pc-scheduler cpu-freq interval dma-allocate)))))
+        (pc-scheduler cpu-freq interval pc-dma-allocate)))))
 
 (when (eq? ($boot-loader-type) 'multiboot)
   (init-set! 'init pc-init)))
