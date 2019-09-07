@@ -37,13 +37,12 @@
   (display main-package-version)
   (display "
 Copyright © 2019 Göran Weinholt
-License AGPLv3+: GNU AGPL version 3 or later
+See <https://scheme.fail/> for the source code and new releases.
+License AGPLv3+: GNU Affero GPL version 3 or later
   <https://www.gnu.org/licenses/agpl.html>
 There is NO WARRANTY, to the extent permitted by law. This is
 free software: you are free to change and redistribute it under
-certain conditions.
-
-"))
+certain conditions.\n"))
 
 (define env (make-parameter #f))
 

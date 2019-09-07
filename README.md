@@ -81,6 +81,19 @@ Loko's source code needs to be available for compilation to succeed.
 The location is decided by `PREFIX` when compiling Loko, but can be
 overridden using the `LOKO_SOURCE` environment variable.
 
+## Related projects
+
+To try and keep Loko at a manageable size, not everything will be part
+of a normal Loko install. Some things are extra:
+
+* POSIX support for Loko (on Linux) is worked on at [loko-posix][].
+* Hardware drivers are worked on at [loko-drivers][].
+* SRFIs are maintained in [chez-srfi][], when it is possible and
+  convenient.
+
+ [loko-posix]: https://gitlab.com/weinholt/loko-posix
+ [loko-drivers]: https://gitlab.com/weinholt/loko-drivers
+
 ## Contact
 
 * [Loko Scheme on GitLab issues](https://gitlab.com/weinholt/loko/issues)
@@ -95,8 +108,9 @@ overridden using the `LOKO_SOURCE` environment variable.
 
 ## License
 
-**Work is pending to formulate an exception to this license. For now,
-there is no exception. See https://gitlab.com/weinholt/loko/issues/2/.**
+**Work is pending (https://gitlab.com/weinholt/loko/issues/2) to
+formulate an application exception to this license. For now, there is
+no exception.**
 
 **The samples/ directory is covered by a different license.**
 
