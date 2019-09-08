@@ -52,6 +52,7 @@
     __NR_mkdirat
     __NR_mknodat
     __NR_mmap
+    __NR_munmap
     __NR_open
     __NR_pipe2
     __NR_preadv
@@ -720,6 +721,7 @@
 (define-inlined __NR_mkdirat 258)
 (define-inlined __NR_mknodat 259)
 (define-inlined __NR_mmap 9)
+(define-inlined __NR_munmap 11)
 (define-inlined __NR_open 2)
 (define-inlined __NR_pipe2 293)
 (define-inlined __NR_preadv 295)

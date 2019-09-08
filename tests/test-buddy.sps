@@ -32,7 +32,7 @@
 ;; Get some memory to test with
 (define testaddr
   (sys_mmap 0
-            (* 1024 1024)
+            (* 1023 1024)
             (fxior PROT_READ PROT_WRITE)
             (fxior MAP_PRIVATE MAP_ANONYMOUS)
             -1 0))
@@ -125,9 +125,6 @@
   (hashtable-clear! addrs)
   (test))
 
-#;
-(single-size-test 12 4096)
-
 (do ((i 0 (+ i 1)))
     ((= i 9))
   (single-size-test 12 (* (expt 2 i) 4 1024)))
@@ -191,18 +188,21 @@
 
 ;; Allocate blocks of varying sizes until no free memory remains; then
 ;; free all the addresses
-(define (random-test lowest-order)
+(define (random-test testaddr lowest-order iterations req-heap-size)
   (define random-u32 (make-xorshift32 2463534242))
   (define addrs (make-eqv-hashtable))
-  (define buddy (make-buddy testaddr (* 1024 1024) lowest-order))
+  (define buddy (make-buddy testaddr req-heap-size lowest-order))
+  (define heap-size (buddy-free-amount buddy))
   (define (test)
     (do ((i 0 (+ i 1)))
-        ((eqv? i 5000)
+        ((fx=? i iterations)
          (vector-for-each
           (lambda (addr)
             (buddy-free! buddy addr))
           (hashtable-keys addrs))
-         (assert (= (buddy-free-amount buddy) (* 1024 1024))))
+         (unless (= (buddy-free-amount buddy) heap-size)
+           (buddy-dump buddy)
+           (error 'random-test "buddy-free-amount is wrong" (buddy-free-amount buddy) heap-size)))
       (cond ((and (eqv? 0 (fxand (random-u32) 15))
                   (not (eqv? 0 (hashtable-size addrs))))
              ;; Free a random address
@@ -210,17 +210,19 @@
                (hashtable-delete! addrs addr)
                (buddy-free! buddy addr)))
             (else
-             (let* ((size (fxmod (random-u32) (* 1024 1024)))
+             (let* ((size (fxmod (random-u32) heap-size))
                     (addr (buddy-allocate! buddy size)))
                (when addr
                  (when (hashtable-contains? addrs addr)
+                   (buddy-dump buddy)
                    (error 'single-size-test "Address returned twice" buddy addr))
                  (do ((i 0 (fx+ i 4))
                       (addr addr (fx+ addr 4)))
                      ((fx>=? i size))
                    (put-mem-u32 addr #xdeadbeef))
                  (hashtable-set! addrs addr #t)))))))
-  (print (list 'random-test lowest-order))
+  (buddy-dump buddy)
+  (print (list 'random-test lowest-order iterations heap-size))
   (test)
   (hashtable-clear! addrs)
   (test)
@@ -229,6 +231,21 @@
   (hashtable-clear! addrs)
   (test))
 
-(random-test 5)
-(random-test 12)
+(random-test testaddr 5 1000 (* 1024 1024))
+(random-test testaddr 12 2000 (* 1024 1024))
+
+(for-each (lambda (heap-size)
+            (let ((addr (sys_mmap 0 heap-size
+                                  (fxior PROT_READ PROT_WRITE)
+                                  (fxior MAP_PRIVATE MAP_ANONYMOUS)
+                                  -1 0)))
+              (random-test addr 12 500 heap-size)
+              (sys_munmap addr heap-size)))
+          (list (* 1023 1024)
+                (* 4 1024 1024)
+                1234567
+                123456
+                12345
+                4097))
+
 (print "Random test passed")

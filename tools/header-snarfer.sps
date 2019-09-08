@@ -57,6 +57,7 @@
     __NR_mkdirat
     __NR_mknodat
     __NR_mmap
+    __NR_munmap
     __NR_open
     __NR_pipe2
     __NR_preadv

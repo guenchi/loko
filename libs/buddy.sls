@@ -92,7 +92,6 @@
 
 (define-record-type buddy
   (sealed #t)
-  ;; (opaque #t)
   (fields
    ;; The start address of this buddy allocator
    start-address
@@ -102,36 +101,52 @@
    highest-order
    ;; Heads of doubly-linked lists
    avail
-   ;; One TAG byte per block (TAG = 1 means available)
+   ;; One KVAL + TAG byte per block (TAG = 1 means available)
    tags
+   ;; Total capacity
+   size
    ;; Amount free
    (mutable free))
   (protocol
    (lambda (new)
      (lambda (start-address size lowest-order)
-       (unless (zero? (bitwise-and size (- size 1)))
-         (assertion-violation 'buddy "Expected a power-of-two size as the second argument"
-                              start-address size lowest-order))
-       (assert (fx<=? 5 lowest-order 40))
-       (let* ((highest-order (fxfirst-bit-set size))
-              (avail (make-vector (fx+ highest-order 1) #f))
-              (tags (make-bytevector (fxarithmetic-shift-right size lowest-order) 1))
-              (buddy (new start-address lowest-order highest-order avail tags size)))
-         (avail-ptr-set! buddy highest-order start-address)
-         (availf-set! buddy highest-order start-address)
-         (availb-set! buddy highest-order start-address)
-         (tag/k-set! buddy (address->index buddy start-address) 1 highest-order)
-         buddy)))))
+       (assert (fx<=? 4 lowest-order 40))
+       ;; size is rounded down to the closest block multiple
+       (let* ((smallest-block-size (fxarithmetic-shift-left 1 lowest-order))
+              (size (fxand size (fxnot (fx- smallest-block-size 1)))))
+         (unless (fxpositive? size)
+           (assertion-violation 'make-buddy
+                                "Expected space for at least one block"
+                                start-address size lowest-order))
+         (let* ((highest-order (let ((h (fxlength (fx- size 1))))
+                                 (if (fx<? size (fxarithmetic-shift-left 1 h))
+                                     (- h 1)
+                                     h)))
+                (avail (make-vector (fx+ highest-order 1) #f))
+                (tags (make-bytevector (fxarithmetic-shift-right size lowest-order) 1))
+                (buddy (new start-address lowest-order highest-order avail tags size size)))
+           (let lp ((order highest-order) (rem-size size) (address start-address) (avail 0))
+             (cond
+               ((eqv? rem-size 0)
+                (assert (fx=? avail size)))
+               ((fx<? rem-size (fxarithmetic-shift-left 1 order))
+                (lp (fx- order 1) rem-size address avail))
+               (else
+                (avail-ptr-set! buddy order address)
+                (availf-set! buddy order address)
+                (availb-set! buddy order address)
+                (tag/k-set! buddy (address->index buddy address) 1 order)
+                (let ((order-size (fxarithmetic-shift-left 1 order)))
+                  (lp (fx- order 1)
+                      (fx- rem-size order-size)
+                      (fx+ address order-size)
+                      (fx+ avail order-size))))))
+           buddy))))))
 
 (define (buddy-block-size buddy)
   (fxarithmetic-shift-left 1 (buddy-lowest-order buddy)))
 
-(define (buddy-size buddy)
-  (fxarithmetic-shift-left 1 (buddy-highest-order buddy)))
-
 ;;; Algorithms to reserve and liberate memory
-
-(define (print . x) (for-each display x) (newline))
 
 (define (next-power-of-2 n)
   (fxarithmetic-shift-left 1 (fxlength (fx- n 1))))
@@ -202,7 +217,7 @@
           (m (buddy-highest-order buddy))
           (M (fx+ start size)))
       ;; FIXME: validate the lower bits
-      (unless (fx<=? start addr (fx- M block-size))
+      (unless (fx<=? start addr M)
         (assertion-violation 'buddy-free! "The address does not belong to this buddy allocator"
                              buddy addr))
       (unless (eqv? 0 (tag-ref buddy (address->index buddy addr)))
@@ -217,9 +232,9 @@
                  (P-idx (address->index buddy P)))
             ;;(print "Buddy to " (list (address->index buddy L) k) " is at " (list P-idx k))
             (cond ((or (fx=? k m)
-                       (let* ((P-tag (tag-ref buddy P-idx))
-                              (P-tag (if (fx>=? P (fx- M (fxarithmetic-shift-left 1 k)))
-                                         0 P-tag)))
+                       (let ((P-tag (if (fx>=? P (fx- M (fxarithmetic-shift-left 1 k)))
+                                        0
+                                        (tag-ref buddy P-idx))))
                          ;;(print "TAG(P)=" P-tag)
                          (or (eqv? 0 P-tag)
                              (not (fx=? (k-ref buddy P-idx) k)))))
@@ -260,6 +275,8 @@
                    (lp (fxmin L P) (fx+ k 1))))))))))
 
 ;;; Bonus material
+
+(define (print . x) (for-each display x) (newline))
 
 (define (dump-list buddy L)
   (define (pinfo addr)
@@ -306,6 +323,8 @@
 (define (buddy-dump buddy)
   (let ((n (buddy-lowest-order buddy))
         (m (buddy-highest-order buddy)))
+    (print "Buddy allocator of orders " n "-" m
+           " with " (buddy-free buddy) " free space")
     (do ((k m (fx- k 1)))
         ((fx<? k n))
       (print k " " (fxarithmetic-shift-left 1 k))

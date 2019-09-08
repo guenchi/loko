@@ -68,6 +68,7 @@
     sys_mkdirat
     sys_mknodat
     sys_mmap
+    sys_munmap
     sys_open
     sys_pipe2
     sys_read
@@ -230,6 +231,7 @@
 (define-syscall (mkdirat dfd *pathname mode))
 (define-syscall (mknodat dfd *pathname mode dev))
 (define-syscall (mmap addr length prot flags fd offset))
+(define-syscall (munmap addr length))
 (define-syscall (open *pathname flags mode))
 (define-syscall (pipe2 *filedes flags))
 (define-syscall (preadv fd *vec vlen pos_l pos_h))
