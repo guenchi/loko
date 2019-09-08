@@ -1141,6 +1141,7 @@
     (stack-trace              $host)
 
     (dma-allocate             $host)
+    (dma-free                 $host)
     (enable-irq               $host)
     (acknowledge-irq          $host)
     (wait-irq-operation       $host)

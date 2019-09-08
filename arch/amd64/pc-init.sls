@@ -44,6 +44,7 @@
     (only (loko libs context) CPU-VECTOR:SCHEDULER-SP CPU-VECTOR:LAST-INTERRUPT-VECTOR)
     (only (loko libs io) $init-standard-ports)
     (only (loko libs control) print-condition)
+    (loko libs buddy)
     (loko system $x86)
     (loko system $host)
     (loko system $primitives))
@@ -499,7 +500,7 @@
   (div (* t (expt 10 9)) cpu-freq))
 
 ;; Pid 0 for Loko on PC
-(define (pc-scheduler cpu-freq interval dma-allocate)
+(define (pc-scheduler cpu-freq interval dma-allocate dma-free)
   ;; FIXME: passing in dma-allocate here is ugly.
   (define DEBUG #f)
   (define *runq* #f)
@@ -658,6 +659,14 @@
                     (pcb-msg-set! pcb 'ok)))
                  (else
                   (pcb-msg-set! pcb #f)))))
+        ((free)
+         (let ((addr (vector-ref msg 1)))
+           ;; Allocate a consecutive memory region.
+           (cond ((dma-free addr) =>
+                  (lambda (addr)
+                    (pcb-msg-set! pcb 'ok)))
+                 (else
+                  (pcb-msg-set! pcb #f)))))
 
         ;;; IRQs
         ((enable-irq)
@@ -796,7 +805,7 @@
     (define M (* k 1024))
     (define G (* M 1024))
     (define T (* G 1024))
-    (let ((x (div x 8)))
+    (let ((x (fxdiv x 8)))
       (cond ((> x (* 10 T)) (string-append (number->string (div x T)) "TQ"))
             ((> x (* 10 G)) (string-append (number->string (div x G)) "GQ"))
             ((> x (* 10 M)) (string-append (number->string (div x M)) "MQ"))
@@ -1108,23 +1117,19 @@
                                        (and (entry-present? pte)
                                             (fxior (fxand addr (- (expt 2 VIRTUAL-PT) 1))
                                                    (pte-address pte)))))))))))))))
-
-  (define *available* '())
+  (define *buddies* '())
   (define (get-4K-zero-page)
-    ;; XXX: this must return identity-mapped memory because it's used
-    ;; to populate the page tables. FIXME: This eats up all the low
-    ;; memory.
-    (if (null? *available*)
-        (error 'get-4K-zero-page "TODO: no available pages")
-        (let* ((a (car *available*))
-               (page (area-base a))
-               (nbase (fx+ page 4096)))
-          (if (fx=? nbase (area-top a))
-              (set! *available* (cdr *available*))
-              (set-area-base! a nbase))
-          ;; TODO: the page should have been cleared already
-          (clear-page page)
-          page)))
+    ;; XXX: Must return identity-mapped memory because it's used to
+    ;; populate the page tables.
+    (let lp ((buddies *buddies*))
+      (cond ((null? buddies)
+             (error 'get-4K-zero-page "Out of memory" *buddies*))
+            ((buddy-allocate! (car buddies) 4096) =>
+             (lambda (page)
+               (clear-page page)
+               page))
+            (else
+             (lp (cdr buddies))))))
   ;; Create virtual memory mapping for the addresses from start to
   ;; start+len-1. Does not remove/overwrite existing mappings.
   (define (longmode-mmap start* len type)
@@ -1193,33 +1198,42 @@
     ;; TODO: unmap and invalidate tlb
     #f)
 
+  ;; Allocate *size* bytes for DMA, with the requirement that only the
+  ;; bits in mask can be 1s
   (define (pc-dma-allocate size mask)
-    ;; TODO: more than one page, natural alignment, move other pages
-    ;; if none are free, have get-4K-zero-page allocate >4GB pages
-    ;; before using low pages. FIXME: This only looks at the first
-    ;; area.
-    (assert (eqv? size 4096))
-    ;; (print "DMA allocate: " (list 'size size 'mask mask '*available* *available*))
-    (if (null? *available*)
-        #f
-        (let* ((a (car *available*))
-               (page (area-base a))
-               (nbase (fx+ page 4096)))
-          (cond
-            ((fx=? (fxand page mask) page)
-             (if (fx=? nbase (area-top a))
-                 (set! *available* (cdr *available*))
-                 (set-area-base! a nbase))
-             ;; TODO: the page should have been cleared already
-             (clear-page page)
-             ;; (print "dma allocated " (fmt-addr page))
-             (longmode-mmap page 4096 'identity)
-             ;; XXX: I got lazy and these two values now have to be
-             ;; the same.
-             page)
-            (else
-             ;; (print "no physical pages with the requested mask are available")
-             #f)))))
+    ;; (print "DMA allocate: " (list 'size size 'mask mask))
+    (let lp ((buddies *buddies*))
+      (if (null? buddies)
+          #f
+          (let ((buddy (car buddies)))
+            (let* ((start (buddy-start-address buddy))
+                   (end (fx+ start (buddy-capacity buddy))))
+              (cond
+                ((not (and (fx=? start (fxand start mask))
+                           (fx=? end (fxand end mask))))
+                 ;; The wrong bits are set
+                 (lp (cdr buddies)))
+                ((buddy-allocate! buddy size) =>
+                 (lambda (addr)
+                   ;; FIXME: clear the memory
+                   '(clear-page addr)
+                   addr))
+                (else
+                 (lp (cdr buddies)))))))))
+
+  (define (pc-dma-free addr)
+    ;; (print "DMA free: " addr)
+    (let lp ((buddies *buddies*))
+      (if (null? buddies)
+          #f
+          (let ((buddy (car buddies)))
+            (let* ((start (buddy-start-address buddy))
+                   (end (fx+ start (buddy-capacity buddy))))
+              (cond
+                ((and (fx<=? start addr end))
+                 (buddy-free! buddy addr))
+                (else
+                 (lp (cdr buddies)))))))))
 
   ;; (print-full-table)
 
@@ -1327,17 +1341,35 @@
             (list-sort (lambda (a b)
                          (< (area-base a) (area-base b)))
                        areas))
-  (let ((usable (find-usable areas)))
+  ;; Put 1MB last, 1MB-4GB second, 4GB+ last. Only the first 4GB is
+  ;; identity mapped when we get here from the boot loader, so that
+  ;; memory is needed for page table. And it's better to not waste the
+  ;; first 1MB, since some hardware needs that memory.
+  (let ((usable (list-sort (lambda (a b)
+                             (let ((a (area-top a))
+                                   (b (area-top b)))
+                               (cond ((fx<? a (* 1024 1024)) #f)
+                                     ((fx<? b (* 1024 1024)) #t)
+                                     (else
+                                      (fx<? a b)))))
+                           (find-usable areas))))
     (print "Usable areas:")
     (for-each print-area usable)
-    (set! *available* usable)
     (print "Usable RAM: "
            (fmt-quantums
             (fold-left (lambda (acc area)
                          (+ acc (- (area-top area) (area-base area))))
                        0 usable)))
+    ;; Make buddy allocators for all usable regions.
+    (set! *buddies*
+          (map (lambda (area)
+                 (make-buddy (area-base area)
+                             (- (area-top area) (area-base area))
+                             12))
+               usable))
+    ;; Identity-map all RAM. Only the first 4GB is identity-mapped
+    ;; initially.
     (for-each (lambda (base top)
-                ;; Only the first 4GB is identity-mapped initially.
                 (when (or (> base (* 4 1024 1024 1024))
                           (> top (* 4 1024 1024 1024)))
                   (longmode-mmap base (fx- top base) 'identity)))
@@ -1393,7 +1425,9 @@
       (write-timer-divide apic-divisor)
 
       (print "Booting application processors...")
-      (let ([temp-page (pc-dma-allocate 4096 #x000ff000)])
+      ;; XXX: The page is hardcoded to #x3000 now due to a bug in
+      ;; machine-code's 16-bit mode support
+      (let ([temp-page #x3000 #; (pc-dma-allocate 4096 #x000ff000)])
         (define (busywait seconds)
           (let* ((start (rdtsc))
                  (target (+ start (nanoseconds->TSC cpu-freq (* seconds #e1e9)))))
@@ -1402,12 +1436,12 @@
                 (unless (and (> current start)
                              (> current target))
                   (lp))))))
-        ;; TODO: after this, when all CPUs have booted, free the page
         (print "AP boot page: #x" (and temp-page (number->string temp-page 16)))
         (when temp-page
           (boot-application-processors temp-page APIC:ICR-low busywait))
         (newline)
-        (pc-scheduler cpu-freq interval pc-dma-allocate)))))
+        #;(pc-dma-free temp-page)
+        (pc-scheduler cpu-freq interval pc-dma-allocate pc-dma-free)))))
 
 (when (eq? ($boot-loader-type) 'multiboot)
   (init-set! 'init pc-init)))

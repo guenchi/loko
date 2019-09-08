@@ -31,7 +31,9 @@
 (library (loko libs buddy)
   (export
     make-buddy buddy-allocate! buddy-free!
-    (rename (buddy-free buddy-free-amount))
+    buddy-start-address
+    (rename (buddy-free buddy-free-amount)
+            (buddy-size buddy-capacity))
     buddy-dump)
   (import
     (rnrs (6))

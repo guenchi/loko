@@ -32,7 +32,6 @@
     open-file-input/output-port
     open-i/o-poller
     $mmap
-    dma-allocate
     machine-type
     set-file-mode
     init
@@ -152,12 +151,6 @@
 (define ($mmap start len type)
   (*mmap* start len type))
 
-(define *dma-allocate*
-  (lambda _ (error 'dma-allocate "No dma-allocate procedure installed")))
-(define (dma-allocate size mask)
-  ;; DMA memory allocation.
-  (*dma-allocate* size mask))
-
 ;; chmod
 (define *set-file-mode*
   (lambda _
@@ -189,7 +182,6 @@
     ((open-file-input-port) (set! *open-file-input-port* value))
     ((open-file-output-port) (set! *open-file-output-port* value))
     ((open-i/o-poller) (set! *open-i/o-poller* value))
-    ((dma-allocate) (set! *dma-allocate* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
     ((set-file-mode) (set! *set-file-mode* value))

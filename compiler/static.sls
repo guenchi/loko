@@ -132,6 +132,7 @@
                            "loko/arch/amd64/pc-start")
                          '())
                    "loko/arch/amd64/pc-ap-boot"
+                   "loko/libs/buddy"
                    "loko/arch/amd64/pc-init")
                  '())
            ,@(if (memq target-kernel '(linux loko+linux))
