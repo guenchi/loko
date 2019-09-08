@@ -353,7 +353,7 @@ class LokoUnwinder(Unwinder):
             if not self.have_warned:
                 print("Warning: loko-gdb.py is using a hardcoded value")
                 self.have_warned = True
-            table = gdb.Value(0x47b000).cast(gdb.lookup_type('unsigned long').pointer())
+            table = gdb.Value(0x489000).cast(gdb.lookup_type('unsigned long').pointer())
         #print('table', table)
 
         # Skip over the locals (unwind)

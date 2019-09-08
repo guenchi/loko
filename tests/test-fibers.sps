@@ -1,3 +1,4 @@
+#!/usr/bin/env -S loko --program
 ;; -*- mode: scheme; coding: utf-8 -*-
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 ;; Loko Scheme - an R6RS Scheme compiler
