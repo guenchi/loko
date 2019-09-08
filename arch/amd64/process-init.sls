@@ -742,6 +742,9 @@
                             (condition (make-syscall-error 'write errno)
                                        (make-irritants-condition
                                         (list fd 'bv start count))))))))))
+  (define (linux-set-file-mode fn mode)
+    (let ((path (filename->c-string 'set-file-mode fn)))
+      (sys_chmod (bytevector-address path) #o755)))
   ;; XXX: Potential trouble here: https://cr.yp.to/unix/nonblock.html
   (define (set-fd-nonblocking fd)
     (let ((prev (sys_fcntl fd F_GETFL 0)))
@@ -766,6 +769,7 @@
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
   (init-set! 'open-i/o-poller linux-open-i/o-poller)
+  (init-set! 'set-file-mode linux-set-file-mode)
   (time-init-set! 'cumulative-process-time
                   (lambda () (linux-get-time CLOCK_THREAD_CPUTIME_ID)))
   (time-init-set! 'cumulative-process-time-resolution

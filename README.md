@@ -73,8 +73,7 @@ loko --compile hello.sps --output hello
 Libraries are looked up from the `LOKO_LIBRARY_PATH` environment
 variable (which is automatically set by Akku).
 
-**Note**: Currently you need to do chmod +x hello yourself and the
-command line is very inflexible.
+**Note**: The command line is very inflexible.
 
 **Note**: Loko integrates its run-time into the resulting binary and
 Loko's source code needs to be available for compilation to succeed.

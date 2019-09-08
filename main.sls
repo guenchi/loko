@@ -28,7 +28,7 @@
     (rnrs (6))
     (rnrs mutable-strings (6))
     (only (loko) compile-program)
-    (only (loko init) init-set! init-get)
+    (only (loko init) init-set! set-file-mode)
     (only (loko repl) banner repl)
     (only (loko config) config-library-path)
     (only (psyntax expander) compile-r6rs-top-level)
@@ -113,7 +113,8 @@
      (flush-output-port (current-output-port))
      (exit 0)]
     [(exec-name "--compile" sps-fn "--output" out-fn)
-     (compile-program out-fn sps-fn '())]
+     (compile-program out-fn sps-fn '())
+     (set-file-mode out-fn #x755)]
     [(exec-name)
      (banner)
      (repl)

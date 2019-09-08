@@ -34,9 +34,9 @@
     $mmap
     dma-allocate
     machine-type
+    set-file-mode
     init
-    init-set!
-    init-get)
+    init-set!)
   (import
     (except (rnrs) command-line exit
             file-exists? delete-file
@@ -158,6 +158,16 @@
   ;; DMA memory allocation.
   (*dma-allocate* size mask))
 
+;; chmod
+(define *set-file-mode*
+  (lambda _
+    (raise (condition
+            (make-warning)
+            (make-who-condition 'set-file-mode)
+            (make-message-condition "No set-file-mode procedure installed")))))
+(define (set-file-mode filename mask)
+  (*set-file-mode* filename mask))
+
 (define *init*
   (lambda _ (error 'start "No start procedure installed")))
 (define (init)
@@ -182,11 +192,6 @@
     ((dma-allocate) (set! *dma-allocate* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
+    ((set-file-mode) (set! *set-file-mode* value))
     (else
-     (error 'init-set! "Unrecognized key" what value))))
-
-(define (init-get what)
-  (case what
-    ((exit) *exit*)
-    (else
-     (error 'init-get "Unrecognized key" what)))))
+     (error 'init-set! "Unrecognized key" what value)))))

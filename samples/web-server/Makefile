@@ -14,7 +14,6 @@ all: $(PROGRAM)
 
 $(PROGRAM): $(PROGRAM).sps $(LOKO) .akku/env
 	LOKO_SOURCE=$(LOKO_SOURCE) .akku/env $(LOKO) --compile $< --output $@
-	chmod +x $@
 
 run: $(PROGRAM)
 	./$(PROGRAM)
