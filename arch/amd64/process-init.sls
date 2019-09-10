@@ -145,6 +145,8 @@
 
 (define (enable-irq irq)
   (assert (fx<=? 0 irq 15))
+  (unless (vector-ref *interrupt-cvars* irq)
+    (vector-set! *interrupt-cvars* irq (make-cvar)))
   ($process-yield `#(enable-irq ,irq)))
 
 (define (acknowledge-irq irq)
@@ -303,6 +305,7 @@
 
 (define (pc-com0-setup)
   ;; Start standard input/output on COM1
+  (define debugcon #xe9)
   (define com1 #x3f8)
   (define com1-irq 4)
   (define com2 #x2f8)
@@ -321,7 +324,12 @@
                         (i start (fx+ i 1)))
                        ((fx=? i end) count)
                      ;; TODO: Send all bytes in one put
-                     (put-message write-ch (bytevector-u8-ref bv i))))))
+                     (put-message write-ch (bytevector-u8-ref bv i)))))
+          (debug-write (lambda (bv start count)
+                         (do ((end (fx+ start count))
+                              (i start (fx+ i 1)))
+                             ((fx=? i end) count)
+                           (put-i/o-u8 debugcon (bytevector-u8-ref bv i))))))
       ($init-standard-ports read write write (eol-style crlf)))))
 
 ;; Hook up a minimal /boot filesystem consisting of the multiboot

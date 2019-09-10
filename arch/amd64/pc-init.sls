@@ -547,7 +547,8 @@
                  (when DEBUG
                    (write (list 'irq vec))
                    (newline))
-                 (pcb-enqueue-message! pcb (fx- vec PIC1-vector-offset))))
+                 (let ((irq (fx- vec PIC1-vector-offset)))
+                   (pcb-enqueue-message! pcb irq))))
               ((eqv? vec APIC-vector-spurious)
                ;; XXX: if the spurious interrupts come
                ;; without end, then probably an
