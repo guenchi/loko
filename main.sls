@@ -30,11 +30,8 @@
     (only (loko) compile-program)
     (only (loko init) init-set! set-file-mode)
     (only (loko repl) banner repl)
-    (only (loko config) config-library-path)
     (only (psyntax expander) compile-r6rs-top-level)
     (only (loko libs reader) read-annotated)
-    (srfi :98 os-environment-variables)
-    (only (psyntax library-manager) library-directories library-extensions)
     (loko libs fibers)
     (loko match))
 
@@ -69,32 +66,12 @@
     (and (>= strlen namelen)
          (string=? name (substring str (- strlen namelen) strlen)))))
 
-(define (string-split str c)
-  (let lp ((start 0) (end 0))
-    (cond ((fx=? end (string-length str))
-           (list (substring str start end)))
-          ((char=? c (string-ref str end))
-           (cons (substring str start end)
-                 (lp (fx+ end 1) (fx+ end 1))))
-          (else
-           (lp start (fx+ end 1))))))
-
 (define (main)
   ;; Sanity check
   (guard (exn (else #f))
     (let ((msg "warning: Read-only data is not being protected from writes.\n"))
       (string-set! msg 0 #\W)
       (display msg (current-error-port))))
-
-  ;; Read the environment
-  (library-extensions '(".loko.sls" ".sls" ".ss" ".scm"))
-  (cond
-    ((get-environment-variable "LOKO_LIBRARY_PATH") =>
-     (lambda (path)
-       (library-directories (append (string-split path #\:)
-                                    (config-library-path)))))
-    (else
-     (library-directories (cons "." (config-library-path)))))
 
   ;; Parse the command line
   (match (command-line)

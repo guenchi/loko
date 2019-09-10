@@ -22,12 +22,35 @@
 (library (loko start)
   (export)
   (import
-    (only (rnrs) call/cc lambda exit)
+    (rnrs (6))
     (only (loko libs fibers) run-fibers)
-    (only (loko init) init))
+    (only (loko init) init)
+    (srfi :98 os-environment-variables)
+    (only (loko config) config-library-path)
+    (only (psyntax library-manager) library-directories library-extensions))
+
+(define (string-split str c)
+  (let lp ((start 0) (end 0))
+    (cond ((fx=? end (string-length str))
+           (list (substring str start end)))
+          ((char=? c (string-ref str end))
+           (cons (substring str start end)
+                 (lp (fx+ end 1) (fx+ end 1))))
+          (else
+           (lp start (fx+ end 1))))))
 
 ;; Call the init code from pc-init, linux-init or process-init.
 (init)
+
+;; Read the environment
+(library-extensions '(".loko.sls" ".sls" ".ss" ".scm"))
+(cond
+  ((get-environment-variable "LOKO_LIBRARY_PATH") =>
+   (lambda (path)
+     (library-directories (append (string-split path #\:)
+                                  (config-library-path)))))
+  (else
+   (library-directories (cons "." (config-library-path)))))
 
 ;; Ensure that everything from here on (the rest of the libraries and
 ;; the top-level) runs with a fiber scheduler.
