@@ -153,7 +153,10 @@
             "loko/compiler"
             "loko/compiler/static")
           '())
-    "loko/start"))
+    "loko/start"
+    ,@(if (memq 'eval options)
+          '("loko/start-libman")
+          '())))
 
 ;; Get filenames from a subset of the libraries above here.
 (define (get-scheme-library-files library-dir target-cpu target-kernel options)
