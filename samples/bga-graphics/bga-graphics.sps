@@ -6,7 +6,9 @@
 
 (import
   (rnrs)
-  (loko system unsafe))
+  (loko system fibers)
+  (loko system unsafe)
+  (loko-drivers pci))
 
 ;;; Bochs Graphics Array
 
@@ -25,12 +27,6 @@
 (define VBE_DISPI_INDEX_VIRT_HEIGHT 7)
 (define VBE_DISPI_INDEX_X_OFFSET 8)
 (define VBE_DISPI_INDEX_Y_OFFSET 9)
-
-;; Linear address of the banked memory. If you want to use the linear
-;; framebuffer, you'll need to find the BAR in PCI configuration
-;; space.
-(define bank-address #xA0000)
-(define bank-length #x10000)
 
 ;; Write a BGA register
 (define (bga-write reg value)
@@ -54,12 +50,6 @@
                     (if enable-lfb? #x40 0)
                     (if clear-memory? 0 #x80))))
 
-(define current-bank #f)
-(define (bga-set-bank! n)
-  (unless (eqv? n current-bank)
-    (set! current-bank n)
-    (bga-write VBE_DISPI_INDEX_BANK n)))
-
 (display "Starting Bochs graphics\n")
 (unless (fx<=? #xB0C0 (bga-read VBE_DISPI_INDEX_ID) #xB0CF)
   (error 'bga "No Bochs graphics detected"))
@@ -67,16 +57,29 @@
 (define w 640)
 (define h 480)
 
-(bga-set-mode w h 32 #f #t)
-(bga-set-bank! 0)
+(bga-set-mode w h 32 #t #t)
+
+(define framebuffer
+  (let lp ((devs (pci-scan-bus #f)))
+    (when (null? devs)
+      (error 'bga-graphics "Could not find Bochs graphics"))
+    (let ((dev (car devs)))
+      (cond
+        ;; Magic numbers for the Bochs graphics
+        ((and (eqv? (pcidev-vendor-id dev) #x1234)
+              (eqv? (pcidev-device-id dev) #x1111)
+              (eqv? (pci-get-u16 dev PCI-CFG-00-SUBSYSTEM-VENDOR-ID) #x1af4)
+              (eqv? (pci-get-u16 dev PCI-CFG-00-SUBSYSTEM-ID) #x1100))
+         ;; BAR 0 is the framebuffer
+         (pcibar-base (vector-ref (pcidev-BARs dev) 0)))
+        (else
+         (lp (cdr devs)))))))
 
 ;;; Pixel drawing
 
 (define (set-pixel x y c)
-  (let ((pixel (fx* (fx+ x (fx* y w)) 4)))
-    (let-values ([(bank offset) (fxdiv-and-mod pixel bank-length)])
-      (bga-set-bank! bank)
-      (put-mem-u32 (fx+ bank-address offset) c))))
+  (let ((offset (fx* (fx+ x (fx* y w)) 4)))
+    (put-mem-u32 (fx+ framebuffer offset) c)))
 
 ;;; Color space
 

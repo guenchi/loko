@@ -9,8 +9,11 @@ PROGRAM := bga-graphics
 
 all: $(PROGRAM)
 
-$(PROGRAM): $(PROGRAM).sps $(LOKO)
-	LOKO_SOURCE=$(LOKO_SOURCE) $(LOKO) --compile $< --output $@
+.akku/env:
+	akku install
+
+$(PROGRAM): $(PROGRAM).sps $(LOKO) .akku/env
+	LOKO_SOURCE=$(LOKO_SOURCE) .akku/env $(LOKO) --compile $< --output $@
 
 run: $(PROGRAM)
 	qemu-system-x86_64 -enable-kvm -kernel $(PROGRAM) -m 1024 -serial stdio -debugcon vc \

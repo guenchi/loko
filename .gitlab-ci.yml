@@ -50,7 +50,7 @@ test:
     - .akku/env ./loko.out --program tests/test-fibers.sps
     - LOKO_SOURCE=.akku/lib .akku/env ./loko.out --compile tests/test-buddy.sps --output tests/test-buddy
     - tests/test-buddy
-    - (cd samples/bga-graphics; make LOKO=../../loko.out)
+    - make -C samples/bga-graphics LOKO=../../loko.out
   artifacts:
     paths:
       - loko.out
