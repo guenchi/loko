@@ -12,33 +12,37 @@ language.
 
 * Most of R6RS Scheme is present and accounted for.
 * Most SRFIs in [chez-srfi][chez-srfi] are supported.
+* Supports non-blocking I/O with lightweight concurrency.
 * Memory management is limited. The Linux target makes at most 1 GB
   available (hard coded limit, will be fixed some day).
-* Very few Linux system calls are implemented. Basic I/O works, but
-  may have horrible bugs and is fully blocking.
 * There is no test suite.
 
  [chez-srfi]: https://akkuscm.org/packages/chez-srfi/
 
-## Building on GNU/Linux
+The packages in [Akku](https://akkuscm.org) should be working, but
+Loko is still very new and needs to be battle tested.
 
-Install the package manager [Akku.scm](https://akkuscm.org) and then
-run `make` followed by `make install`.
+## Getting Loko running
 
-Alternatively get the pre-compiled `loko` binary from the CI system or
-use the Docker base image [weinholt/loko:base][docker]: `docker run
---rm -it weinholt/loko:base`. The image akkuscm/akku:loko is also
-available and comes with Debian GNU/Linux and Akku pre-installed.
+Loko can currently be bootstrapped with Chez Scheme and depends on
+some packages from Akku. Follow these steps to compile Loko:
+
+* Install the package manager [Akku.scm](https://akkuscm.org)
+* Run `make` to compile Loko
+* Install with `make install`
+
+Once Loko is bootstrapped you can optionally build it with itself
+using `make selfcompile`.
+
+Alternatively, get the pre-compiled `loko` binary from the GitLab CI
+system.
+
+Another option is the Docker base image [weinholt/loko:base][docker]:
+`docker run --rm -it weinholt/loko:base`. The image akkuscm/akku:loko
+is also available and comes with Debian GNU/Linux and Akku
+pre-installed.
 
  [docker]: https://cloud.docker.com/u/weinholt/repository/docker/weinholt/loko
-
-## Building with Loko
-
-Loko can compile itself:
-
-```
-.akku/env ./loko --program compile-loko.sps
-```
 
 ## Running on the Linux kernel
 
@@ -60,6 +64,16 @@ works as an inferior Scheme for Emacs):
 qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
 ```
 
+There are these additional options you can try:
+
+* Get debug output from the scheduler in a special window in QEMU:
+  `-debugcon vc`.
+* Add files to `/boot` using `-initrd filename`.
+* Set environment variables with e.g. `-append
+  LOKO_LIBRARY_PATH=/boot`.
+* Pass command line arguments in `-append` by adding them after `--`,
+  e.g. `-append VAR=abc -- --program foo.sps`.
+
 See the [samples](samples) directory for more examples.
 
 ## Compiling a program
@@ -71,7 +85,13 @@ loko --compile hello.sps --output hello
 ```
 
 Libraries are looked up from the `LOKO_LIBRARY_PATH` environment
-variable (which is automatically set by Akku).
+variable (which is automatically set by Akku). The use of `eval` is
+disabled by default to speed up builds, but can be enabled with
+`-feval`:
+
+```sh
+loko -feval --compile hello.sps --output hello
+```
 
 **Note**: The command line is very inflexible.
 

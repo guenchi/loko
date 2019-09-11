@@ -24,6 +24,12 @@ loko: .akku/env
 	if [ -f loko ]; then mv -f loko loko.old; fi
 	mv -f loko.out loko
 
+selfcompile: .akku/env loko
+	LOKO_SOURCE=.akku/lib .akku/env ./loko --program compile-loko.sps
+	chmod +x loko.out
+	if [ -f loko ]; then mv -f loko loko.old; fi
+	mv -f loko.out loko
+
 scheme-script: loko
 	if [ -f scheme-script ]; then mv -f scheme-script scheme-script.old; fi
 	ln loko scheme-script
