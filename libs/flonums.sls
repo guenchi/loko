@@ -92,13 +92,13 @@
 (define (flodd? a)
   (if (flinteger? a)
       (let ((x (fl/ a 2.0)))
-        (not (fl=? a (fltruncate a))))
+        (not (fl=? x (fltruncate x))))
       (assertion-violation 'flodd? "Expected an integer" a)))
 
 (define (fleven? a)
   (if (flinteger? a)
       (let ((x (fl/ a 2.0)))
-        (fl=? a (fltruncate a)))
+        (fl=? x (fltruncate x)))
       (assertion-violation 'fleven? "Expected an integer" a)))
 
 (define (flfinite? a)
