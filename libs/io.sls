@@ -364,25 +364,42 @@
     ((bv)
      (open-bytevector-input-port bv #f))
     ((bv tc)
-     (define (read! bv start count) 0)
-     (define (port-position) 0)
-     (define (set-position! pos) #f)
+     (define pos 0)
+     (define (read! buf start count)
+       (let ((bv bv))
+         (let ((n (fxmin (fx- (bytevector-length bv) pos)
+                         count)))
+           (bytevector-copy! bv pos buf start n)
+           (set! pos (fx+ n pos))
+           n)))
+     (define (get-position) pos)
+     (define (set-position! new-pos) (set! pos new-pos))
+     (define (close)
+       (set! bv 'closed))
      (assert (bytevector? bv))
-     (let ((p (make-port "*bytevector*" #f #b10
-                         #f read! port-position set-position! #f #f #f
-                         bv 0 (bytevector-length bv) 0 #f
-                         'block)))
+     (let ((p (make-custom-binary-input-port
+               "*bytevector*" read! get-position set-position! close)))
        (if tc (transcoded-port p tc) p)))))
 
-(define (open-string-input-port string)
-  (define (read! str start count) 0)
-  (define (port-position) 0)
-  (define (set-position! pos) #f)
-  (assert (string? string))
-  (make-port "*string*" #f #b110
-             #f read! port-position set-position! #f #f #f
-             string 0 (string-length string) 0 #f
-             'block))
+(define (open-string-input-port str)
+  (define pos 0)
+  (define (read! buf start count)
+    (let* ((str str)
+           (n (fxmin (fx- (string-length str) pos)
+                     count)))
+      (do ((end (fx+ start n))
+           (i start (fx+ i 1))
+           (j pos (fx+ j 1)))
+          ((fx=? i end)
+           (set! pos (fx+ n pos))
+           n)
+        (string-set! buf i (string-ref str j)))))
+  (define (get-position) pos)
+  (define (set-position! new-pos) (set! pos new-pos))
+  (define (close)
+    (set! str 'closed))
+  (assert (string? str))
+  (make-custom-textual-input-port "*string*" read! get-position set-position! close))
 
 (define (make-custom-binary-input-port id read! get-position set-position! close)
   (assert (string? id))
@@ -395,7 +412,7 @@
   (assert (string? id))
   (make-port (string-copy id) #f #b110
              #f read! get-position set-position! close #f #f
-             (make-string 4096) 0 0 0 #f
+             (make-string 512) 0 0 0 #f
              'block))
 
 ;;; Binary input
