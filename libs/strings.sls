@@ -54,10 +54,12 @@
      (make-string len #\nul))
     ((len fill)
      (assert (and (fixnum? len) (not (fxnegative? len)) (char? fill)))
-     (let ((v ($make-string len)))
-       (unless (eqv? fill #\nul)
-         (string-fill! v fill))
-       v))))
+     (if (eqv? len 0)
+         ""
+         (let ((v ($make-string len)))
+           (unless (eqv? fill #\nul)
+             (string-fill! v fill))
+           v)))))
 
 (define (string . chars)
   (let ((len (length chars)))

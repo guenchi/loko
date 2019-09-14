@@ -43,7 +43,7 @@
      (if (eqv? n 0)
          '#()
          (let ((v ($make-vector n)))
-           (unless (eq? fill 0)
+           (unless (eqv? fill 0)
              (vector-fill! v fill))
            v)))))
 

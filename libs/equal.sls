@@ -27,15 +27,32 @@
     equal-hash)
   (import
     (except (rnrs) eq? eqv? equal? equal-hash)
-    (prefix (rnrs) sys:))
+    (prefix (rnrs) sys:)
+    (only (loko libs arithmetic) int? ratnum? compnum?))
 
 (define (eq? x y) (sys:eq? x y))
 
+(define (flsign n)
+  (define (sign bits)
+    (fxbit-field bits 31 32))
+  (let ((bits (let ((bv (make-bytevector 4)))
+                (bytevector-ieee-single-native-set! bv 0 n)
+                (bytevector-u32-native-ref bv 0))))
+    (sign bits)))
+
 (define (eqv? x y)
   (cond ((eq? x y))
+        ;; Exact numbers
         ((fixnum? x) (and (fixnum? y) (fx=? x y)))
-        ;; TODO: matching exactness when doing flonums
-        ((number? x) (and (number? y) (= x y)))
+        ((int? x) (and (int? y) (= x y)))
+        ;; Sometimes exact numbers
+        ((ratnum? x) (and (ratnum? y) (eq? (exact? x) (exact? y)) (= x y)))
+        ((compnum? x) (and (compnum? y) (eqv? (exact? x) (exact? y)) (= x y)))
+        ;; Inexact numbers
+        ((flonum? x)
+         (and (flonum? y)
+              (fx=? (flsign x) (flsign y))
+              (fl=? x y)))
         (else #f)))
 
 (define (equal? x y)
@@ -44,8 +61,6 @@
          (and (pair? y)
               (equal? (car x) (car y))
               (equal? (cdr x) (cdr y))))
-        ((number? x)
-         (and (number? y) (= x y)))
         ((string? x)
          (and (string? y) (string=? x y)))
         ((bytevector? x)
@@ -60,7 +75,7 @@
                                  (vector-ref y i))
                          (lp (fx+ i 1)))))))
         (else
-         (eq? x y))))
+         (eqv? x y))))
 
 (define (equal-hash x)
   ;; TODO: Do something better. Much better.

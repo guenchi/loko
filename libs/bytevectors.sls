@@ -113,10 +113,12 @@
     ((len) (make-bytevector len 0))
     ((len fill)
      (assert (fx>=? len 0))
-     (let ((bv ($make-bytevector len)))
-       (unless (eqv? fill 0)
-         (bytevector-fill! bv fill))
-       bv))))
+     (if (eqv? len 0)
+         #vu8()
+         (let ((bv ($make-bytevector len)))
+           (unless (eqv? fill 0)
+             (bytevector-fill! bv fill))
+           bv)))))
 
 (define (bytevector-length x) (sys:bytevector-length x))
 

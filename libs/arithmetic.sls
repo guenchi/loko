@@ -65,9 +65,10 @@
     number->string string->number
 
     $display-number                     ;for the printer
-    bitwise-lsr)
+    bitwise-lsr
+    ;; For (loko libs equal)
+    int? cmp= ratnum? compnum?)
   (import
-
     (except (rnrs)
             number? complex? real? rational? integer?
             real-valued? rational-valued? integer-valued?
@@ -868,10 +869,10 @@
   ;; Collect all number types here. Anything that this returns true
   ;; for must be handled by $display-number, too.
   (or (fixnum? obj)
+      (flonum? obj)
       (int? obj)
       (ratnum? obj)
-      (compnum? obj)
-      (flonum? obj)))
+      (compnum? obj)))
 
 (define (complex? obj)
   (or (real? obj) (compnum? obj)))
@@ -1040,9 +1041,10 @@
                (else (bad-args a b))))
         ((flonum? a)
          (cond ((flonum? b) (fl=? a b))
-               ((or (fixnum? b) (int? b) (ratnum? b) (compnum? b))
+               ((or (fixnum? b) (int? b) (ratnum? b))
                 (and (flfinite? a)
                      (fl=? a (inexact b))))
+               ((compnum? b) (= b a))
                (else (bad-args a b))))
         ((int? a)
          (cond ((fixnum? b) #f)
