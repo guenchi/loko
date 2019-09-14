@@ -99,26 +99,23 @@
           (immutable cmp)
           (immutable hash)
           (mutable mutable?)            ;#t or #f only
-          (immutable gc-sensitive?)))
-
-(define (hashtable-hash-function ht)
-  (and (not (hashtable-gc-sensitive? ht))
-       (hashtable-hash ht)))
+          (immutable gc-sensitive?)
+          (immutable hash-function)))
 
 (define make-eq-hashtable
   (case-lambda
-    (() (make-hashtable 0 0 #f eq? %eq-hash #t #t))
+    (() (make-hashtable 0 0 #f eq? %eq-hash #t #t #f))
     ((k) (make-eq-hashtable))))
 
 (define make-eqv-hashtable
   (case-lambda
-    (() (make-hashtable 0 0 #f eqv? %eqv-hash #t #t))
+    (() (make-hashtable 0 0 #f eqv? %eqv-hash #t #f #f))
     ((k) (make-eqv-hashtable))))
 
 (define make-general-hashtable
   (case-lambda
     ((hash-function equiv)
-     (make-hashtable 0 0 #f equiv hash-function #t #f))
+     (make-hashtable 0 0 #f equiv hash-function #t #f hash-function))
     ((hash-function equiv k)
      (make-general-hashtable hash-function equiv))))
 
@@ -174,6 +171,12 @@
       ($immsym? x)
       ($void? x)))
 
+(define (hashmod x len)
+  (if (fixnum? x)
+      (fxmod x len)
+      (fxmod (bitwise-and x (fx- (fxarithmetic-shift-left 1 (fxlength len)) 1))
+             len)))
+
 ;; This is invoked with the old vector and a new vector. It computes
 ;; new hashes for all the keys and inserts them in the new vector.
 (define (rehash! ht iteration ov nv)
@@ -203,7 +206,7 @@
                 (loop-vector (fx+ i 1) all-immobile)
                 (let* ((key (caar obucket))
                        (value (cdar obucket))
-                       (idx (fxmod (hash key) (vector-length nv))))
+                       (idx (hashmod (hash key) (vector-length nv))))
                   (vector-set! nv idx (cons (cons key value)
                                             (vector-ref nv idx)))
                   (loop-bucket (cdr obucket)
@@ -220,7 +223,7 @@
              (let* ((gc (hashtable-gc-count ht))
                     (hash (hashtable-hash ht))
                     (len (vector-length vals))
-                    (idx (fxmod (hash key) len))
+                    (idx (hashmod (hash key) len))
                     (bucket (vector-ref vals idx)))
                ;;(print "#;IDX " key " => " idx)
                (cond ((and gc (not (fx=? gc (garbage-collection-count))))
@@ -282,14 +285,13 @@
   (assert (hashtable-mutable? ht))
   (print "hashtable-update! " key " " proc " " default)
   (let lp ()
-    (let ((vals (hashtable-vals ht))
-          (cmp (hashtable-cmp ht)))
+    (let ((vals (hashtable-vals ht)))
       (cond ((vector? vals)
              (let* ((start-gc (garbage-collection-count))
                     (gc (hashtable-gc-count ht))
                     (hash (hashtable-hash ht))
                     (len (vector-length vals))
-                    (idx (fxmod (hash key) len))
+                    (idx (hashmod (hash key) len))
                     (bucket (vector-ref vals idx)))
                ;;(print "#;IDX " key " => " idx)
                (cond ((and gc (not (eq? gc (garbage-collection-count))))
@@ -353,7 +355,8 @@
                                    (hashtable-cmp ht)
                                    (hashtable-hash ht)
                                    #t   ;temporarily mutable
-                                   (hashtable-gc-sensitive? ht)))
+                                   (hashtable-gc-sensitive? ht)
+                                   (hashtable-hash-function ht)))
            (vals (hashtable-vals ht)))
        (cond ((vector? vals)
               (let ((b* vals))
