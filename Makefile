@@ -44,11 +44,15 @@ header-snarfer: header-snarfer.c
 arch/amd64/linux-numbers.sls: header-snarfer
 	./header-snarfer > arch/amd64/linux-numbers.sls
 
+samples:: loko
+	$(MAKE) -C samples
+
 clean:
 	rm -f header-snarfer.c header-snarfer
 	rm -f loko loko.out
 	rm -f scheme-script scheme-script.old
 	rm -f config.sls
+	$(MAKE) -C samples clean
 
 install: all
 	$(INSTALL) -m 0755 -d   $(DESTDIR)$(PREFIX)/bin
