@@ -1331,6 +1331,7 @@
 
   ;; BIOS data area + some extra for good measure, VGA, EBDA, ROMs.
   (mark-area 0 #x3000 'bios)
+  (mark-area #x3000 #x4000 'scratch)    ;scratch area for AP boot
   (mark-area #xA0000 #x20000 'vga)
   (mark-area #xC0000 #x40000 'bios)
 
