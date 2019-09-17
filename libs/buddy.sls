@@ -41,13 +41,31 @@
 
 ;;; Doubly-linked lists defined inside the free memory blocks
 
+(define harden #t)
+
 ;; Forward link
-(define (linkf-ref addr) (get-mem-s61 addr))
-(define (linkf-set! addr v) (put-mem-s61 addr v))
+(define (linkf-ref addr)
+  (let ((link (get-mem-s61 addr)))
+    (when harden
+      (unless (fx=? (get-mem-s61 (fx+ addr 8)) (fxnot link))
+        (error 'linkf-ref "Corrupt link" addr)))
+    link))
+(define (linkf-set! addr v)
+  (put-mem-s61 addr v)
+  (when harden
+    (put-mem-s61 (fx+ addr 8) (fxnot v))))
 
 ;; Backward link
-(define (linkb-ref addr) (get-mem-s61 (fx+ addr 8)))
-(define (linkb-set! addr v) (put-mem-s61 (fx+ addr 8) v))
+(define (linkb-ref addr)
+  (let ((link (get-mem-s61 (fx+ addr 16))))
+    (when harden
+      (unless (fx=? (get-mem-s61 (fx+ addr 24)) (fxnot link))
+        (error 'linkb-ref "Corrupt link" addr)))
+    link))
+(define (linkb-set! addr v)
+  (put-mem-s61 (fx+ addr 16) v)
+  (when harden
+    (put-mem-s61 (fx+ addr 24) (fxnot v))))
 
 ;;; Data structures in normal Scheme objects
 
