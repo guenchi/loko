@@ -9,9 +9,9 @@ My hope is that Loko will be run as an open community project. Think
 something like the Linux kernel project. Not just one person holds the
 copyright on Linux; thousands do.
 
-You can ask yourself "would Linus Torvalds accept this change?" If in
-doubt, just ask. But in general you can start hacking and make your
-mark on Loko.
+You can ask yourself "would the Linus Torvalds of the 1990s accept
+this change?" If in doubt, just ask. But in general you can start
+hacking and make your mark on Loko.
 
 Let us make Loko into the native homeworld of Scheme!
 

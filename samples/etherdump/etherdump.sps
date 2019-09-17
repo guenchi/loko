@@ -102,7 +102,7 @@
   (gotoxy 0 0)
   (text-color Yellow)
   (text-background Blue)
-  (print "etherdump.sps - rtl8139 ethernet packet printer demo")
+  (print "etherdump.sps - rtl8139 ethernet frame printer demo")
   (clreol)
 
   (gotoxy 0 (- (window-maxy) 1))

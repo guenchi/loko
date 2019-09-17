@@ -191,7 +191,7 @@
     (%label pde2) (%vu8 ,(make-pde (* 2 #x40000000)))
     (%label pde3) (%vu8 ,(make-pde (* 3 #x40000000)))
 
-    ;; ;; Page table (address bits 20-12), first 2MB only
+    ;; Page table (address bits 20-12), first 2MB only
     (%align 4096 0)
     (%label pte0) (%vu8 ,(make-first-2MB-pte))
 

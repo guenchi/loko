@@ -79,10 +79,11 @@
      (assvio "The given integer is not a Unicode scalar value"))
     (else #f)))
 
-(define (recover-memory-condition live-data inst rip category)
+(define (recover-memory-condition live-data inst rip category closure)
   ;; The given instruction has caused #AC/#GP/#SS. Try to find out
-  ;; what it was doing. TODO: when live-data is implemented it
-  ;; should be used to find the irritant
+  ;; what it was doing. TODO: use live-data to
+  ;; to find the irritants
+  ;; TODO: locate the source of the call
   (define (ret msg)
     (condition (make-assertion-violation)
                (make-message-condition msg)))
@@ -123,6 +124,14 @@
      (set disp))
     (('mov ('mem32+ r disp _) src)
      (set disp))
+    (((or 'call 'jmp) ('mem64+ 'r15 disp))
+     (and (equal? (disp->type disp) "procedure")
+          (condition
+           (make-assertion-violation)
+           (make-who-condition 'apply)
+           (make-message-condition "Tried to call a non-procedural object")
+           (make-irritants-condition (list closure))
+           (make-program-counter-condition rip))))
     (else #f)))
 
 ;; See invoke-error in (loko arch amd64 lib).
@@ -220,22 +229,13 @@
                          "The program has used an unsupported CPU instruction" inst)))))
       ;; Hardware triggered
       ((alignment noncanonical page-fault)
-       (cond ((procedure? closure)
-              (let ((inst (get-instruction)))
-                (return (or (and inst (recover-memory-condition #f inst rip category))
-                            (condition (make-assertion-violation)
-                                       (make-message-condition
-                                        "An unrecognized condition was detected by the hardware")
-                                       (make-irritants-condition (list inst))
-                                       (make-program-counter-condition rip))))))
-             (else
-              ;; TODO: locate the source of the call
-              (condition
-               (make-assertion-violation)
-               (make-who-condition 'apply)
-               (make-message-condition "A non-procedure object was called")
-               (make-irritants-condition (list closure))
-               (make-program-counter-condition rip)))))
+       (let ((inst (get-instruction)))
+         (return (or (and inst (recover-memory-condition #f inst rip category closure))
+                     (condition (make-assertion-violation)
+                                (make-message-condition
+                                 "An unrecognized condition was detected by the hardware")
+                                (make-irritants-condition (list inst))
+                                (make-program-counter-condition rip))))))
       ((accvio)
        ;; TODO
        (generic (make-error) "The hardware has detected an error" category))
