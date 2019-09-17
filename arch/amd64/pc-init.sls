@@ -63,6 +63,28 @@
        (newline (current-error-port))
        (values))]))
 
+(define (fmt-human-readable-bytes x)
+  (define k (* 1024))
+  (define M (* k 1024))
+  (define G (* M 1024))
+  (define T (* G 1024))
+  (string-append
+   (cond ((> x (* 10 T)) (string-append (number->string (div x T)) "TB"))
+         ((> x (* 10 G)) (string-append (number->string (div x G)) "GB"))
+         ((> x (* 10 M)) (string-append (number->string (div x M)) "MB"))
+         ((> x (* 10 k)) (string-append (number->string (div x k)) "kB"))
+         (else (string-append (number->string x) "B")))
+   "/"
+   ;; A quantum is Lisp data, such as a fixnum or a pointer to
+   ;; something. Defined in "Address/Memory Management For A Gigantic
+   ;; Lisp Environment or, GC Considered Harmful", Jon L White, 1980.
+   (let ((x (fxdiv x 8)))
+     (cond ((> x (* 10 T)) (string-append (number->string (div x T)) "TQ"))
+           ((> x (* 10 G)) (string-append (number->string (div x G)) "GQ"))
+           ((> x (* 10 M)) (string-append (number->string (div x M)) "MQ"))
+           ((> x (* 10 k)) (string-append (number->string (div x k)) "kQ"))
+           (else (string-append (number->string x) "Q"))))))
+
 ;; Loko syscalls
 (define (sys_hlt) (syscall -1))
 
@@ -797,21 +819,6 @@
     ;; Read a u64 from memory
     (bitwise-ior (get-mem-u32 a)
                  (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ a 4)) 32)))
-  (define (fmt-quantums x)
-    ;; Converts x (bytes) into quantums, with a suffix. A quantum is
-    ;; Lisp data, such as a fixnum or a pointer to something.
-    ;; Defined in "Address/Memory Management For A Gigantic Lisp
-    ;; Environment or, GC Considered Harmful", Jon L White, 1980.
-    (define k (* 1024))
-    (define M (* k 1024))
-    (define G (* M 1024))
-    (define T (* G 1024))
-    (let ((x (fxdiv x 8)))
-      (cond ((> x (* 10 T)) (string-append (number->string (div x T)) "TQ"))
-            ((> x (* 10 G)) (string-append (number->string (div x G)) "GQ"))
-            ((> x (* 10 M)) (string-append (number->string (div x M)) "MQ"))
-            ((> x (* 10 k)) (string-append (number->string (div x k)) "kQ"))
-            (else (string-append (number->string x) "Q")))))
   ;; Multiboot information structure
   (define flag-mem              #b000000000001)
   (define flag-boot-device      #b000000000010)
@@ -863,7 +870,7 @@
     (let ((i (area-info x)))
       (print " [" (fmt-addr (area-base x)) "," (fmt-addr (area-top x)) ") "
              ;; "(" (fxarithmetic-shift-right (fx- (area-top x) (area-base x)) 12) " pages) "
-             (fmt-quantums (fx- (area-top x) (area-base x)))
+             (fmt-human-readable-bytes (fx- (area-top x) (area-base x)))
              " {" (fmt-addr (info-start i)) "+" (fmt-addr (info-length i)) "}: "
              (info-type i))))
 
@@ -1216,8 +1223,15 @@
                  (lp (cdr buddies)))
                 ((buddy-allocate! buddy size) =>
                  (lambda (addr)
-                   ;; FIXME: clear the memory
-                   '(clear-page addr)
+                   #;
+                   (print "DMA: #x" (number->string addr 16) " - #x"
+                          (number->string (+ addr size) 16))
+                   ;; The buddy allocators have a lowest order of 12,
+                   ;; meaning they always allocate multiples of 4096.
+                   (do ((a addr (fx+ a 4096))
+                        (end (fx+ addr size)))
+                       ((fx>=? a end))
+                     (clear-page a))
                    addr))
                 (else
                  (lp (cdr buddies)))))))))
@@ -1331,7 +1345,7 @@
 
   ;; BIOS data area + some extra for good measure, VGA, EBDA, ROMs.
   (mark-area 0 #x3000 'bios)
-  (mark-area #x3000 #x4000 'scratch)    ;scratch area for AP boot
+  (mark-area #x3000 #x1000 'scratch)    ;scratch area for AP boot
   (mark-area #xA0000 #x20000 'vga)
   (mark-area #xC0000 #x40000 'bios)
 
@@ -1355,20 +1369,26 @@
                                      (else
                                       (fx<? a b)))))
                            (find-usable areas))))
-    (print "Usable areas:")
-    (for-each print-area usable)
-    (print "Usable RAM: "
-           (fmt-quantums
+    ;; (for-each print-area usable)
+    (print "Free RAM: "
+           (fmt-human-readable-bytes
             (fold-left (lambda (acc area)
                          (+ acc (- (area-top area) (area-base area))))
                        0 usable)))
-    ;; Make buddy allocators for all usable regions.
+    ;; Make buddy allocators for all usable areas.
     (set! *buddies*
           (map (lambda (area)
                  (make-buddy (area-base area)
                              (- (area-top area) (area-base area))
                              12))
                usable))
+    (print "Buddy allocators:")
+    (for-each (lambda (buddy)
+                (print " [" (number->string (buddy-start-address buddy) 16)
+                       "," (number->string (+ (buddy-start-address buddy)
+                                              (buddy-capacity buddy)) 16)
+                       ") " (fmt-human-readable-bytes (buddy-capacity buddy))))
+              *buddies*)
     ;; Identity-map all RAM. Only the first 4GB is identity-mapped
     ;; initially.
     (for-each (lambda (base top)
