@@ -29,7 +29,7 @@
           file-locator-resolution-error
           label-binding set-label-binding! remove-location)
   (import 
-    (only (loko libs reader)
+    (only (loko runtime reader)
           read-annotated annotation? annotation-expression
           annotation-stripped annotation-source
           annotation-source->condition)

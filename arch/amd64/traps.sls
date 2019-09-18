@@ -25,8 +25,8 @@
     (rnrs)
     (loko match)
     (only (loko system unsafe) get-mem-u8)
-    (only (loko libs control) register-error-invoker)
-    (only (loko libs conditions) make-program-counter-condition)
+    (only (loko runtime control) register-error-invoker)
+    (only (loko runtime conditions) make-program-counter-condition)
     (loko arch amd64 disassembler)
     (loko system $primitives))
 

@@ -30,7 +30,7 @@
           stack-area heap-area PAGE-SIZE STACK-SIZE HEAP-SIZE)
     (loko arch amd64 registers)
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (prefix (loko arch amd64 lib) lib:)
     (loko config)
     (rnrs)

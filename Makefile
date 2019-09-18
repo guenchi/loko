@@ -58,9 +58,12 @@ install: all
 	$(INSTALL) -m 0755 -d   $(DESTDIR)$(PREFIX)/bin
 	$(INSTALL) -m 0755 loko $(DESTDIR)$(PREFIX)/bin
 # Libraries for users
-	$(INSTALL) -m 0755 -d             $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0644 arch/amd64/linux-numbers.sls  $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0644 arch/amd64/linux-syscalls.sls $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+#	$(INSTALL) -m 0644 lib/posix.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 # Libraries needed when compiling programs
 	(cd .akku/lib; find * -type d | \
 	  while read fn; do \

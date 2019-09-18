@@ -54,7 +54,7 @@
     infer? make-infer infer-expr infer-facts)
   (import
     (psyntax compat)          ;for define-record, gensym and annotations
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map))
 
 (define-record rec (lhs* rhs* body))  ;letrec

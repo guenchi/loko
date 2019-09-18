@@ -37,7 +37,7 @@
     (loko arch amd64 lib-traps)
     (loko arch amd64 lib-valgrind)
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (loko config)
     (rnrs (6))
     (only (machine-code assembler x86) assemble)) ;reexported

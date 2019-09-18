@@ -42,7 +42,7 @@
           $get-mem-object)
     (loko match)
     (loko arch amd64 disassembler)
-    (only (loko libs context)
+    (only (loko runtime context)
           CPU-VECTOR:PROCESS-VECTOR
           PROCESS-VECTOR:STACK-TOP
           PROCESS-VECTOR:GARBAGE-COLLECTION-COUNT))

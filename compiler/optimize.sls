@@ -49,7 +49,7 @@
     pass-optimize)
   (import
     (psyntax compat)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map)
     (rnrs mutable-pairs))
 

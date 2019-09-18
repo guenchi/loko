@@ -24,7 +24,7 @@
     lib-gc:text lib-gc:data)
   (import
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (rnrs (6)))
 
 (define (pvec i) `(,(+ 8 (* 8 i) (- (tag 'vector)))))

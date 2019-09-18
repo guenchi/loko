@@ -24,7 +24,7 @@
     lib-traps:text lib-traps:data)
   (import
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (rnrs (6)))
 
 ;; TODO: these handlers should detect double faults, i.e.

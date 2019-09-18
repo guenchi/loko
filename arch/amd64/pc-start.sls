@@ -40,7 +40,7 @@
     (prefix (loko arch amd64 pc-syscalls) pc-syscalls:)
     (prefix (loko arch amd64 lib) lib:)
     (only (loko arch amd64 objects) immediate shift)
-    (only (loko libs context) CPU-VECTOR:CPU-NUMBER)
+    (only (loko runtime context) CPU-VECTOR:CPU-NUMBER)
     (rnrs (6)))
 
 ;;; .text

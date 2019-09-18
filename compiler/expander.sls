@@ -47,7 +47,7 @@
     expand-files)
   (import
     (rnrs arithmetic bitwise)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs base) map)
     (rnrs bytevectors)
     (rnrs control)
@@ -218,7 +218,7 @@
     (srfi98      (srfi :98 os-environment-variables)   #t    #t)
     (s98         (srfi :98)                            #t    #t)
 
-    ($compat     (loko compat)                         #t    #t)
+    ($compat     (loko compiler compat)                #t    #t)
     (time        (loko system time)                    #t    #t)
     (lsu         (loko system unsafe)                  #t    #t)
     (fibers      (loko system fibers)                  #t    #t)
@@ -228,7 +228,7 @@
     ($host       (loko system $host)                   #f    #t)
 
     ;; Hack for self-compiling a bit faster
-    (compiler    (loko compiler)                       #t    #f)
+    (compiler    (loko compiler main)                  #t    #f)
     (cp0         (loko compiler cp0)                   #t    #f)
 
     ))
@@ -1080,11 +1080,10 @@
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)
 
-    ;; The (loko compat) library for self-compilation
+    ;; The (loko compiler compat) library for self-compilation
     (gensym?                  $compat)
     (gensym->unique-string    $compat)
     (gensym-prefix            $compat)
-    (call/1cc                 $compat)
 
     ;; The (loko system time) library
     (cumulative-process-time  time)

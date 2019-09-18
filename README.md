@@ -72,7 +72,7 @@ There are these additional options you can try:
 * Set environment variables with e.g. `-append
   LOKO_LIBRARY_PATH=/boot`.
 * Pass command line arguments in `-append` by adding them after `--`,
-  e.g. `-append VAR=abc -- --program foo.sps`.
+  e.g. `-append 'VAR=abc -- --program foo.sps'`.
 
 See the [samples](samples) directory for more examples.
 
@@ -100,19 +100,6 @@ Loko's source code needs to be available for compilation to succeed.
 The location is decided by `PREFIX` when compiling Loko, but can be
 overridden using the `LOKO_SOURCE` environment variable.
 
-## Related projects
-
-To try and keep Loko at a manageable size, not everything will be part
-of a normal Loko install. Some things are extra:
-
-* POSIX support for Loko (on Linux) is worked on at [loko-posix][].
-* Hardware drivers are worked on at [loko-drivers][].
-* SRFIs are maintained in [chez-srfi][], when it is possible and
-  convenient.
-
- [loko-posix]: https://gitlab.com/weinholt/loko-posix
- [loko-drivers]: https://gitlab.com/weinholt/loko-drivers
-
 ## Contact
 
 * [Loko Scheme on GitLab issues](https://gitlab.com/weinholt/loko/issues)
@@ -121,8 +108,8 @@ of a normal Loko install. Some things are extra:
 * The Usenet group comp.lang.scheme, available through any Usenet
   provider,
   e.g. [Eternal September](http://www.eternal-september.org/). I would
-  like for Scheme communities to be less fragmented, so I'm not going
-  to wait with setting up a separate mailing list.
+  like for Scheme communities to be less fragmented, so I will wait
+  with setting up a separate mailing list.
 * The [Loko Scheme](https://scheme.fail/) website.
 
 ## License

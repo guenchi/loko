@@ -5,9 +5,5 @@
   (synopsis "Sample for Loko: Ethernet packet dumper")
   (authors "Göran Weinholt")
   (license "MIT")
-  (depends ("text-mode" "^1.0.0")
-           ("loko-drivers"
-            (version "0.0.0")
-            (location (git "https://gitlab.com/weinholt/loko-drivers"))
-            (revision "96e5c707011d6453b64c9d87d31e763351121a8f")))
+  (depends ("text-mode" "^1.0.0"))
 )

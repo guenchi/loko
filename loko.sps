@@ -18,6 +18,6 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-(import (loko main))
+(import (loko runtime main))
 
 (main)

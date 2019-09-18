@@ -25,42 +25,42 @@
   (import
     (rnrs (6))
     (srfi :98 os-environment-variables)
-    (loko utils)
+    (loko runtime utils)
     (psyntax library-manager)
     (loko compiler expander)
-    (loko compiler)
+    (loko compiler main)
     (loko config)
     (only (loko compiler cp0) cp0-effort-limit))
 
 (define (get-scheme-libraries target-cpu target-kernel options)
   `("akku/metadata"
     "loko/config"
-    "loko/libs/booleans"
-    "loko/libs/fixnums"
-    "loko/libs/flonums"
-    "loko/libs/chars"
-    "loko/libs/pairs"
-    "loko/libs/bytevectors"
-    "loko/libs/arithmetic"
-    "loko/libs/strings"
-    "loko/libs/vectors"
-    "loko/libs/equal"     ;eqv? -> memv -> case
-    "loko/libs/context"
-    "loko/libs/records"
-    "loko/libs/reader"
-    "loko/libs/control"
-    "loko/utils"
+    "loko/runtime/booleans"
+    "loko/runtime/fixnums"
+    "loko/runtime/flonums"
+    "loko/runtime/chars"
+    "loko/runtime/pairs"
+    "loko/runtime/bytevectors"
+    "loko/runtime/arithmetic"
+    "loko/runtime/strings"
+    "loko/runtime/vectors"
+    "loko/runtime/equal"     ;eqv? -> memv -> case
+    "loko/runtime/context"
+    "loko/runtime/records"
+    "loko/runtime/reader"
+    "loko/runtime/control"
+    "loko/runtime/utils"
     "loko/match"
-    "loko/init"
-    "loko/libs/hashtables"
-    "loko/libs/symbols"
-    "loko/libs/conditions"
-    "loko/libs/enums"
-    "loko/libs/time"
+    "loko/runtime/init"
+    "loko/runtime/hashtables"
+    "loko/runtime/symbols"
+    "loko/runtime/conditions"
+    "loko/runtime/enums"
+    "loko/runtime/time"
     "pfds/heaps"
-    "loko/libs/fibers"
-    "loko/libs/io"
-    "loko/libs/sorting"
+    "loko/runtime/fibers"
+    "loko/runtime/io"
+    "loko/runtime/sorting"
     ,@(if (memq 'eval options)
           '("psyntax/compat"
             "psyntax/internal"
@@ -79,13 +79,13 @@
             "loko/compiler/closure"
             "loko/compiler/optimize"
             "loko/compiler/expander"
-            "loko/repl")
+            "loko/runtime/repl")
           '())
     "struct/pack"
     ,@(if (memq 'main options)
-          '("loko/main")
+          '("loko/runtime/main")
           '())
-    "loko/libs/unsafe"
+    "loko/runtime/unsafe"
     ;; Target-specific stuff. Only code in (loko arch ...) should
     ;; import these.
     ,@(case target-cpu
@@ -132,7 +132,7 @@
                            "loko/arch/amd64/pc-start")
                          '())
                    "loko/arch/amd64/pc-ap-boot"
-                   "loko/libs/buddy"
+                   "loko/runtime/buddy"
                    "loko/arch/amd64/pc-init")
                  '())
            ,@(if (memq target-kernel '(linux loko+linux))
@@ -149,13 +149,13 @@
         (else '()))
     ,@(if (memq 'eval options)
           '("loko/arch/asm"
-            "loko/libs/eval"
-            "loko/compiler"
+            "loko/runtime/eval"
+            "loko/compiler/main"
             "loko/compiler/static")
           '())
-    "loko/start"
+    "loko/runtime/start"
     ,@(if (memq 'eval options)
-          '("loko/start-libman")
+          '("loko/runtime/start-libman")
           '())))
 
 ;; Get filenames from a subset of the libraries above here.

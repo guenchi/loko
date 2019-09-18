@@ -7,7 +7,7 @@
 
 (import
   (rnrs (6))
-  (loko-drivers pci)
+  (loko drivers pci)
   (loko system unsafe)
   (loko system fibers)
 

@@ -25,7 +25,7 @@
   (import
     (only (loko arch amd64 registers) RFLAGS)
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (rnrs (6)))
 
 (define (lib-stacks:text)

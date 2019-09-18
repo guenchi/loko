@@ -8,7 +8,7 @@
   (rnrs)
   (loko system fibers)
   (loko system unsafe)
-  (loko-drivers pci))
+  (loko drivers pci))
 
 ;;; Bochs Graphics Array
 

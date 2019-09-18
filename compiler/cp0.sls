@@ -33,10 +33,9 @@
     ;; These two for pass-loops:
     operand? operand-value)
   (import
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (loko compiler recordize)
     (loko match)
-    (only (loko compat) call/1cc)
     (psyntax compat)              ;for define-record
     (except (rnrs) map)
     (rnrs eval))
@@ -848,7 +847,7 @@
                        (dynamic-wind
                          (lambda () (set-operand-outer-pending! opnd #t))
                          (lambda ()
-                           (call/1cc
+                           (call/cc     ;TODO: call/1cc
                             (lambda (abort)
                               (let* ((limit (if (active-counter? sc)
                                                 (counter-value sc)

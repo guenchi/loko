@@ -37,12 +37,12 @@
     (srfi :98 os-environment-variables)
     (loko match)
     (loko system unsafe)
-    (only (loko init) init-set!)
+    (only (loko runtime init) init-set!)
     (loko arch amd64 processes)
-    (only (loko libs io) $init-standard-ports $port-buffer-mode-set!
+    (only (loko runtime io) $init-standard-ports $port-buffer-mode-set!
           port-file-descriptor-set!)
-    (only (loko libs time) time-init-set!)
-    (loko libs fibers)
+    (only (loko runtime time) time-init-set!)
+    (loko runtime fibers)
     (except (loko system $host) dma-allocate dma-free
             enable-irq acknowledge-irq wait-irq-operation)
     (loko system $primitives)

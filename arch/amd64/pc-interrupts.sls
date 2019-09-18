@@ -31,7 +31,7 @@
     (rnrs)
     (loko arch amd64 registers)
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (prefix (loko arch amd64 pc-segments) pc-segments:))
 
 ;; These are programmed into the PICs and designate offsets into the

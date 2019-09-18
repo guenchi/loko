@@ -28,10 +28,10 @@
     amd64-least-fixnum
     amd64-greatest-fixnum)
   (import
+    (rnrs (6))
     (only (loko compiler recordize) const?
           const-value const-ref set-const-ref!)
-    (only (loko compat) gensym? gensym->unique-string gensym-prefix)
-    (rnrs))
+    (only (loko compiler compat) gensym? gensym->unique-string gensym-prefix))
 
 (define-syntax define-inlined
   (lambda (x)

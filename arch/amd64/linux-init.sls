@@ -28,15 +28,15 @@
   (export)
   (import
     (rnrs (6))
-    (only (loko init) init-set!)
+    (only (loko runtime init) init-set!)
     (loko system unsafe)
     (loko arch amd64 linux-numbers)
     (loko arch amd64 linux-syscalls)
     (loko arch amd64 processes)
-    (only (loko libs io) $init-standard-ports)
+    (only (loko runtime io) $init-standard-ports)
     (loko system $host)
     (loko system $primitives)
-    (only (loko libs context)
+    (only (loko runtime context)
           CPU-VECTOR:ALTSIGSTK-BASE
           CPU-VECTOR:ALTSIGSTK-SIZE
           CPU-VECTOR:SCHEDULER-SP)

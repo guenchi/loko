@@ -28,7 +28,7 @@
     (loko compiler recordize)
     (loko compiler cp0)
     (only (psyntax compat) gensym)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map))
 
 (define (pass-loops x)

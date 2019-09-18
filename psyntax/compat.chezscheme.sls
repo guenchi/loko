@@ -32,7 +32,7 @@
           label-binding set-label-binding! remove-location
           format)
   (import
-    (only (loko libs reader)
+    (only (loko runtime reader)
           read-annotated annotation? annotation-expression
           annotation-stripped annotation-source
           annotation-source->condition)

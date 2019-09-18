@@ -31,7 +31,7 @@
     pass-mutation)
   (import
     (loko compiler recordize)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map))
 
 ;; This is fragile... the code needs to be better at keeping apart

@@ -24,7 +24,7 @@
     pass-let)
   (import
     (loko compiler recordize)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map))
 
 #| This takes a proc and a list of operands, i.e.

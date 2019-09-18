@@ -24,7 +24,4 @@
         ((and osx pre-install)
           (run "cc -dynamiclib -o libtextmode.so textmode.c"))
         (post-install
-          (run "cp -v libtextmode.so \"$akku_path_lib_ffi\"")))))
-  ((name "loko-drivers")
-    (location (git "https://gitlab.com/weinholt/loko-drivers"))
-    (revision "96e5c707011d6453b64c9d87d31e763351121a8f")))
+          (run "cp -v libtextmode.so \"$akku_path_lib_ffi\""))))))

@@ -24,7 +24,7 @@
   (rnrs (6))
   (loko arch amd64 linux-syscalls)
   (loko arch amd64 linux-numbers)
-  (loko libs buddy)
+  (loko runtime buddy)
   (loko system unsafe))
 
 (define (print . x) (for-each display x) (newline))

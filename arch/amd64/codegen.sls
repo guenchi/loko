@@ -24,9 +24,9 @@
     codegen)
   (import
     (loko arch amd64 objects)
-    (loko libs context)
+    (loko runtime context)
     (loko compiler recordize)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (loko match)
     (except (rnrs) map)
     (only (rnrs mutable-pairs) set-car!))

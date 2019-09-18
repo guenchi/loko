@@ -115,7 +115,7 @@
               (make-syscall-error* who errno (car x) (cdr x))))
         (else (make-syscall-error* who errno #f #f))))
 
-;; FIXME: This should be done in (loko libs io), otherwise dynamically
+;; FIXME: This should be done in (loko runtime io), otherwise dynamically
 ;; loaded code gets its own finalizers hashtable.
 (define *finalizers* (make-eqv-hashtable))
 (define (add-fdes-finalizer! fdes finalizer)

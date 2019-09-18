@@ -29,7 +29,7 @@
     pass-infer)
   (import
     (loko compiler recordize)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map)
     (rnrs mutable-pairs))
 

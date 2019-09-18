@@ -23,7 +23,7 @@
   (export pass-closure)
   (import
     (loko compiler recordize)
-    (rename (loko utils) (map-in-order map))
+    (rename (loko runtime utils) (map-in-order map))
     (except (rnrs) map)
     (only (psyntax compat) gensym))
 

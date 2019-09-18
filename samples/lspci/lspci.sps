@@ -7,7 +7,7 @@
 
 (import
   (rnrs (6))
-  (loko-drivers pci))
+  (loko drivers pci))
 
 (define (print . x)
   (for-each display x)
@@ -127,7 +127,7 @@
                     (reset)))))))))))
   (make-pciid-db vendors classes))
 
-;; Given a pcidev from (loko-drivers pci) and a pciid-db, print some
+;; Given a pcidev from (loko drivers pci) and a pciid-db, print some
 ;; useful information.
 (define (print-pcidev dev db)
   (define (hex x) (number->string x 16))

@@ -31,7 +31,7 @@
     (loko system $primitives)
     (loko system $host)
     (only (loko system $x86) $enable-interrupts $disable-interrupts)
-    (only (loko libs context) CPU-VECTOR:SCHEDULER-RUNNING?
+    (only (loko runtime context) CPU-VECTOR:SCHEDULER-RUNNING?
           CPU-VECTOR:SCHEDULER-SP))
 
 ;; This should be split: the mapping and the starting. After mapping
