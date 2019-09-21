@@ -63,6 +63,7 @@ install: all
 	$(INSTALL) -m 0644 arch/amd64/linux-syscalls.sls $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+	$(INSTALL) -m 0644 lib/match.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 #	$(INSTALL) -m 0644 lib/posix.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 # Libraries needed when compiling programs
 	(cd .akku/lib; find * -type d | \
