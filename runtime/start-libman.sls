@@ -25,17 +25,8 @@
     (rnrs (6))
     (srfi :98 os-environment-variables)
     (only (loko config) config-library-path)
-    (only (psyntax library-manager) library-directories library-extensions))
-
-(define (string-split str c)
-  (let lp ((start 0) (end 0))
-    (cond ((fx=? end (string-length str))
-           (list (substring str start end)))
-          ((char=? c (string-ref str end))
-           (cons (substring str start end)
-                 (lp (fx+ end 1) (fx+ end 1))))
-          (else
-           (lp start (fx+ end 1))))))
+    (only (psyntax library-manager) library-directories library-extensions)
+    (only (loko runtime utils) string-split))
 
 ;; Read the environment
 (library-extensions '(".loko.sls" ".sls"))

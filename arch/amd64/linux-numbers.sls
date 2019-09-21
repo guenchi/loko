@@ -12,12 +12,12 @@
     __NR_arch_prctl
     __NR_bind
     __NR_chdir
-    __NR_chmod
     __NR_chown
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
     __NR_connect
+    __NR_dup3
     __NR_epoll_create1
     __NR_epoll_ctl
     __NR_epoll_pwait
@@ -27,22 +27,29 @@
     __NR_exit
     __NR_faccessat
     __NR_fchdir
+    __NR_fchmod
     __NR_fchmodat
+    __NR_fchown
     __NR_fchownat
     __NR_fcntl
     __NR_fork
     __NR_fstat
     __NR_ftruncate
-    __NR_futimesat
     __NR_getcwd
     __NR_getdents64
+    __NR_getegid
+    __NR_geteuid
+    __NR_getgid
+    __NR_getgroups
     __NR_getpeername
+    __NR_getpgid
     __NR_getpid
     __NR_getppid
     __NR_getrandom
     __NR_getsid
     __NR_getsockname
     __NR_getsockopt
+    __NR_getuid
     __NR_ioctl
     __NR_lchown
     __NR_linkat
@@ -64,13 +71,14 @@
     __NR_recvfrom
     __NR_recvmsg
     __NR_renameat2
-    __NR_rmdir
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
     __NR_sendmsg
     __NR_sendto
     __NR_setpgid
+    __NR_setregid
+    __NR_setreuid
     __NR_setsid
     __NR_setsockopt
     __NR_shmat
@@ -84,6 +92,7 @@
     __NR_timer_create
     __NR_timer_settime
     __NR_truncate
+    __NR_umask
     __NR_uname
     __NR_unlinkat
     __NR_utimensat
@@ -527,6 +536,8 @@
     offsetof-stat-st_mtime_nsec
     offsetof-stat-st_ctime
     offsetof-stat-st_ctime_nsec
+    UTIME_NOW
+    UTIME_OMIT
     S_IFMT
     S_IFLNK
     S_IFREG
@@ -537,6 +548,13 @@
     S_IFSOCK
     GRND_NONBLOCK
     GRND_RANDOM
+    sizeof-new_utsname
+    offsetof-new_utsname-sysname
+    offsetof-new_utsname-nodename
+    offsetof-new_utsname-release
+    offsetof-new_utsname-version
+    offsetof-new_utsname-machine
+    offsetof-new_utsname-domainname
     sizeof-sockaddr_in6
     offsetof-sockaddr_in6-sin6_family
     offsetof-sockaddr_in6-sin6_port
@@ -681,12 +699,12 @@
 (define-inlined __NR_arch_prctl 158)
 (define-inlined __NR_bind 49)
 (define-inlined __NR_chdir 80)
-(define-inlined __NR_chmod 90)
 (define-inlined __NR_chown 92)
 (define-inlined __NR_clock_getres 229)
 (define-inlined __NR_clock_gettime 228)
 (define-inlined __NR_close 3)
 (define-inlined __NR_connect 42)
+(define-inlined __NR_dup3 292)
 (define-inlined __NR_epoll_create1 291)
 (define-inlined __NR_epoll_ctl 233)
 (define-inlined __NR_epoll_pwait 281)
@@ -696,22 +714,29 @@
 (define-inlined __NR_exit 60)
 (define-inlined __NR_faccessat 269)
 (define-inlined __NR_fchdir 81)
+(define-inlined __NR_fchmod 91)
 (define-inlined __NR_fchmodat 268)
+(define-inlined __NR_fchown 93)
 (define-inlined __NR_fchownat 260)
 (define-inlined __NR_fcntl 72)
 (define-inlined __NR_fork 57)
 (define-inlined __NR_fstat 5)
 (define-inlined __NR_ftruncate 77)
-(define-inlined __NR_futimesat 261)
 (define-inlined __NR_getcwd 79)
 (define-inlined __NR_getdents64 217)
+(define-inlined __NR_getegid 108)
+(define-inlined __NR_geteuid 107)
+(define-inlined __NR_getgid 104)
+(define-inlined __NR_getgroups 115)
 (define-inlined __NR_getpeername 52)
+(define-inlined __NR_getpgid 121)
 (define-inlined __NR_getpid 39)
 (define-inlined __NR_getppid 110)
 (define-inlined __NR_getrandom 318)
 (define-inlined __NR_getsid 124)
 (define-inlined __NR_getsockname 51)
 (define-inlined __NR_getsockopt 55)
+(define-inlined __NR_getuid 102)
 (define-inlined __NR_ioctl 16)
 (define-inlined __NR_lchown 94)
 (define-inlined __NR_linkat 265)
@@ -733,13 +758,14 @@
 (define-inlined __NR_recvfrom 45)
 (define-inlined __NR_recvmsg 47)
 (define-inlined __NR_renameat2 316)
-(define-inlined __NR_rmdir 84)
 (define-inlined __NR_rt_sigaction 13)
 (define-inlined __NR_rt_sigprocmask 14)
 (define-inlined __NR_rt_sigreturn 15)
 (define-inlined __NR_sendmsg 46)
 (define-inlined __NR_sendto 44)
 (define-inlined __NR_setpgid 109)
+(define-inlined __NR_setregid 114)
+(define-inlined __NR_setreuid 113)
 (define-inlined __NR_setsid 112)
 (define-inlined __NR_setsockopt 54)
 (define-inlined __NR_shmat 30)
@@ -753,6 +779,7 @@
 (define-inlined __NR_timer_create 222)
 (define-inlined __NR_timer_settime 223)
 (define-inlined __NR_truncate 76)
+(define-inlined __NR_umask 95)
 (define-inlined __NR_uname 63)
 (define-inlined __NR_unlinkat 263)
 (define-inlined __NR_utimensat 280)
@@ -1240,6 +1267,8 @@
 (define-inlined offsetof-stat-st_mtime_nsec 96)
 (define-inlined offsetof-stat-st_ctime 104)
 (define-inlined offsetof-stat-st_ctime_nsec 112)
+(define-inlined UTIME_NOW #x3fffffff)
+(define-inlined UTIME_OMIT #x3ffffffe)
 
 ;;; asm/stat.h
 (define-inlined S_IFMT #o170000)
@@ -1254,6 +1283,15 @@
 ;;; linux/random.h
 (define-inlined GRND_NONBLOCK 1)
 (define-inlined GRND_RANDOM 2)
+
+;;; linux/utsname.h
+(define-inlined sizeof-new_utsname 390)
+(define-inlined offsetof-new_utsname-sysname 0)
+(define-inlined offsetof-new_utsname-nodename 65)
+(define-inlined offsetof-new_utsname-release 130)
+(define-inlined offsetof-new_utsname-version 195)
+(define-inlined offsetof-new_utsname-machine 260)
+(define-inlined offsetof-new_utsname-domainname 325)
 
 ;;; linux/in6.h
 (define-inlined sizeof-sockaddr_in6 28)

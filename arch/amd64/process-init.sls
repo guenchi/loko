@@ -547,12 +547,10 @@
                                          (make-syscall-error 'open errno))))))))
            (position 0))
       (define (handle-write-error errno)
-        (if (eqv? errno EINTR)
-            'retry
-            (raise
-              (condition
-               (make-syscall-i/o-error errno filename #f)
-               (make-syscall-error 'write errno)))))
+        (raise
+          (condition
+           (make-syscall-i/o-error errno filename #f)
+           (make-syscall-error 'write errno))))
       (define (write! bv start count)
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
         (let ((status
@@ -760,7 +758,7 @@
                                         (list fd 'bv start count))))))))))
   (define (linux-set-file-mode fn mode)
     (let ((path (filename->c-string 'set-file-mode fn)))
-      (sys_chmod (bytevector-address path) #o755)))
+      (sys_fchmodat AT_FDCWD (bytevector-address path) mode)))
   ;; XXX: Potential trouble here: https://cr.yp.to/unix/nonblock.html
   (define (set-fd-nonblocking fd)
     (let ((prev (sys_fcntl fd F_GETFL 0)))

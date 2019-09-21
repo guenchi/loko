@@ -17,12 +17,12 @@
     __NR_arch_prctl
     __NR_bind
     __NR_chdir
-    __NR_chmod
     __NR_chown
     __NR_clock_getres
     __NR_clock_gettime
     __NR_close
     __NR_connect
+    __NR_dup3
     __NR_epoll_create1
     __NR_epoll_ctl
     __NR_epoll_pwait
@@ -32,22 +32,29 @@
     __NR_exit
     __NR_faccessat
     __NR_fchdir
+    __NR_fchmod
     __NR_fchmodat
+    __NR_fchown
     __NR_fchownat
     __NR_fcntl
     __NR_fork
     __NR_fstat
     __NR_ftruncate
-    __NR_futimesat
     __NR_getcwd
     __NR_getdents64
+    __NR_getegid
+    __NR_geteuid
+    __NR_getgid
+    __NR_getgroups
     __NR_getpeername
+    __NR_getpgid
     __NR_getpid
     __NR_getppid
     __NR_getrandom
     __NR_getsid
     __NR_getsockname
     __NR_getsockopt
+    __NR_getuid
     __NR_ioctl
     __NR_lchown
     __NR_linkat
@@ -69,13 +76,14 @@
     __NR_recvfrom
     __NR_recvmsg
     __NR_renameat2
-    __NR_rmdir
     __NR_rt_sigaction
     __NR_rt_sigprocmask
     __NR_rt_sigreturn
     __NR_sendmsg
     __NR_sendto
     __NR_setpgid
+    __NR_setregid
+    __NR_setreuid
     __NR_setsid
     __NR_setsockopt
     __NR_shmat
@@ -89,6 +97,7 @@
     __NR_timer_create
     __NR_timer_settime
     __NR_truncate
+    __NR_umask
     __NR_uname
     __NR_unlinkat
     __NR_utimensat
@@ -547,6 +556,9 @@
             st_atime st_atime_nsec
             st_mtime st_mtime_nsec
             st_ctime st_ctime_nsec)
+    (fmt "#x%x")
+    (define UTIME_NOW #x3fffffff)
+    (define UTIME_OMIT #x3ffffffe)
 
     (c-include "asm/stat.h")
     (fmt "#o%o")
@@ -562,6 +574,10 @@
     (c-include "linux/random.h")
     GRND_NONBLOCK
     GRND_RANDOM
+
+    (c-include "linux/utsname.h")
+    (struct new_utsname
+            sysname nodename release version machine domainname)
 
     (c-include "linux/in6.h")
     (struct sockaddr_in6 sin6_family sin6_port sin6_flowinfo

@@ -23,7 +23,8 @@
 
 (library (loko runtime utils)
   (export
-    map-in-order)
+    map-in-order
+    string-split)
   (import
     (rnrs))
 
@@ -52,4 +53,14 @@
        (if (null? x*)
            (reverse ret)
            (lp (cons (apply f (car x*) (car y*) (map car z**)) ret)
-               (cdr x*) (cdr y*) (map cdr z**))))))))
+               (cdr x*) (cdr y*) (map cdr z**)))))))
+
+(define (string-split str c)
+  (let lp ((start 0) (end 0))
+    (cond ((fx=? end (string-length str))
+           (list (substring str start end)))
+          ((char=? c (string-ref str end))
+           (cons (substring str start end)
+                 (lp (fx+ end 1) (fx+ end 1))))
+          (else
+           (lp start (fx+ end 1)))))))
