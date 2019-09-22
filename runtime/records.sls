@@ -35,6 +35,7 @@ record-type-descriptors:
   4 uid (symbol or false)
   5 names (vector of symbols)
   6 mutable (bitfield)
+  7 record-writer (procedure)
 
 record-constructor-descriptors:
  -1 'rcd
@@ -55,7 +56,8 @@ record-constructor-descriptors:
     record-accessor record-mutator
     record? record-rtd record-type-name record-type-parent
     record-type-uid record-type-generative? record-type-sealed?
-    record-type-opaque? record-type-field-names record-field-mutable?)
+    record-type-opaque? record-type-field-names record-field-mutable?
+    record-writer)
   (import
     (except (rnrs)
             make-record-type-descriptor record-type-descriptor?
@@ -83,7 +85,7 @@ record-constructor-descriptors:
 (define (make-record-type-descriptor name parent uid sealed? opaque? fields)
   (define who 'make-record-type-descriptor)
   (define (make-rtd flags&len name parent uid names mutable)
-    (let ((ret ($make-box 'rtd 7)))
+    (let ((ret ($make-box 'rtd 8)))
       ($box-set! ret 0 6)
       ($box-set! ret 1 flags&len)
       ($box-set! ret 2 name)
@@ -91,6 +93,7 @@ record-constructor-descriptors:
       ($box-set! ret 4 uid)
       ($box-set! ret 5 names)
       ($box-set! ret 6 mutable)
+      ($box-set! ret 7 default-record-writer)
       ret))
   (define (build parent-length parent-mutable opaque?)
     (let ((len (fx+ (vector-length fields) parent-length)))
@@ -429,7 +432,7 @@ record-constructor-descriptors:
 
 (define (record-type-generative? rtd)
   (assert (record-type-descriptor? rtd))
-  ;; only nongenerative records have an uid
+  ;; only nongenerative records have a uid
   (not ($box-ref rtd 4)))
 
 (define (record-type-sealed? rtd)
@@ -450,4 +453,34 @@ record-constructor-descriptors:
   (let* ((prtd (record-type-parent rtd))
          (k (if prtd (fx+ k ($record-length prtd)) k)))
     (assert (fx<? k ($record-length rtd)))
-    (bitwise-bit-set? ($box-ref rtd 6) k))))
+    (bitwise-bit-set? ($box-ref rtd 6) k)))
+
+;;; Record writers
+
+(define (default-record-writer v p wr)
+  (let ((t (record-rtd v)))
+    (display "#[" p)
+    (display (or (record-type-uid t) (record-type-name t)) p)
+    (let lp ((t t))
+      (when (and t (not (record-type-opaque? t)))
+        (lp (record-type-parent t))
+        (do ((i 0 (fx+ i 1))
+             (fields (record-type-field-names t)))
+            ((fx=? i (vector-length fields)))
+          (let ((field (vector-ref fields i))
+                (value ((record-accessor t i) v)))
+            (display #\space p)
+            (display field p)
+            (display ": " p)
+            (wr value p)))))
+    (display "]" p)))
+
+(define record-writer
+  (case-lambda
+    ((rtd)
+     (assert (record-type-descriptor? rtd))
+     ($box-ref rtd 7))
+    ((rtd procedure)
+     (assert (record-type-descriptor? rtd))
+     (assert (procedure? procedure))
+     ($box-set! rtd 7 procedure)))))

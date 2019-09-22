@@ -63,12 +63,12 @@
     (lambda (x p wr)
       (unless (library? x)
         (assertion-violation 'record-type-printer "not a library"))
-      (display
-        (format "#<library ~s>"
-          (if (null? (library-version x))
+      (display "#<library " p)
+      (wr (if (null? (library-version x))
               (library-name x)
-              (append (library-name x) (list (library-version x)))))
-        p)))
+              (append (library-name x) (list (library-version x))))
+          p)
+      (display ">" p)))
 
   (define (library-invoke-dependencies lib)
     (library-inv* lib))

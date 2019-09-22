@@ -1076,6 +1076,7 @@
     (port-file-descriptor-set! ^)       ;for SRFI-170
     (parameterize              ^)       ;Chez-style (not SRFI-39)
     (make-parameter            ^)       ;Chez-style (not SRFI-39)
+    (record-writer             ^)       ;Chez-style record writers
 
     ;; Procedures that cp0 can emit calls to
     (bitwise-lsr)
