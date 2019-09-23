@@ -86,7 +86,7 @@ record-constructor-descriptors:
   (define who 'make-record-type-descriptor)
   (define (make-rtd flags&len name parent uid names mutable)
     (let ((ret ($make-box 'rtd 8)))
-      ($box-set! ret 0 6)
+      ($box-set! ret 0 7)
       ($box-set! ret 1 flags&len)
       ($box-set! ret 2 name)
       ($box-set! ret 3 parent)
