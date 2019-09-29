@@ -413,10 +413,19 @@ record-constructor-descriptors:
        (record-type-descriptor? ($box-type x))
        (not (record-type-opaque? ($box-type x)))))
 
+(define (record-rtd* x)
+  (if (not ($box? x))
+      (error 'record-rtd "Expected a record (this is not even a box)" x)
+      (let ((t ($box-type x)))
+        (if (not (record-type-descriptor? t))
+            (error 'record-rtd "Expected a record" x)
+            t))))
+
 (define (record-rtd x)
-  (if (record? x)
-      ($box-type x)
-      (error 'record-type "The object is probably not a record" x)))
+  (let ((t (record-rtd* x)))
+    (if (record-type-opaque? t)
+        (error 'record-rtd "Expected a non-opaque record" x)
+        t)))
 
 (define (record-type-name rtd)
   (assert (record-type-descriptor? rtd))
@@ -458,7 +467,7 @@ record-constructor-descriptors:
 ;;; Record writers
 
 (define (default-record-writer v p wr)
-  (let ((t (record-rtd v)))
+  (let ((t (record-rtd* v)))
     (display "#[" p)
     (display (or (record-type-uid t) (record-type-name t)) p)
     (let lp ((t t))

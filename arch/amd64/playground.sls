@@ -346,12 +346,6 @@
   ;; This code is currently specific to amd64. This code will work
   ;; *very* unreliably if interpreted by a tree code interpreter.
   (define (print . x) (for-each (lambda (x) (display x p)) x) (newline p))
-  (define (get-mem64 addr)
-    (bitwise-ior (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ addr 4)) 32)
-                 (get-mem-u32 addr)))
-  (define (get-mem64/unaligned addr)
-    (bitwise-ior (bitwise-arithmetic-shift-left (get-mem-u32 (fx+ addr 4)) 32)
-                 (get-mem-u32 addr)))
   (define (get-mem-uint addr size)
     ;; XXX: this clearly shows that the encoding is too complex for
     ;; an assembler decoder. Always using two bytes for the size
@@ -380,53 +374,54 @@
                              mask)
                 (fx+ addr 5))
             mask))))
-  (print "Stack trace:")
-  (let ((top (stack-top))
-        (rsp ($stack-pointer)))
-    (let lp ((frame 0) (rsp rsp))
-      (cond ((fx=? rsp top)
-             (print "End of stack trace"))
-            ((fx>? rsp top)
-             (print "End of stack trace due to OVERRUN"))
-            (else
-             (let ((rip (get-mem64 rsp))
-                   (rsp (fx+ rsp 8)))
-               ;; TODO: look up where the code of rip comes from
-               (print " Frame " frame " has return address #x" (number->string rip 16) ".")
-               (when (<= #x200000 rip #xffffffff) ;XXX: should probably just catch #PF
-                 (let ((frame (fx+ frame 1))
-                       (op0 (get-mem-u8 rip))
-                       (op1 (get-mem-u8 (fx+ rip 1)))
-                       (modr/m (get-mem-u8 (fx+ rip 2))))
-                   (let ((size-bytes (fxbit-field modr/m 3 7)))
-                     (cond ((or (not (fx=? op0 #x0F))
-                                (not (fx=? op1 #x1F))
-                                (fxzero? size-bytes))
-                            ;; This is not a liveness NOP, skip it.
-                            (print "  (no live locals)")
-                            (lp frame rsp))
-                           (else
-                            (let ((locals (fx+ (get-mem-uint (fx+ rip 3) size-bytes) 1))
-                                  (livemask (get-livemask (fx+ (fx+ rip 3) size-bytes)
-                                                          size-bytes)))
-                              (do ((i 0 (fx+ i 1))
-                                   (laddr rsp (fx+ laddr 8)))
-                                  ((fx=? i locals))
-                                (cond ((bitwise-bit-set? livemask i)
-                                       ;; XXX: ONLY if the local is in
-                                       ;; the livemask is it ever safe
-                                       ;; to do $get-mem-object on it.
-                                       (display "  Local " p)
-                                       (display i p)
-                                       (display ": " p)
-                                       (let ((v ($get-mem-object laddr)))
-                                         ;; TODO: size-limited pretty printing
-                                         (write v p)
-                                         (newline p)))
-                                      #;
-                                      (else
-                                       (print "   Local " i " is not live."))))
-                              (lp frame (fx+ rsp (fx* locals 8)))))))))))))))
+    (let ((top (stack-top))
+          (rsp ($stack-pointer)))
+      (print "Stack trace from #x" (number->string rsp 16) " to #x" (number->string top 16)
+             " (" (- top rsp) " bytes)")
+      (let lp ((frame 0) (rsp rsp))
+        (cond ((fx=? rsp top)
+               (print "End of stack trace"))
+              ((fx>? rsp top)
+               (print "End of stack trace due to OVERRUN"))
+              (else
+               (let ((rip (get-mem-s61 rsp))
+                     (rsp (fx+ rsp 8)))
+                 ;; TODO: look up where the code of rip comes from
+                 (print " Frame " frame " has return address #x" (number->string rip 16) ".")
+                 (when (<= #x200000 rip #xffffffff) ;XXX: should probably just catch #PF
+                   (let ((frame (fx+ frame 1))
+                         (op0 (get-mem-u8 rip))
+                         (op1 (get-mem-u8 (fx+ rip 1)))
+                         (modr/m (get-mem-u8 (fx+ rip 2))))
+                     (let ((size-bytes (fxbit-field modr/m 3 7)))
+                       (cond ((or (not (fx=? op0 #x0F))
+                                  (not (fx=? op1 #x1F))
+                                  (fxzero? size-bytes))
+                              ;; This is not a liveness NOP, skip it.
+                              (print "  (no live locals)")
+                              (lp frame rsp))
+                             (else
+                              (let ((locals (fx+ (get-mem-uint (fx+ rip 3) size-bytes) 1))
+                                    (livemask (get-livemask (fx+ (fx+ rip 3) size-bytes)
+                                                            size-bytes)))
+                                (do ((i 0 (fx+ i 1))
+                                     (laddr rsp (fx+ laddr 8)))
+                                    ((fx=? i locals))
+                                  (cond ((bitwise-bit-set? livemask i)
+                                         ;; XXX: ONLY if the local is in
+                                         ;; the livemask is it ever safe
+                                         ;; to do $get-mem-object on it.
+                                         (display "  Local " p)
+                                         (display i p)
+                                         (display ": " p)
+                                         (let ((v ($get-mem-object laddr)))
+                                           ;; TODO: size-limited pretty printing
+                                           (write v p)
+                                           (newline p)))
+                                        #;
+                                        (else
+                                         (print "   Local " i " is not live."))))
+                                (lp frame (fx+ rsp (fx* locals 8)))))))))))))))
 
 ;; Valgrind requests (valgrind.h)
 (define RUNNING_ON_VALGRIND #x1001)
