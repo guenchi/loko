@@ -29,7 +29,6 @@
       (unless (eqv? error 0)
         (assertion-violation 'read!
                              "Expected a multiple of the block length" count))
-      (assert (zero? (mod count 512)))
       (do ((i 0 (fx+ i 1)))
           ((fx=? i blocks))
         (let ((ch (make-channel)))

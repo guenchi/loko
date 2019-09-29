@@ -128,7 +128,7 @@
             close-input-port close-output-port read-char peek-char read
             write-char newline display write)
     (only (rnrs mutable-strings) string-set!)
-    (prefix (only (rnrs) eof-object eof-object?) sys:)
+    (prefix (rnrs io ports) sys:)
     (only (loko runtime arithmetic) $display-number)
     (only (loko runtime symbols) $gensym-generate-names!)
     (only (loko runtime records) record-writer)
@@ -420,18 +420,18 @@
 
 (define get-u8
   (case-lambda
-    (() (get-u8 (current-input-port)))
+    (() (sys:get-u8 (current-input-port)))
     ((p)
-     (let ((x (lookahead-u8 p)))
-       (cond ((eof-object? x)
-              (eof-object))
+     (let ((x (sys:lookahead-u8 p)))
+       (cond ((sys:eof-object? x)
+              (sys:eof-object))
              (else
               (port-buffer-r-set! p (fx+ (port-buffer-r p) 1))
               x))))))
 
 (define lookahead-u8
   (case-lambda
-    (() (lookahead-u8 (current-input-port)))
+    (() (sys:lookahead-u8 (current-input-port)))
     ((p)
      (assert (input-port? p))
      (let ((b (port-buffer p))
@@ -467,9 +467,9 @@
     (let lp ((i 0))
       (if (fx=? n i)
           buf
-          (let ((b (get-u8 port)))
+          (let ((b (sys:get-u8 port)))
             (cond
-              ((eof-object? b)
+              ((sys:eof-object? b)
                (if (eqv? i 0)
                    (eof-object)
                    (let ((ret (make-bytevector i)))
