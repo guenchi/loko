@@ -309,7 +309,7 @@
             fk
             (let loop ((ls ls) (n len) (id-ls '()) ...)
               (cond
-                ((= n tail-len)
+                ((fx=? n tail-len)
                  (let ((id (reverse id-ls)) ...)
                    (match-one ls (r ...) #f #f (sk ... i) fk i)))
                 ((pair? ls)
@@ -360,12 +360,12 @@
       ((_ v n ((pat index) ...) () sk fk i)
        (if (vector? v)
          (let ((len (vector-length v)))
-           (if (= len n)
+           (if (fx=? len n)
              (match-vector-step v ((pat index) ...) sk fk i)
              fk))
          fk))
       ((_ v n (pats ...) (p . q) sk fk i)
-       (match-vector v (+ n 1) (pats ... (p n)) q sk fk i))
+       (match-vector v (fx+ n 1) (pats ... (p n)) q sk fk i))
       ))
   
   (define-syntax match-vector-step
@@ -405,7 +405,7 @@
            (let ((id (reverse id-ls)) ...) (sk ... i))
            (let ((w (vector-ref v j)))
              (match-one w p (vector-ref v j) (vetor-set! v j)
-                        (match-drop-ids (loop (+ j 1) (cons id id-ls) ...))
+                        (match-drop-ids (loop (fx+ j 1) (cons id id-ls) ...))
                         fk i)))))))
   
   ;; Extract all identifiers in a pattern.  A little more complicated
