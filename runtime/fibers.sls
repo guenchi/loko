@@ -398,7 +398,7 @@
 ;;; Channels
 
 (define-record-type channel
-  (nongenerative)
+  (opaque #t)
   (fields recvq sendq)
   (protocol
    (lambda (new)
