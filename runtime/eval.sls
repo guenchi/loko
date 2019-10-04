@@ -223,6 +223,8 @@
                     (lambda (lhs rhs)
                       (assert (gensym? lhs))
                       ($box-set! lhs 2 rhs)))
+                   ((eqv? name '$cons)  ;used by the mutation pass
+                    cons)
                    (else
                     (lambda _
                       (error 'eval "This primitive is not yet implemented" name))))))

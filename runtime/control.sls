@@ -29,10 +29,6 @@
     assertion-violation error
     make-promise force
 
-    ;; Parameters.
-    make-parameter
-    ;;parameterize   ; defined in (psyntax expander)
-
     ;; Internal
     implementation-restriction
     register-error-invoker
@@ -47,7 +43,7 @@
             dynamic-wind
             with-exception-handler raise raise-continuable
             assertion-violation error)
-    (only (loko) parameterize)
+    (only (loko) parameterize make-parameter)
     (prefix (only (rnrs) procedure? apply) sys:)
     (loko system $primitives)
     (loko system $host)
@@ -171,24 +167,6 @@
     (set! *winders* (cdr *winders*))
     (after)
     (apply values v)))
-
-;;; Parameters
-
-(define make-parameter
-  (case-lambda
-    ((x)
-     (case-lambda
-       (() x)
-       ((v) (set! x v))))
-    ((x fender)
-     (unless (procedure? fender)
-       (assertion-violation 'make-parameter "Expected a procedure" x fender))
-     (let ((x (fender x)))
-       (case-lambda
-         (() x)
-         ((v) (set! x (fender v))))))))
-
-;; parameterize is a macro in (psyntax expander)
 
 ;;; Exceptions
 

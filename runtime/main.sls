@@ -92,6 +92,9 @@
     [(exec-name "-feval" "--compile" sps-fn "--output" out-fn)
      (compile-program out-fn sps-fn '(eval use-primlocs))
      (set-file-mode out-fn #o755)]
+    [(exec-name "-ffreestanding" "--compile" sps-fn "--output" out-fn)
+     (compile-program out-fn sps-fn '(freestanding))
+     (set-file-mode out-fn #o755)]
     [(exec-name "--compile" sps-fn "--output" out-fn)
      (compile-program out-fn sps-fn '())
      (set-file-mode out-fn #o755)]

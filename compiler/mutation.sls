@@ -45,7 +45,7 @@
         body
         (make-bind mutated
                    (map (lambda (var)
-                          (make-funcall (make-primref 'cons)
+                          (make-funcall (make-primref '$cons)
                                         (list (make-ref var)
                                               (make-const 'mutable #f))
                                         #f #f))

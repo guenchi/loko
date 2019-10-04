@@ -17,34 +17,26 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #!r6rs
 
-;;; Global compile-time configuration
+;;; Parameters
 
-(library (loko config)
+(library (loko runtime parameters)
   (export
-    config-target-cpu
-    config-target-kernel
-    config-max-cpus
-    config-library-path
-    config-source-path)
+    ;;parameterize   ; defined in (psyntax expander)
+    make-parameter)
   (import
-    (rnrs)
-    (loko runtime parameters))
+    (only (rnrs) define case-lambda set! unless procedure?
+          assertion-violation quote let))
 
-;; This is the target the system will be running on.
-
-(define config-target-cpu
-  (make-parameter 'amd64))
-
-(define config-target-kernel
-  (make-parameter 'loko+linux))
-
-(define (config-max-cpus)
-  16)
-
-(define (config-library-path)
-  '("@PREFIX@/share/r6rs"))
-
-;; Loko's source code will be installed here for use by (loko compiler
-;; static).
-(define (config-source-path)
-  "@PREFIX@/lib/loko"))
+(define make-parameter
+  (case-lambda
+    ((x)
+     (case-lambda
+       (() x)
+       ((v) (set! x v))))
+    ((x fender)
+     (unless (procedure? fender)
+       (assertion-violation 'make-parameter "Expected a procedure" x fender))
+     (let ((x (fender x)))
+       (case-lambda
+         (() x)
+         ((v) (set! x (fender v)))))))))

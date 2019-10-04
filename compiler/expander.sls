@@ -1359,7 +1359,7 @@
     ((not (assq (cdar subst) env)) (prune-subst (cdr subst) env))
     (else (cons (car subst) (prune-subst (cdr subst) env)))))
 
-(define (expand-all files top-level-file use-primlocs)
+(define (expand-all files top-level-file use-primlocs freestanding)
   (define ls '())
   (let-values (((name* code* subst env) (make-init-code)))
     (for-each
@@ -1399,9 +1399,10 @@
              (expand-top-level '(*main*) (read-code top-level-file)))
             (else
              (expand-top-level '(*main*) '((import)))))
-      (expand-top-level '(*exit*)
-                        '((import (only (rnrs) exit))
-                          (exit 0))))
+      (unless freestanding
+        (expand-top-level '(*exit*)
+                          '((import (only (rnrs) exit))
+                            (exit 0)))))
     (let-values (((export-subst export-env export-locs)
                   (make-system-data (prune-subst subst env) env)))
       (if use-primlocs
@@ -1472,13 +1473,13 @@
 ;; Expand an a list of .sls files followed by an optional .sps file.
 ;; The .sps file can pull in additional libraries. Returns a list of
 ;; names, a list of core forms and export locations.
-(define (expand-files scheme-library-files scheme-program-file use-primlocs)
+(define (expand-files scheme-library-files scheme-program-file use-primlocs freestanding)
   (initialize)
   (let-values (((name* core* locs)
                 (parameterize ((current-library-collection (copy-collection bootstrap-collection)))
                   (expand-all scheme-library-files
                               scheme-program-file
-                              use-primlocs))))
+                              use-primlocs freestanding))))
     #;
     (current-primitive-locations
      (lambda (x)
