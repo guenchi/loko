@@ -27,7 +27,10 @@ Loko is still very new and needs to be battle tested.
 Loko can currently be bootstrapped with Chez Scheme and depends on
 some packages from Akku. Follow these steps to compile Loko:
 
-* Install the package manager [Akku.scm](https://akkuscm.org)
+* Install [Chez Scheme](https://cisco.github.io/ChezScheme/), version
+  9.5 or later, as a bootstrap compiler.
+* Install the package manager [Akku.scm](https://akkuscm.org), version
+  1.0.0 or later
 * Run `make` to compile Loko
 * Install with `make install`
 
