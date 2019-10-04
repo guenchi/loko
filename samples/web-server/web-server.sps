@@ -126,8 +126,9 @@
   (let lp ()
     (let ((req (get-bytevector-some in)))
       (unless (eof-object? req)
-        (write (utf8->string req))
-        (newline)
+        ;; Commented out to work around #20:
+        ;; (write (utf8->string req))
+        ;; (newline)
         (display "HTTP/1.1 200 OK\r\n" out)
         (display "Content-Length: 6\r\n" out)
         ;; (display "Connection: close\r\n" out)
