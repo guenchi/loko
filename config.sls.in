@@ -36,7 +36,7 @@
   (make-parameter 'amd64))
 
 (define config-target-kernel
-  (make-parameter 'loko+linux))
+  (make-parameter 'pc+linux))
 
 (define (config-max-cpus)
   16)

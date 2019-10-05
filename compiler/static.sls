@@ -82,7 +82,8 @@
                 "loko/compiler/closure"
                 "loko/compiler/optimize"
                 "loko/compiler/expander"
-                "loko/runtime/repl")
+                "loko/runtime/repl"
+                "loko/arch/asm")
               '())
         "struct/pack"
         ,@(if (memq 'main options)
@@ -109,7 +110,8 @@
                "loko/arch/amd64/playground"
                "loko/arch/amd64/prototyping"
                "loko/arch/amd64/registers"
-               ,@(if (memq target-kernel '(loko linux loko+linux))
+               ,@(if (or (memq target-kernel '(pc pc+linux))
+                         (memq 'eval options))
                      '("machine-code/assembler/x86-misc"
                        "machine-code/assembler/x86-operands"
                        ;;FIXME: runs some code on startup
@@ -126,7 +128,7 @@
                        "loko/arch/amd64/lib-valgrind"
                        "loko/arch/amd64/lib")
                      '())
-               ,@(if (memq target-kernel '(loko loko+linux))
+               ,@(if (memq target-kernel '(pc pc+linux))
                      `(,@(if (memq 'eval options)
                              '("loko/arch/amd64/pc-segments"
                                "loko/arch/amd64/pc-interrupts"
@@ -138,7 +140,7 @@
                        "loko/runtime/buddy"
                        "loko/arch/amd64/pc-init")
                      '())
-               ,@(if (memq target-kernel '(linux loko+linux))
+               ,@(if (memq target-kernel '(linux pc+linux))
                      `("loko/arch/amd64/linux-numbers"
                        "loko/arch/amd64/linux-syscalls"
                        ,@(if (memq 'eval options)
@@ -146,13 +148,20 @@
                              '())
                        "loko/arch/amd64/linux-init")
                      '())
+               ,@(if (memq 'eval options)
+                     ;; These native and cross compiler targets will
+                     ;; be supported. They should also be in
+                     ;; compile-loko.sps if you want to build Loko.
+                     '("loko/arch/amd64/pc-asm"
+                       "loko/arch/amd64/linux-asm"
+                       "loko/arch/amd64/pc-and-linux-asm")
+                     '())
                "pfds/queues/private/condition"          ;temporary
                "pfds/queues/naive"          ;temporary
                "loko/arch/amd64/process-init"))
             (else '()))
         ,@(if (memq 'eval options)
-              '("loko/arch/asm"
-                "loko/runtime/eval"
+              '("loko/runtime/eval"
                 "loko/compiler/main"
                 "loko/compiler/static")
               '())

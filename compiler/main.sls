@@ -53,7 +53,8 @@
              ;; No instruction analyzer? No optimizations for you.
              (values text data)))))
   (let*-values ([(text data) (generate-assembler code)]
-                [(text data) (generate-tables (config-target-cpu) text data)])
+                [(text data) (generate-tables (config-target-cpu) (config-target-kernel)
+                                              text data)])
     (print "Assembling code...")
     ;; (for-each (lambda (x) (write x) (newline)) text) (newline)
     (call-with-port (open-file-output-port filename (file-options no-fail))

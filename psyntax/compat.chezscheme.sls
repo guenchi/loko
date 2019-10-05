@@ -103,10 +103,7 @@
     [(_ name (field* ...) printer)
      (begin
        (define-record* name (field* ...))
-       (define dummy
-         (record-writer (type-descriptor name)
-                        (lambda (r p wr)
-                          (printer r p)))))]
+       (define dummy (record-writer (type-descriptor name) printer)))]
     [(_ name (field* ...))
      (define-record* name (field* ...))]))
 

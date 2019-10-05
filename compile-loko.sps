@@ -24,7 +24,19 @@
   (psyntax library-manager)
   (loko config)
   (only (loko compiler cp0) cp0-effort-limit)
-  (loko compiler static))
+  (loko compiler static)
+
+  (only (loko compiler compat) gensym?)
+  (prefix (loko arch amd64 pc-asm) pc-asm:)
+  (prefix (loko arch amd64 linux-asm) linux-asm:)
+  (prefix (loko arch amd64 pc-and-linux-asm) pc-and-linux-asm:)
+  )
+
+;; Workaround for the library visiting semantics in R6RS
+gensym?
+pc-asm:visit
+linux-asm:visit
+pc-and-linux-asm:visit
 
 ;; Amp up the optimizations
 (cp0-effort-limit 1000)

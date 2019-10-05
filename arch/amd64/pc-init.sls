@@ -1269,7 +1269,7 @@
                (let lp ()
                  (sys_hlt)
                  (lp))))
-  (init-set! 'machine-type '#(amd64 loko))
+  (init-set! 'machine-type '#(amd64 pc))
 
   ;; Check that #AC works
   (guard (exn (else #f))

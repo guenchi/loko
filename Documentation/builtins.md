@@ -62,8 +62,8 @@ Disassembly for #<procedure car .akku/lib/loko/libs/pairs.loko.sls:3224>
 ### Procedure: (machine-type)
 
 The machine type that Loko is running on. This is a vector where the
-first element is the CPU type (`amd64`) and the second is the OS
-(`linux` or `loko`).
+first element is the CPU type (`amd64`) and the second is the system
+environment (`linux` or `pc`).
 
 ### Syntax: (time *expr*)
 

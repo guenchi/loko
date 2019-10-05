@@ -813,7 +813,7 @@
          (else
           (error '$init-process "Internal error: no code for this pid" pid)))))
     ((multiboot)
-     (init-set! 'machine-type '#(amd64 loko))
+     (init-set! 'machine-type '#(amd64 pc))
      (init-set! 'open-i/o-poller pc-open-i/o-poller)
      (time-init-set! 'current-ticks pc-current-ticks)
      (let ((pid (get-pid)))

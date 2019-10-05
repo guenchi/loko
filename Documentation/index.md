@@ -16,10 +16,10 @@ Loko internals:
 Loko supports these targets, as set in `(loko config)`:
 
 * `amd64 linux`. Linux ELF amd64. Regular Linux binaries.
-* `amd64 loko`. Multiboot amd64. These are binaries that are loaded
+* `amd64 pc`. Multiboot amd64. These are binaries that are loaded
   by boot loaders such as GRUB 2 and SYSLINUX. QEMU's `-kernel` option
   also works.
-* `amd64 loko+linux` (default). Dual-personality binaries can run
+* `amd64 pc+linux` (default). Dual-personality binaries can run
   on both Linux and from a boot loader.
 
 The `amd64` targets are a bit unusual in that they require that the
