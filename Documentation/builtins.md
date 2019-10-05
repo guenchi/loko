@@ -117,6 +117,14 @@ measure the overhead of `eval`.
 Modern computers are notoriously difficult to get any consistent
 results from. An improvement in cycles could be because the code
 slightly moved in memory.
+See
+[Producing Wrong Data Without Doing Anything Obviously Wrong][mytkowicz] (2009,
+Mytkowicz, et al). A more lively view of the problem is the
+presentation [Performance Matters][berger] (2019, Emery Berger at
+Strange Loop).
+
+ [mytkowicz]: https://john.cs.olemiss.edu/~hcc/researchMethods/notes/localcopy/mytkowicz-wrong-data.pdf
+ [berger]: https://www.youtube.com/watch?v=r-TLSBdHe1A
 
 ### Procedure: (open-output-string)
 
