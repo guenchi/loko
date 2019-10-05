@@ -1,0 +1,54 @@
+;; -*- mode: scheme; coding: utf-8 -*-
+;; Copyright © 2019 Göran Weinholt <goran@weinholt.se>
+;; SPDX-License-Identifier: MIT
+#!r6rs
+
+;;; Initialize USB controllers and list devices as they appear
+
+(import
+  (rnrs (6))
+  (loko system fibers)
+  (loko drivers pci)
+  (loko drivers usb core)
+  (loko drivers usb uhci))
+
+(define (manage-usb-hci controller)
+  (let lp ()
+    (let ((msg (get-message (usb-controller-notify-channel controller))))
+      (case (car msg)
+        ((new-device)
+         (let ((usbdev (cdr msg)))
+           (display "\nlsusb: Fetching descriptors\n")
+           ;; Fetch all descriptors from the hardware and cache them
+           ;; on the usb-device record
+           (usb-fetch-descriptors usbdev)
+           ;; At this point we could find a driver for the device and
+           ;; spawn a fiber to handle it.
+           (print-usb-descriptor (usb-get-device-descriptor usbdev))
+           (for-each (lambda (cfgdesc*)
+                       (for-each print-usb-descriptor cfgdesc*))
+                     (usb-device-$configurations usbdev))
+           (write usbdev)
+           (newline))))
+      (lp))))
+
+(display "Scanning the PCI bus\n")
+(for-each
+ (lambda (dev)
+   (when (probe·pci·uhci? dev)
+     (display "Found UHCI controller: ")
+     (write dev)
+     (newline)
+     (spawn-fiber
+      (lambda ()
+        (let ((controller (make-usb-controller)))
+          (spawn-fiber (lambda () (manage-usb-hci controller)))
+          (driver·pci·uhci dev controller))))))
+ (pci-scan-bus #f))
+
+(display "Waiting for USB devices\n")
+
+;; Keep the process alive
+(let lp ()
+  (sleep 60)
+  (lp))

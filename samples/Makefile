@@ -1,4 +1,4 @@
-SUBDIRS = bga-graphics etherdump hello lspci web-server
+SUBDIRS = bga-graphics etherdump hello lspci lsusb web-server
 
 default: all
 

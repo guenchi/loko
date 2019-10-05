@@ -20,6 +20,7 @@
     usb-device-max-packet-size-0
     usb-device-speed
     usb-get-device-descriptor
+    usb-get-configuration-descriptors
 
     usb-device-$descriptor-set!
     usb-device-$descriptor
@@ -119,8 +120,8 @@
     ;; Change a device's configuration (synchronous call)
     usb-set-configuration
 
-    temp-get-descriptors
-    )
+    ;; Fetch and cache the device's string and configuration descriptors
+    usb-fetch-descriptors)
   (import
     (rnrs (6))
     (loko system fibers))
@@ -337,10 +338,20 @@
           speed                      ;low, full, high, super, super+
           (mutable $descriptor)
           ;; ((cfgdesc intdesc ... epdesc ...) ...)
-          (mutable $configurations)))
+          (mutable $configurations)
+          ;; ((lang-id manufacturer product serial-no) ...)
+          (mutable $device-strings))
+  (protocol
+   (lambda (p)
+     (lambda (controller port address max-packet-size-0 speed desc)
+       (p controller port address max-packet-size-0 speed desc #f #f)))))
 
 ;; Gets the USB device descriptor without generating bus traffic.
 (define usb-get-device-descriptor usb-device-$descriptor)
+
+;; Same as above for the configuration descriptors. The
+;; usb-fetch-descriptors procedure must be called first.
+(define usb-get-configuration-descriptors usb-device-$configurations)
 
 ;;; Requests
 
@@ -415,34 +426,30 @@
 ;; FIXME: needs a cleanup. It should fetch all descriptors and store
 ;; them in the usb-device record so that no bus traffic is needed to
 ;; read them.
-(define (temp-get-descriptors dev)
-  (let ((address (usb-device-address dev))
-        (desc (usb-get-device-descriptor dev)))
-    (log/debug "Getting language list")
-    (let* ((strdesc (get-string-descriptor dev 0 0))
-           (lang* (string-language-descriptor->list strdesc)))
-      (let ((langid (if (pair? lang*) (car lang*) #f)))
-        (when langid
-          (log/debug "Getting strings for language #x" (number->string langid 16))
-          (let ((manufacturer  (get-string-descriptor* dev langid (devdesc-iManufacturer desc)))
-                (product       (get-string-descriptor* dev langid (devdesc-iProduct desc)))
-                (serial-number (get-string-descriptor* dev langid (devdesc-iSerialNumber desc))))
-            (print " Manufacturer: " manufacturer)
-            (print " Product: " product)
-            (print " Serial Number: " serial-number)))
+(define (usb-fetch-descriptors dev)
+  (let ((desc (usb-get-device-descriptor dev))
+        (strdesc (get-string-descriptor dev 0 0)))
 
-        (do ((conf 0 (fx+ conf 1))
-             (cfgdesc** '()
-                        (cons (split-configuration-descriptor
-                               (get-configuration-descriptor dev conf))
-                              cfgdesc**)))
-            ((fx=? conf (devdesc-bNumConfigurations
-                         (usb-get-device-descriptor dev)))
-             (usb-device-$configurations-set! dev (reverse cfgdesc**))))
+    ;; Fetch string descriptors
+    (let ((strings
+           (map
+            (lambda (langid)
+              (let ((manufacturer  (get-string-descriptor* dev langid (devdesc-iManufacturer desc)))
+                    (product       (get-string-descriptor* dev langid (devdesc-iProduct desc)))
+                    (serial-number (get-string-descriptor* dev langid (devdesc-iSerialNumber desc))))
+                (list langid manufacturer product serial-number)))
+            (string-language-descriptor->list strdesc))))
+      (usb-device-$device-strings-set! dev strings))
 
-        (for-each (lambda (cfgdesc*)
-                    (for-each print-usb-descriptor cfgdesc*))
-                  (usb-device-$configurations dev))))))
+    ;; Fetch configuration descriptors
+    (do ((conf 0 (fx+ conf 1))
+         (cfgdesc** '()
+                    (cons (split-configuration-descriptor
+                           (get-configuration-descriptor dev conf))
+                          cfgdesc**)))
+        ((fx=? conf (devdesc-bNumConfigurations
+                     (usb-get-device-descriptor dev)))
+         (usb-device-$configurations-set! dev (reverse cfgdesc**))))))
 
 (define (get-full-descriptor dev index descindex desctype)
   (let ((req0 (make-devreq-get-descriptor desctype descindex index 8)))

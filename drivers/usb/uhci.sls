@@ -37,7 +37,8 @@ Conventions in this driver:
 (define (driver·uhci reg-type^ reg-base reg-size irq controller)
   (define reg-type 'i/o)
   (define _dummy (assert (eq? reg-type^ reg-type)))
-  (define (print . x) (for-each display x) (newline))
+  (define (log/error . x)
+    (for-each display x) (newline))
   (define log/debug (lambda _ #f))
 
 ;;; Access to the device registers (independent of i/o vs mem)
@@ -397,7 +398,7 @@ Conventions in this driver:
          i)))
 
   (define (init-controller)
-    (print "Starting UHCI controller...")
+    (log/debug "Starting UHCI controller...")
     (USBINTR-set! (fxior INTR-Short INTR-IOC INTR-Resume INTR-Timeout/CRC))
     (FRNUM-set! #x0000)
     (%allocate-frame-list!)             ;set %&frame-list and %&queues
@@ -408,7 +409,7 @@ Conventions in this driver:
     (reg-flush-writes))
 
   (define (uninit-controller)
-    (print "Stopping UHCI controller...")
+    (log/debug "Stopping UHCI controller...")
     (global-reset)
     (millisleep 50)
     (SOFMOD-set! %original-SOF))
@@ -487,7 +488,7 @@ Conventions in this driver:
       (dma-flush-writes)))
 
   (define (reset-and-enable-port port)
-    (print "Resetting port " port)
+    (log/debug "Resetting port " port)
     (PortSCn-set! port PortSC-Reset)
     (reg-flush-writes)
     (millisleep 50)
@@ -498,16 +499,16 @@ Conventions in this driver:
       (let ((x (PortSCn-ref port)))
         (cond
           ((eqv? i 10)
-           (print "Timed out trying to enable the port")
+           (log/error "Timed out trying to enable the port")
            #f)
           ((eqv? 0 (fxand x PortSC-Connect))
-           (print "Nothing attached")
+           (log/debug "Nothing attached")
            #f)
           ((not (eqv? 0 (fxand x (fxior PortSC-Connect-Change PortSC-Enable-Change))))
            (PortSCn-set! port (fxior PortSC-Connect-Change PortSC-Enable-Change))
            (lp (fx+ i 1)))
           ((not (eqv? 0 (fxand x PortSC-Enable)))
-           (print "Port " port " enabled!")
+           (log/debug "Port " port " enabled!")
            #t)
           (else
            (PortSCn-set! port PortSC-Enable)
@@ -520,7 +521,7 @@ Conventions in this driver:
     ;; TODO: This should not block the main loop
     (define (reset-and-create-device port low-speed?)
       (let ((dev0 (make-usb-device controller port 0 8
-                                   (if low-speed? 'low 'full) #f #f)))
+                                   (if low-speed? 'low 'full) #f)))
         (cond
           ((next-free-address) =>
            (lambda (address)
@@ -535,7 +536,7 @@ Conventions in this driver:
                         (let ((dev (make-usb-device controller port address
                                                     (devdesc-bMaxPacketSize0 desc)
                                                     (usb-device-speed dev0)
-                                                    desc #f)))
+                                                    desc)))
                           (cond
                             ((get-device-descriptor dev (desc-bLength desc)) =>
                              (lambda (full-desc)
@@ -562,14 +563,16 @@ Conventions in this driver:
       (let* ((x (PortSCn-ref port))
              (low-speed? (fx=? PortSC-Low-Speed (fxand x PortSC-Low-Speed))))
         (unless (fxzero? (fxand x PortSC-Connect-Change))
-          (print "Probing new device on " port)
+          (log/debug "Probing new device on " port)
           (cond
             ((reset-and-create-device port low-speed?) =>
              (lambda (dev)
                ;; Send a notification that there's a new device.
                ;; Whoever is listening will be responsible for
                ;; fetching the additional descriptors.
-               (put-message notify-ch (cons 'new-device dev)))))))))
+               (spawn-fiber
+                (lambda ()
+                  (put-message notify-ch (cons 'new-device dev)))))))))))
 
   ;; Perform a control transfer and read back a response from the
   ;; device
@@ -623,8 +626,8 @@ Conventions in this driver:
                  (log/debug "<- " resp)
                  (values 'ok resp)))
               (else
-               (print "TD0: " (TD->list &td0))
-               (print "Last TD: " (TD->list &last-td))
+               (log/debug "TD0: " (TD->list &td0))
+               (log/debug "Last TD: " (TD->list &last-td))
                (values status #f))))))))
 
   ;; TODO: perform-devreq/output
@@ -664,8 +667,8 @@ Conventions in this driver:
                          (log/debug "<- (" endpoint ") " data)
                          (values 'ok 0))))
                  (else
-                  (print "TD0: " (TD->list &td0))
-                  (print "Last TD: " (TD->list &td))
+                  (log/debug "TD0: " (TD->list &td0))
+                  (log/debug "Last TD: " (TD->list &td))
                   (values status #f)))))
           ;; Enqueue the next packet
           (let ((packet-len (fxmin (fx- total-length index) bytes/req)))
@@ -682,7 +685,7 @@ Conventions in this driver:
       (log/debug "Getting " total-length " bytes of the device descriptor")
       (let-values ([(status resp) (perform-devreq/response dev EndPt0 req 100)])
         (unless (eq? status 'ok)
-          (print "Could not retrieve device descriptor: " status))
+          (log/error "Could not retrieve device descriptor: " status))
         resp)))
 
   (define (set-address dev new-address)
@@ -709,12 +712,12 @@ Conventions in this driver:
         (schedule-insert-td (if low-speed? idx-QLS idx-QFS) &td0)
         (case (await-transfer-descriptor &td1 10)
           ((ok)
-           (print "Address set to " new-address)
+           (log/debug "Address set to " new-address)
            new-address)
           (else
-           (print "Error setting the address")
-           (print "TD0: " (TD->list &td0))
-           (print "TD1: " (TD->list &td1))
+           (log/debug "Error setting the address")
+           (log/debug "TD0: " (TD->list &td0))
+           (log/debug "TD1: " (TD->list &td1))
            #f)))))
 
   (define (set-configuration dev configuration)
@@ -741,12 +744,12 @@ Conventions in this driver:
         (schedule-insert-td (if low-speed? idx-QLS idx-QFS) &td0)
         (case (await-transfer-descriptor &td1 10)
           ((ok)
-           (print "Configuration set to " configuration)
+           (log/debug "Configuration set to " configuration)
            #t)
           (else
-           (print "Error setting the configuration")
-           (print "TD0: " (TD->list &td0))
-           (print "TD1: " (TD->list &td1))
+           (log/debug "Error setting the configuration")
+           (log/debug "TD0: " (TD->list &td0))
+           (log/debug "TD1: " (TD->list &td1))
            #f)))))
 
   (define %num-ports
@@ -790,7 +793,7 @@ Conventions in this driver:
              (put-message ch (cons 'ok configuration))))
           args)]
         [else
-         (print "unknown request: " req-type args)
+         (log/debug "unknown request: " req-type args)
          (let ((ch (car args)))
            (put-message ch (cons 'fail 'unknown-req)))])))
 
@@ -799,7 +802,7 @@ Conventions in this driver:
   (define request-ch (usb-controller-request-channel controller))
   (define notify-ch (usb-controller-notify-channel controller))
 
-  (print "Detected " %num-ports " USB ports")
+  (log/debug "Detected " %num-ports " USB ports")
 
   (guard (exn
           (else
@@ -812,7 +815,7 @@ Conventions in this driver:
       (detect-new-devices)
       (let ((x (perform-operation
                 (choice-operation
-                 (wrap-operation sleep-op (lambda _ '(sleep . ())))
+                 (wrap-operation sleep-op (lambda _ '(sleep)))
                  (wrap-operation (get-operation request-ch)
                                  (lambda (req) (cons 'req req)))))))
         (case (car x)
