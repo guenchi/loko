@@ -66,6 +66,7 @@ install: all
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/core.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/uhci.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
+	$(INSTALL) -m 0644 drivers/usb/hub.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 lib/match.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 #	$(INSTALL) -m 0644 lib/posix.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 # Libraries needed when compiling programs

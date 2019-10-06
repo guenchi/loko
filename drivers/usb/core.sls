@@ -11,10 +11,18 @@
     make-usb-controller
     usb-controller-request-channel
     usb-controller-notify-channel
+    usb-controller-root-hub
+
+    ;; USB hubs
+    make-usb-hub
+    usb-hub-request-channel
+    usb-hub-notify-channel
+    usb-hub-descriptor
+    usb-hub-descriptor-set!
 
     ;; USB devices
     make-usb-device
-    ;; usb-device-controller
+    usb-device-controller
     usb-device-port
     usb-device-address
     usb-device-max-packet-size-0
@@ -119,12 +127,20 @@
 
     ;; Change a device's configuration (synchronous call)
     usb-set-configuration
+    ;; Change a device's address (synchronous call)
+    usb-set-address
 
     ;; Fetch and cache the device's string and configuration descriptors
-    usb-fetch-descriptors)
+    usb-fetch-descriptors
+    usb-fetch-device-descriptor   ;involves bus access
+    )
   (import
     (rnrs (6))
+    (loko match)
     (loko system fibers))
+
+(define (print . x) (for-each display x) (newline))
+(define (log/debug . _) #f)
 
 (define-syntax define-vu8-ref
   (lambda (x)
@@ -317,21 +333,25 @@
           (let ((cfgdesc (get-bytevector-n p (lookahead-u8 p))))
             (cons cfgdesc (lp)))))))
 
-;; Each USB HCI gets one of these
+;; Each USB controller (HCI) gets one of these
 (define-record-type usb-controller
   (fields
    ;; Requests to the controller.
    request-channel
    ;; Notifications from the controller.
-   notify-channel)
+   notify-channel
+   ;; The "root hub", which is a fake hub that handles the ports
+   ;; directly on the controller.
+   root-hub)
   (protocol
    (lambda (p)
      (lambda ()
-       (p (make-channel) (make-channel))))))
+       (p (make-channel) (make-channel)
+          (make-usb-hub))))))
 
 ;; Each device on the USB gets one of these
 (define-record-type usb-device
-  (fields controller
+  (fields controller hub
           port
           address
           max-packet-size-0          ;max packet size for endpoint 0
@@ -343,8 +363,22 @@
           (mutable $device-strings))
   (protocol
    (lambda (p)
-     (lambda (controller port address max-packet-size-0 speed desc)
-       (p controller port address max-packet-size-0 speed desc #f #f)))))
+     (lambda (controller hub port address max-packet-size-0 speed desc)
+       (p controller hub port address max-packet-size-0 speed desc #f #f)))))
+
+;; Each USB hub gets one of these and the controller also gets one
+(define-record-type usb-hub
+  (fields
+   ;; Control requests to the hub
+   request-channel
+   ;; Status change notifications from the hub
+   notify-channel
+   ;; Hub descriptor
+   (mutable descriptor))
+  (protocol
+   (lambda (p)
+     (lambda ()
+       (p (make-channel) (make-channel) #f)))))
 
 ;; Gets the USB device descriptor without generating bus traffic.
 (define usb-get-device-descriptor usb-device-$descriptor)
@@ -415,17 +449,21 @@
         (values (car resp) (cdr resp)))))
   (let-values ([(status resp) (perform-set-configuration dev configuration)])
     (case status
-      ((ok) resp)                     ;actual length
+      ((ok) resp)
       (else (error 'usb-set-configuration "Failed" dev configuration)))))
+
+(define (usb-set-address dev address)
+  (let ((ch (make-channel)))
+    (put-message (usb-controller-request-channel (usb-device-controller dev))
+                 (list 'set-address ch dev address))
+    (match (get-message ch)
+      [('ok . resp)
+       resp]
+      [('fail . resp)
+       (error 'usb-set-address "Failed to set address" dev address resp)])))
 
 ;;;
 
-(define (print . x) (for-each display x) (newline))
-(define (log/debug . _) #f)
-
-;; FIXME: needs a cleanup. It should fetch all descriptors and store
-;; them in the usb-device record so that no bus traffic is needed to
-;; read them.
 (define (usb-fetch-descriptors dev)
   (let ((desc (usb-get-device-descriptor dev))
         (strdesc (get-string-descriptor dev 0 0)))
@@ -450,6 +488,14 @@
         ((fx=? conf (devdesc-bNumConfigurations
                      (usb-get-device-descriptor dev)))
          (usb-device-$configurations-set! dev (reverse cfgdesc**))))))
+
+(define (usb-fetch-device-descriptor dev total-length)
+  (let ((req0 (make-devreq-get-descriptor desctype-DEVICE 0 0 total-length)))
+    (let-values ([(status resp) (perform-devreq/response dev EndPt0 req0 100)])
+      (unless (eqv? status 'ok)
+        (error 'get-device-descriptor "Could not retrieve device descriptor"
+               dev total-length status))
+      (usb-device-$descriptor-set! dev resp))))
 
 (define (get-full-descriptor dev index descindex desctype)
   (let ((req0 (make-devreq-get-descriptor desctype descindex index 8)))
@@ -485,6 +531,5 @@
 
 (define (get-configuration-descriptor dev descindex)
   (get-full-descriptor dev 0 descindex desctype-CONFIGURATION))
-
 
 )

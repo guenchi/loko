@@ -19,8 +19,7 @@ run: $(PROGRAM)
 	qemu-system-x86_64 -enable-kvm -kernel $(PROGRAM) -m 512 \
 	  -debugcon vc -serial stdio \
 	  -usb \
-	  -device usb-kbd -device usb-mouse \
-	  -s
+	  -device usb-kbd -device usb-mouse
 
 clean:
 	rm -f $(PROGRAM)

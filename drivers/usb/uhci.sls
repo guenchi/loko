@@ -18,6 +18,11 @@ Conventions in this driver:
  * TD is transfer descriptor
  * QH is queue head
 
+The driver is based on Lunt's book on USB. The queues are according to
+the book, but oddly enough differ signficantly from how the design
+guide says they should be set up wrt isochronous transfers and
+reclamation.
+
 |#
 
 (library (loko drivers usb uhci)
@@ -27,12 +32,15 @@ Conventions in this driver:
     driver·uhci)
   (import
     (rnrs (6))
+    (loko match)
     (loko system fibers)
     (loko system unsafe)
     (only (loko system $host) dma-allocate dma-free
           enable-irq acknowledge-irq wait-irq-operation)
     (loko drivers pci)
-    (loko drivers usb core))
+    (loko drivers usb core)
+    (loko drivers usb hub)
+    (struct pack))
 
 (define (driver·uhci reg-type^ reg-base reg-size irq controller)
   (define reg-type 'i/o)
@@ -177,6 +185,7 @@ Conventions in this driver:
   (define PortSC-Enable         #b0000000000100) ;Enable/disable
   (define PortSC-Connect-Change #b0000000000010) ;Connect status change
   (define PortSC-Connect        #b0000000000001) ;Current connect status
+  (define PortSC-R/WC-mask      #b0000000001010) ;Cleared when written as 1
 
 ;;; Hardware (DMA) data structures
 
@@ -445,7 +454,7 @@ Conventions in this driver:
           (Q32 (fx+ &queues (* 16 5)))
           (Q64 (fx+ &queues (* 16 6)))
           (Q128 (fx+ &queues (* 16 7))) ;every 128ms
-          ;; Various control, bulk and interrupt
+          ;; Control, bulk and isochronous
           (QISO (fx+ &queues (* 16 8)))
           (QLS (fx+ &queues (* 16 9)))
           (QFS (fx+ &queues (* 16 10))))
@@ -459,7 +468,9 @@ Conventions in this driver:
                        %&queues)
 
       ;; Set up links between the queues. QFS, QLS and QISO are last
-      ;; and appear in every frame.
+      ;; and appear in every frame. QFS and QLS are for bulk
+      ;; transfers; QISO for isochronous; the numbered queues are for
+      ;; interrupt transfers.
       (QH-HEAD-link-queue! QLS QISO)
       (QH-HEAD-link-queue! QFS QLS)
       (QH-HEAD-link-queue! Q1 QFS)
@@ -513,66 +524,6 @@ Conventions in this driver:
           (else
            (PortSCn-set! port PortSC-Enable)
            (lp (fx+ i 1)))))))
-
-  (define (detect-new-devices)
-    ;; XXX: The important part here is that only one device at a time
-    ;; should have the default address. Anything else would be
-    ;; hilarious, of course.
-    ;; TODO: This should not block the main loop
-    (define (reset-and-create-device port low-speed?)
-      (let ((dev0 (make-usb-device controller port 0 8
-                                   (if low-speed? 'low 'full) #f)))
-        (cond
-          ((next-free-address) =>
-           (lambda (address)
-             (cond
-               ((reset-and-enable-port (usb-device-port dev0))
-                (cond
-                  ((get-device-descriptor dev0 8) =>
-                   (lambda (desc)
-                     (reset-and-enable-port (usb-device-port dev0))
-                     (cond
-                       ((set-address dev0 address)
-                        (let ((dev (make-usb-device controller port address
-                                                    (devdesc-bMaxPacketSize0 desc)
-                                                    (usb-device-speed dev0)
-                                                    desc)))
-                          (cond
-                            ((get-device-descriptor dev (desc-bLength desc)) =>
-                             (lambda (full-desc)
-                               (usb-device-$descriptor-set! dev full-desc)
-                               (vector-set! %devices address dev)
-                               dev))
-                            (else
-                             (log/debug "Failed to get full device descriptor on port " port)
-                             #f))))
-                       (else
-                        (log/debug "Failed to assign address to device on port " port)
-                        #f))))
-                  (else
-                   (log/debug "Failed to get device descriptor from port " port)
-                   #f)))
-               (else
-                (log/debug "Failed to reset and enable port " port)
-                #f))))
-          (else
-           (log/debug "No more free USB addresses")
-           #f))))
-    (do ((port 0 (fx+ port 1)))
-        ((eqv? port %num-ports))
-      (let* ((x (PortSCn-ref port))
-             (low-speed? (fx=? PortSC-Low-Speed (fxand x PortSC-Low-Speed))))
-        (unless (fxzero? (fxand x PortSC-Connect-Change))
-          (log/debug "Probing new device on " port)
-          (cond
-            ((reset-and-create-device port low-speed?) =>
-             (lambda (dev)
-               ;; Send a notification that there's a new device.
-               ;; Whoever is listening will be responsible for
-               ;; fetching the additional descriptors.
-               (spawn-fiber
-                (lambda ()
-                  (put-message notify-ch (cons 'new-device dev)))))))))))
 
   ;; Perform a control transfer and read back a response from the
   ;; device
@@ -680,17 +631,9 @@ Conventions in this driver:
             (TD-set-token!   &td packet-len D endpoint address PID)
             (TD-set-address! &td &data))))))
 
-  (define (get-device-descriptor dev total-length)
-    (let ((req (make-devreq-get-descriptor desctype-DEVICE 0 0 total-length)))
-      (log/debug "Getting " total-length " bytes of the device descriptor")
-      (let-values ([(status resp) (perform-devreq/response dev EndPt0 req 100)])
-        (unless (eq? status 'ok)
-          (log/error "Could not retrieve device descriptor: " status))
-        resp)))
-
   (define (set-address dev new-address)
     (let ((low-speed? (eq? (usb-device-speed dev) 'low))
-          (old-address (usb-device-address dev)))
+          (address (usb-device-address dev)))
       (log/debug "Setting address...")
       (let* ((&td0 &probe-mem)
              (&td1 (fx+ &td0 TD-size))
@@ -701,12 +644,12 @@ Conventions in this driver:
           ;; Set the address
           (TD-link-td!     &td0 &td1)
           (TD-set-control! &td0 low-speed? #f #f)
-          (TD-set-token!   &td0 (bytevector-length bv) DATA0 EndPt0 old-address PID-SETUP)
+          (TD-set-token!   &td0 (bytevector-length bv) DATA0 EndPt0 address PID-SETUP)
           (TD-set-address! &td0 &data-setup))
         ;; Read back the status
         (TD-link-terminate! &td1)
         (TD-set-control!    &td1 low-speed? #f #f)
-        (TD-set-token!      &td1 Length0 DATA1 EndPt0 old-address PID-IN)
+        (TD-set-token!      &td1 Length0 DATA1 EndPt0 address PID-IN)
         (TD-set-address!    &td1 0)       ;unused
         ;; Wait for the transfer to complete
         (schedule-insert-td (if low-speed? idx-QLS idx-QFS) &td0)
@@ -760,47 +703,187 @@ Conventions in this driver:
       (init-controller)
       (count-ports)))
 
+  (define shutdown-cvar (make-cvar))
   (define (cleanup)
+    (signal-cvar! shutdown-cvar)
     (uninit-controller)
     (dma-free &probe-mem)
     (dma-free &frame)
     (dma-free &queues))
 
-  (define (handle-request req)
-    (let ((req-type (car req))
-          (args (cdr req)))
-      ;; FIXME: This uses put-message, but that can block
-      (case req-type
-        [(perform-devreq/response)
-         (apply
-          (case-lambda
-            ((ch dev endpoint devreq timeout)
-             (let-values ([(status resp) (perform-devreq/response dev endpoint devreq timeout)])
-               (put-message ch (cons status resp)))))
-          args)]
-        [(perform-bulk)
-         (apply
-          (case-lambda
-            ((ch dev endpoint data timeout)
-             (let-values ([(status resp) (perform-bulk dev endpoint data timeout)])
-               (put-message ch (cons status resp)))))
-          args)]
-        [(set-configuration)
-         (apply
-          (case-lambda
-            ((ch dev configuration)
-             (set-configuration dev configuration)
-             (put-message ch (cons 'ok configuration))))
-          args)]
-        [else
-         (log/debug "unknown request: " req-type args)
-         (let ((ch (car args)))
-           (put-message ch (cons 'fail 'unknown-req)))])))
+;;; UHCI Root hub
+
+  (define (fxtest a b) (not (eqv? 0 (fxand a b))))
+
+  (define (fxtest-set-bit x PortSC-mask bit)
+    (if (fxtest x PortSC-mask) (fxarithmetic-shift-left 1 bit) 0))
+
+  (define (PortSCn->wPortStatus x)
+    ;; Bit positions
+    (define PORT_CONNECTION   0)
+    (define PORT_ENABLE       1)
+    (define PORT_SUSPEND      2)
+    (define PORT_OVER_CURRENT 3)
+    (define PORT_RESET        4)
+    (define PORT_POWER        8)
+    (define PORT_LOW_SPEED    9)
+    (fxior (fxtest-set-bit x PortSC-Connect PORT_CONNECTION)
+           (fxtest-set-bit x PortSC-Enable PORT_ENABLE)
+           (fxtest-set-bit x PortSC-Suspend PORT_SUSPEND)
+           (fxtest-set-bit x PortSC-Reset PORT_RESET)
+           (fxtest-set-bit x PortSC-Low-Speed PORT_LOW_SPEED)
+           (fxarithmetic-shift-left 1 PORT_POWER)))
+
+  (define (PortSCn->wChangeStatus x)
+    ;; Bit positions
+    (define C_PORT_CONNECTION   0)
+    (define C_PORT_ENABLE       1)
+    (define C_PORT_SUSPEND      2)
+    (define C_PORT_OVER_CURRENT 3)
+    (define C_PORT_RESET        4)
+    (fxior (fxtest-set-bit x PortSC-Connect-Change C_PORT_CONNECTION)
+           (fxtest-set-bit x PortSC-Enable-Change C_PORT_ENABLE)
+           ;; TODO: Implement these two properly
+           #;C_PORT_SUSPEND
+           (fxarithmetic-shift-left 1 C_PORT_RESET)))
+
+  (define (handle-hub-request ch req)
+    (match req
+      ;; [('ClearHubFeature port) #f]
+      ;; [('ClearPortFeature port) #f]
+      ;; [('GetBusState port) #f]
+      [#('GetHubDescriptor 0)
+       ;; Create a hub descriptor for UHCI
+       (let ((x (pack "<uCCCSCC CC" (format-size "<uCCCSCC CC")
+                      #x29 %num-ports
+                      ;; Ganged port power switching; not a compound
+                      ;; device; global over-current protection
+                      0
+                      ;; Wait 10 ms for good power after power on
+                      10/2 0 #xff #xff)))
+         (put-message ch (cons 'ok x)))]
+      ;; [('GetHubStatus port) #f]
+      [#('GetPortStatus port)
+       (if (not (fx<? -1 port %num-ports))
+           (put-message ch (cons 'fail 'bad-port))
+           (let ((x (PortSCn-ref port)))
+             (let ((wPortStatus (PortSCn->wPortStatus x))
+                   (wChangeStatus (PortSCn->wChangeStatus x)))
+               (put-message ch (cons 'ok (pack "<SS" wPortStatus wChangeStatus))))))]
+      ;; [('SetHubDescriptor port) #f]
+      ;; [('SetHubFeature port) #f]
+      [#('SetPortFeature feature port)
+       (if (not (fx<? -1 port %num-ports))
+           (put-message ch (cons 'fail 'bad-port))
+           (let* ((x (PortSCn-ref port))
+                  (ok (case feature
+                        [(PORT_RESET)
+                         ;; TODO: keep track of "reset change" and do
+                         ;; the reset in the background so the root
+                         ;; hub is not blocked here
+                         (reset-and-enable-port port)
+                         #t]
+                        [(PORT_SUSPEND)
+                         (PortSCn-set! port (fxior PortSC-Suspend (fxand x (fxnot PortSC-R/WC-mask))))
+                         (reg-flush-writes)
+                         #t]
+                        [else #f])))
+             (put-message ch (if ok '(ok . #vu8()) '(fail . bad-request)))))]
+      [#('ClearPortFeature feature port)
+       (if (not (fx<? -1 port %num-ports))
+           (put-message ch (cons 'fail 'bad-port))
+           (let* ((x (PortSCn-ref port))
+                  (ok (case feature
+                        [(C_PORT_RESET)
+                         ;; FIXME: See PORT_RESET above
+                         #t]
+                       [(PORT_SUSPEND)
+                        (PortSCn-set! port (fxand x (fxnot (fxior PortSC-Suspend PortSC-R/WC-mask))))
+                        #t]
+                       [(PORT_ENABLE)
+                        (PortSCn-set! port (fxand x (fxnot (fxior PortSC-Enable PortSC-R/WC-mask))))
+                        #t]
+                       [(C_PORT_CONNECTION)
+                        (PortSCn-set! port (fxior PortSC-Connect-Change
+                                                  (fxand x (fxnot PortSC-R/WC-mask))))
+                        #t]
+                       [(C_PORT_ENABLE)
+                        (PortSCn-set! port (fxior PortSC-Enable-Change
+                                                  (fxand x (fxnot PortSC-R/WC-mask))))
+                        #t]
+                       [else #f])))
+             (reg-flush-writes)
+             (put-message ch (if ok '(ok . #vu8()) '(fail . bad-request)))))]
+      [_
+       (put-message ch (cons 'fail 'unknown-req))]))
+
+  (define (root-hub-task)
+    (define (change-report)
+      ;; Build a byte like the one sent in a hub interrupt endpoint
+      (let lp ((port 0)
+               (change-report 0))
+        (if (fx=? port %num-ports)
+            change-report
+            (lp (fx+ port 1)
+                (if (fxzero? (fxand (PortSCn-ref port) PortSC-Connect-Change))
+                    change-report
+                    (fxior change-report (fxarithmetic-shift-left 1 (fx+ port 1))))))))
+
+    (define request-ch (usb-hub-request-channel root-hub))
+    (define notify-ch (usb-hub-notify-channel root-hub))
+
+    (let loop ((sleep-op (sleep-operation 1))
+               (notify-op #f))
+      (match (perform-operation
+              (choice-operation
+               (wrap-operation (wait-operation shutdown-cvar) (lambda _ 'shutdown))
+               (wrap-operation (get-operation request-ch) (lambda (req) (cons 'req req)))
+               (if notify-op
+                   (wrap-operation notify-op (lambda _ 'notified))
+                   (wrap-operation sleep-op (lambda _ 'sleep)))))
+        ['sleep
+         ;; Every interval we probe the ports for change indications
+         ;; and prepare to send them. The change indication bit is
+         ;; cleared by writing it, which will happen when the port is
+         ;; tested.
+         (let ((changes (change-report)))
+           (log/debug "Changes: #b" (number->string changes 2))
+           (loop (sleep-operation 1) (put-operation notify-ch changes)))]
+        ['notified
+         ;; Someone received our notification
+         (loop sleep-op #f)]
+        [('req ch . req)
+         (log/debug "root hub req: " req)
+         (handle-hub-request ch req)
+         (loop sleep-op notify-op)]
+        ['shutdown #f])))
 
 ;;; Main loop
 
+  (define (handle-hci-request req)
+    (match req
+      [('perform-devreq/response ch dev endpoint devreq timeout)
+       (let-values ([(status resp) (perform-devreq/response dev endpoint devreq timeout)])
+         (put-message ch (cons status resp)))]
+      [('perform-bulk ch dev endpoint data timeout)
+       (let-values ([(status resp) (perform-bulk dev endpoint data timeout)])
+         (put-message ch (cons status resp)))]
+      ;; FIXME: Is this necessary?
+      [('set-configuration ch dev configuration)
+       (put-message ch (if (set-configuration dev configuration) (cons 'ok configuration) '(fail . #f)))]
+      ;; This is a special case in how the packets are sent since the
+      ;; address changes in the middle of the request
+      [('set-address ch dev address)
+       (put-message ch (if (set-address dev address) (cons 'ok address) '(fail . #f)))]
+      [(req-type ch . _)
+       (log/debug "unknown request: " req-type)
+       (put-message ch (cons 'fail 'unknown-req))]))
+
+  (define root-hub (usb-controller-root-hub controller))
   (define request-ch (usb-controller-request-channel controller))
   (define notify-ch (usb-controller-notify-channel controller))
+
+  (define TIMEOUT (sleep-operation 30)) ;DEBUGGING
 
   (log/debug "Detected " %num-ports " USB ports")
 
@@ -811,19 +894,20 @@ Conventions in this driver:
            (newline)
            (cleanup)
            (raise exn)))
-    (let loop ((sleep-op (sleep-operation 0.001)))
-      (detect-new-devices)
+    (spawn-fiber root-hub-task)
+    (spawn-fiber (lambda ()
+                   (usb-enumerator controller shutdown-cvar)))
+    (let loop ()
       (let ((x (perform-operation
                 (choice-operation
-                 (wrap-operation sleep-op (lambda _ '(sleep)))
                  (wrap-operation (get-operation request-ch)
-                                 (lambda (req) (cons 'req req)))))))
+                                 (lambda (req) (cons 'req req)))
+                 (wrap-operation TIMEOUT (lambda _ '(stop)))))))
         (case (car x)
-          ((sleep)
-           (loop (sleep-operation 0.001)))
           ((req)
-           (handle-request (cdr x))
-           (loop sleep-op)))))
+           (handle-hci-request (cdr x))
+           (loop)))))
+    (signal-cvar! shutdown-cvar)
     (display "UHCI exited\n" (current-error-port))
     (cleanup)))
 
@@ -836,8 +920,12 @@ Conventions in this driver:
 ;; Main procedure for UHCI devices connected by PCI
 (define (driver·pci·uhci dev controller)
   (let ((bar (vector-ref (pcidev-BARs dev) 4)))
+    ;; Disable keyboard and mouse legacy support
+    (pci-put-u16 dev #xC0 #x0000)
     (driver·uhci (if (pcibar-i/o? bar) 'i/o 'mem)
                  (pcibar-base bar)
                  (pcibar-size bar)
                  (pcidev-irq dev)
-                 controller))))
+                 controller)))
+
+)
