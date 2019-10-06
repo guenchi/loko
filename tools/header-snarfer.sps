@@ -50,6 +50,7 @@
     __NR_getpgid
     __NR_getpid
     __NR_getppid
+    __NR_getpriority
     __NR_getrandom
     __NR_getsid
     __NR_getsockname
@@ -66,6 +67,7 @@
     __NR_mmap
     __NR_munmap
     __NR_open
+    __NR_openat
     __NR_pipe2
     __NR_preadv
     __NR_preadv2
@@ -82,6 +84,7 @@
     __NR_sendmsg
     __NR_sendto
     __NR_setpgid
+    __NR_setpriority
     __NR_setregid
     __NR_setreuid
     __NR_setsid
@@ -103,6 +106,8 @@
     __NR_utimensat
     __NR_wait4
     __NR_write
+
+    (sizeof gid_t)
 
     (c-include "asm/errno.h")
     EPERM
@@ -283,10 +288,60 @@
     IXANY
     IXOFF
     IMAXBEL
+    IUTF8
     (comment "c_oflag")
     OPOST
     (comment "c_cflag")
+    CBAUD
+    B0
+    B50
+    B75
+    B110
+    B134
+    B150
+    B200
+    B300
+    B600
+    B1200
+    B1800
+    B2400
+    B4800
+    B9600
+    B19200
+    B38400
+    EXTA
+    EXTB
+    CSIZE
+    CS5
+    CS6
+    CS7
     CS8
+    CSTOPB
+    CREAD
+    PARENB
+    PARODD
+    HUPCL
+    CLOCAL
+    CBAUDEX
+    BOTHER
+    B57600
+    B115200
+    B230400
+    B460800
+    B500000
+    B576000
+    B921600
+    B1000000
+    B1152000
+    B1500000
+    B2000000
+    B2500000
+    B3000000
+    B3500000
+    B4000000
+    CIBAUD
+    CMSPAR
+    CRTSCTS
     (comment "c_lflag")
     ISIG
     ICANON
@@ -653,6 +708,13 @@
     SO_LINGER
     SO_BSDCOMPAT
     SO_REUSEPORT
+
+    (c-include "linux/resource.h")
+    PRIO_MIN
+    PRIO_MAX
+    PRIO_PROCESS
+    PRIO_PGRP
+    PRIO_USER
 
     ;; This isn't in the UAPI headers. For the PF_ defines, just use
     ;; the AF_ name, they are identical. Apparently some of these

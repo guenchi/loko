@@ -5,6 +5,51 @@
 
 ;;; SRFI-170 (POSIX) for Loko on Linux
 
+#|
+
+Known non-conformance and extensions:
+
+ * temp-file-prefix is a Chez-style parameter, but should be a
+   SRFI-39/R7RS parameter
+
+ * The support for passing ports to file-info, etc, was kept from SRFI
+   170 draft #6
+
+ * read-directory has an optional flag that causes it to return
+   directory-entry objects instead of just filenames
+
+ * make-directory-files-generator is not implemented here, but can
+   be implemented in a (srfi :170 posix) library without incurring
+   extra overhead from syscalls
+
+ * uname is kept from SRFI 170 draft #6 as an extension
+
+ * The user-info and group-info procedures do not try to access the
+   databases via NSS and therefore will not see some users and groups.
+   If this is a problem for you then please open an issue.
+
+ * Some explicit error checking is missing. Probably everything here
+   should call errno-error instead of assertion-violation.
+
+ * The terminal control procedures do not work as intended because the
+   fibers system uses call/cc to switch between tasks, which triggers
+   the dynamic-wind code.
+
+This library is meant to be used in (srfi :170 posix), in a file like
+srfi/%3a170/posix.loko.sls, perhaps in the chez-srfi package. With
+some simple care in these things you can make your code portable
+between implementations.
+
+Both posix-time and monotonic-time assume that (srfi :174) will
+use (loko system time).
+
+The with-* procedures are provided, but are not recommended for use
+with Loko. They are based on dynamic-wind, which means that the
+handlers are called each time your fiber is suspended and resumed.
+This means a lot of overhead in syscalls.
+
+|#
+
 (library (loko posix)
   (export
     ;; Aliases for the real names
@@ -92,24 +137,24 @@
             (EXDEV errno/exdev))
 
     errno-error
-    syscall-error?
-    syscall-error:errno
-    syscall-error:message
-    syscall-error:procedure
-    syscall-error:data
+    (rename (syscall-errno-condition? syscall-error?)
+            (condition-syscall-errno syscall-error:errno)
+            (condition-syscall-message syscall-error:message)
+            (condition-irritants syscall-error:data))
+    syscall-error:procname
 
     fdes->textual-input-port
     fdes->binary-input-port
     fdes->textual-output-port
     fdes->binary-output-port
     (rename (port-file-descriptor port-fdes))
-    dup->fdes
     close-fdes
 
     create-directory
     create-fifo
     create-hard-link
     create-symlink
+    read-symlink
     rename-file
     delete-directory
     set-file-mode
@@ -123,30 +168,19 @@
     file-info:device file-info:inode file-info:mode file-info:nlinks file-info:uid
     file-info:gid file-info:rdev file-info:size file-info:blksize file-info:blocks
     file-info:atime file-info:mtime file-info:ctime
-    file-info-directory? file-info-fifo? file-info-regular? file-info-socket?
-    file-info-special? file-info-symlink?
+    file-info-directory? file-info-fifo? file-info-regular? file-info-symlink?
 
+    directory-files
+    ;; make-directory-files-generator
     open-directory read-directory close-directory
     directory-entry-inode directory-entry-offset
     directory-entry-type directory-entry-filename
 
+    real-path
     temp-file-prefix
     create-temp-file
     call-with-temporary-filename
-    real-path
-    ;; spawn
-    ;; spawn-path
-    ;; file-spawn
-    ;; fork
-    ;; exec
-    ;; exec-path
-    process-object?
-    process-object:pid
-    wait
-    wait-process-group
-    status:exit-val
-    status:stop-sig
-    status:term-sig
+
     umask
     set-umask
     working-directory
@@ -154,56 +188,37 @@
     pid
     parent-pid
     process-group
-    set-process-group
-    set-priority
-    priority
     nice
-    user-login-name
     user-uid
     user-gid
-    user-supplementary-gids
-    set-uid
-    set-gid
     user-effective-uid
-    set-user-effective-uid
     user-effective-gid
-    set-user-effective-gid
+    user-supplementary-gids
+
     user-info
     user-info?
     user-info:name user-info:uid user-info:gid user-info:home-dir user-info:shell
+    user-info:full-name user-info:parsed-full-name
     group-info
     group-info?
-    group-info:name group-info:gid group-info:members
-    system-name
+    group-info:name group-info:gid
+
     uname
     uname?
     uname:os-name uname:node-name uname:release-name uname:version uname:machine
-    current-timezone
-    current-locale
-    signal-process
-    signal-process-group
-    posix-time
-    monotonic-time
-    timespec-difference
-    timespec=?
-    exec-path-list
-    tty?
-    tty-file-name
-    with-raw-mode
-    without-echo
-    without-interrupt-chars
-    open-control-tty
-    become-session-leader
-    tty-process-group
-    set-tty-process-group
-    control-tty-file-name)
+
+    posix-time monotonic-time
+
+    terminal? terminal-file-name
+    with-raw-mode with-rare-mode without-echo)
   (import
     (rnrs (6))
     (srfi :98 os-environment-variables)
     (struct pack)
     (only (loko) make-parameter port-file-descriptor port-file-descriptor-set!)
     (loko match)
-    (except (loko system fibers) wait)
+    (loko system fibers)
+    (loko system time)
     (loko system unsafe)
     (loko runtime utils)
     (loko arch amd64 linux-syscalls)
@@ -268,32 +283,26 @@
                                (handler errno)))))))))
 
 ;;; 3.1 Errors
+;; Translation from Loko's &syscall-errno to SRFI 170 syscall-error
 
-;; This is an extra condition included in the errors raised by this
-;; library.
-(define-condition-type &errno-error &error
-   make-errno-error* syscall-error?
-   (errno syscall-error:errno)
-   (message syscall-error:message)
-   (procedure syscall-error:procedure)
-   (data syscall-error:data))
+(define syscall-error:errno condition-syscall-errno)
 
-;; Make a condition that is compatible with the errno-error stuff.
-(define (make-errno-error errno procedure . data)
-  (let ((msg (cond ((and (fx<? errno (vector-length errno-list))
-                         (vector-ref errno-list errno))
-                    => cdr)
-                   (else #f))))
-    (make-errno-error* errno msg procedure data)))
+(define syscall-error:message condition-syscall-message)
 
-;; Raise an error. Not to be used in this library.
-(define (errno-error errno procedure . data)
-  (raise (apply make-errno-error errno procedure data)))
+(define (syscall-error:procname x)
+  (symbol->string (condition-syscall-function x)))
+
+(define syscall-error:data condition-irritants)
+
+(define (errno-error errno procname . data)
+  (raise
+    (condition
+     (make-syscall-error (string->symbol procname) errno)
+     (make-irritants-condition data))))
 
 ;;; 3.2 I/O
 
 (define (fdes->binary-input-port fd)
-  (define who 'fdes->binary-input-port)
   (define position (sys_lseek fd 0 SEEK_CUR (lambda _ #f)))
   (define (handle-read-error errno)
     (raise
@@ -320,12 +329,7 @@
     (sys_lseek fd off SEEK_SET)
     (set! position off))
   (define (close)
-    (sys_close fd (lambda (errno)
-                    (unless (eqv? errno EINTR)
-                      (raise
-                        (make-who-condition 'close-port)
-                        (make-message-condition "Error while closing the fd")
-                        (make-syscall-error 'close errno))))))
+    (sys_close fd))
   (let ((p (make-custom-binary-input-port
             (string-append "fd " (number->string fd))
             read! (and position get-position) (and position set-position!) close)))
@@ -336,7 +340,6 @@
   (transcoded-port (fdes->binary-input-port fd) (native-transcoder)))
 
 (define (fdes->binary-output-port fd)
-  (define who 'fdes->binary-output-port)
   (define position (sys_lseek fd 0 SEEK_CUR (lambda _ #f)))
   (define (handle-write-error errno)
     (raise
@@ -363,12 +366,7 @@
     (sys_lseek fd off SEEK_SET)
     (set! position off))
   (define (close)
-    (sys_close fd (lambda (errno)
-                    (unless (eqv? errno EINTR)
-                      (raise
-                        (make-who-condition 'close-port)
-                        (make-message-condition "Error while closing the fd")
-                        (make-syscall-error 'close errno))))))
+    (sys_close fd))
   (let ((p (make-custom-binary-output-port
             (string-append "fd " (number->string fd))
             write! (and position get-position) (and position set-position!) close)))
@@ -378,35 +376,8 @@
 (define (fdes->textual-output-port fd)
   (transcoded-port (fdes->binary-output-port fd) (native-transcoder)))
 
-(define-optional (dup->fdes port [(fd #f)])
-  (define (raise-error errno)
-    (let ((syswho (if fd 'dup3 'fcntl)))
-      (raise
-        (condition
-         (make-who-condition 'dup->fdes)
-         (make-message-condition "Failed to duplicate the file descriptor")
-         (make-irritants-condition (list port fd))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno dup->fdes port fd)))))
-  (cond
-    ((or (not (port? port)) (not (port-file-descriptor port)))
-     (assertion-violation 'dup->fdes "Expected a port with a file descriptor" port fd))
-    ((not fd)
-     (with-restart (sys_fcntl (port-file-descriptor port) F_DUPFD 0 raise-error)))
-    (else
-     (with-restart (sys_dup3 (port-file-descriptor port) fd 0 raise-error)))))
-
 (define (close-fdes fd)
-  (sys_close fd
-             (lambda (errno)
-               (unless (eqv? errno EINTR)
-                 (raise
-                   (condition
-                    (make-who-condition 'close-fdes)
-                    (make-message-condition "Failed to close file descriptor")
-                    (make-irritants-condition (list fd))
-                    (make-syscall-error 'close errno)
-                    (make-errno-error errno close-fdes fd))))))
+  (sys_close fd)
   (values))
 
 ;;; 3.3 File system
@@ -462,8 +433,7 @@
           (else "Failed to create the directory")))
        (make-irritants-condition (list fname permission-bits override?))
        (filename-condition syswho errno fname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno create-directory fname permission-bits override?))))
+       (make-syscall-error syswho errno))))
   (unless (fixnum? permission-bits)
     (assertion-violation 'create-directory "Expected an exact integer"
                          fname permission-bits override?))
@@ -490,8 +460,7 @@
           (else "Failed to create the FIFO")))
        (make-irritants-condition (list fname permission-bits override?))
        (filename-condition syswho errno fname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno create-fifo fname permission-bits override?))))
+       (make-syscall-error syswho errno))))
   (unless (fixnum? permission-bits)
     (assertion-violation 'create-fifo "Expected an exact integer"
                          fname permission-bits override?))
@@ -521,8 +490,7 @@
        ;; XXX: This error reporting could be improved
        (filename-condition syswho errno oldname)
        (filename-condition syswho errno newname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno create-hard-link oldname newname override?))))
+       (make-syscall-error syswho errno))))
   (let ((oldname-bv (filename->c-string 'create-hard-link oldname))
         (newname-bv (filename->c-string 'create-hard-link newname)))
     (with-restart
@@ -547,8 +515,7 @@
           (else "Failed to create the symlink")))
        (make-irritants-condition (list oldname newname override?))
        (filename-condition syswho errno newname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno create-symlink oldname newname override?))))
+       (make-syscall-error syswho errno))))
   (let ((oldname-bv (filename->c-string 'create-symlink oldname))
         (newname-bv (filename->c-string 'create-symlink newname)))
     (with-restart
@@ -573,8 +540,7 @@
           (else "Failed to rename the file")))
        (make-irritants-condition (list oldname newname override?))
        (filename-condition syswho errno newname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno rename-file oldname newname override?))))
+       (make-syscall-error syswho errno))))
   (let ((oldname-bv (filename->c-string 'rename-file oldname))
         (newname-bv (filename->c-string 'rename-file newname)))
     (with-restart
@@ -600,8 +566,7 @@
        (make-message-condition "Failed to delete the directory")
        (make-irritants-condition (list fname))
        (filename-condition syswho errno fname)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno delete-directory fname))))
+       (make-syscall-error syswho errno))))
   (let ((newname-bv (filename->c-string 'delete-directory fname)))
     (with-restart
      (sys_unlinkat AT_FDCWD (& newname-bv) AT_REMOVEDIR
@@ -618,8 +583,7 @@
          (make-message-condition "Could not set file mode")
          (make-irritants-condition (list fname/port))
          (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno set-file-mode fname/port)))))
+         (make-syscall-error syswho errno)))))
   (if (string? fname/port)
       (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
         (with-restart
@@ -643,8 +607,7 @@
          (make-message-condition "Could not set file owner")
          (make-irritants-condition (list fname/port uid))
          (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno set-file-mode fname/port uid)))))
+         (make-syscall-error syswho errno)))))
   (if (string? fname/port)
       (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
         (with-restart
@@ -668,8 +631,7 @@
          (make-message-condition "Could not set file group")
          (make-irritants-condition (list fname/port gid))
          (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno set-file-mode fname/port gid)))))
+         (make-syscall-error syswho errno)))))
   (if (string? fname/port)
       (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
         (with-restart
@@ -693,8 +655,7 @@
          (make-message-condition "Could not set file times")
          (make-irritants-condition (list fname/port access-timespec mod-timespec))
          (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno set-file-timespecs fname/port access-timespec mod-timespec)))))
+         (make-syscall-error syswho errno)))))
   ;; Extension: either of the timespecs can be omitted
   (let ((access-timespec
          (or access-timespec (if mod-timespec (cons 0 UTIME_OMIT) (cons 0 UTIME_NOW))))
@@ -727,8 +688,7 @@
          (if (string? fname/port)
              (make-i/o-filename-error fname/port)
              (condition))
-         (make-syscall-error syswho errno)
-         (make-errno-error errno truncate-file fname/port len)))))
+         (make-syscall-error syswho errno)))))
   (unless (fixnum? len)
     (assertion-violation 'truncate-file "Expected a fixnum" fname/port len))
   (if (string? fname/port)
@@ -774,8 +734,7 @@
               (if (string? filename/port)
                   (make-i/o-filename-error filename/port)
                   (condition))
-              (make-syscall-error syswho errno)
-              (make-errno-error errno file-info filename/port chase?)))))
+              (make-syscall-error syswho errno)))))
   (let ((statbuf (make-bytevector sizeof-stat)))
     ;; Call the right stat syscall
     (if (string? filename/port)
@@ -815,13 +774,6 @@
 (define (file-info-regular? file-info)
   (eqv? (fxand (file-info:mode file-info) S_IFMT) S_IFREG))
 
-(define (file-info-socket? file-info)
-  (eqv? (fxand (file-info:mode file-info) S_IFMT) S_IFSOCK))
-
-(define (file-info-special? file-info)
-  (let ((type (fxand (file-info:mode file-info) S_IFMT)))
-    (or (eqv? type S_IFCHR) (eqv? type S_IFBLK))))
-
 (define (file-info-symlink? file-info)
   (eqv? (fxand (file-info:mode file-info) S_IFMT) S_IFLNK))
 
@@ -840,8 +792,7 @@
                              (if (eqv? errno ENOENT)
                                  (make-i/o-file-does-not-exist-error dirname)
                                  (make-i/o-filename-error dirname))
-                             (make-syscall-error 'open errno)
-                             (make-errno-error errno open-directory dirname))))))))
+                             (make-syscall-error 'open errno))))))))
     (define (read! bv start count)
       (let retry ()
         (with-restart
@@ -855,8 +806,7 @@
                                     (condition
                                      (make-who-condition 'read-directory)
                                      (make-i/o-filename-error dirname)
-                                     (make-syscall-error 'getdents64 errno)
-                                     (make-errno-error errno read-directory dirname))))))))))
+                                     (make-syscall-error 'getdents64 errno))))))))))
     (define get-position #f)
     (define set-position! #f)
     (define (close)
@@ -865,8 +815,7 @@
                         (make-who-condition 'close-directory)
                         (make-message-condition "Error while closing the directory")
                         (make-i/o-filename-error dirname)
-                        (make-syscall-error 'close errno)
-                        (make-errno-error errno close-directory dirname)))))
+                        (make-syscall-error 'close errno)))))
     (let ((p (make-custom-binary-input-port
               dirname read! get-position set-position! close)))
       (port-file-descriptor-set! p fd)
@@ -875,22 +824,18 @@
 (define-record-type directory-entry
   (fields inode offset type filename))
 
-(define read-directory
-  (case-lambda
-    ((dir)
-     (read-directory dir #f))
-    ;; The full-info? argument is an extension
-    ((dir full-info?)
-     ;; Read and parse a "struct linux_dirent64" (which is apparently
-     ;; not part of the UAPI headers).
-     (if (port-eof? dir)
-         #f
-         (let-values ([(d_ino d_off d_reclen d_type) (get-unpack dir "QQSC")])
-           (let ((fn (utf8z->string (get-bytevector-n dir (fx- d_reclen (format-size "QQSC")))
-                                    0)))
-             (if full-info?
-                 (make-directory-entry d_ino d_off d_type fn)
-                 fn)))))))
+(define-optional (read-directory dir [(full-info? #f)])
+  ;; Read and parse a "struct linux_dirent64" (which is apparently not
+  ;; part of the UAPI headers). The full-info? argument is an
+  ;; extension.
+  (if (port-eof? dir)
+      #f
+      (let-values ([(d_ino d_off d_reclen d_type) (get-unpack dir "QQSC")])
+        (let ((fn (utf8z->string (get-bytevector-n dir (fx- d_reclen (format-size "QQSC")))
+                                 0)))
+          (if full-info?
+              (make-directory-entry d_ino d_off d_type fn)
+              fn)))))
 
 (define (close-directory dir)
   (close-port dir))
@@ -909,17 +854,16 @@
               (else ret))))))
 
 (define (read-symlink filename)
-  (define (raise-error syswho errno)
+  (define (raise-error errno)
     (raise
       (condition
        (make-who-condition 'read-symlink)
        (make-message-condition "Failed to read symlink")
        (make-irritants-condition (list filename))
-       (filename-condition syswho errno filename)
-       (make-syscall-error syswho errno)
-       (make-errno-error errno read-symlink filename))))
+       (filename-condition 'readlinkat errno filename)
+       (make-syscall-error 'readlinkat errno))))
   (let ((fn (filename->c-string 'read-symlink filename)))
-    (let lp ((bufsize 1))
+    (let lp ((bufsize 128))
       (let ((buf (make-bytevector bufsize)))
         (let ((len (sys_readlinkat AT_FDCWD (& fn) (& buf) bufsize raise-error)))
           (cond ((fx=? len bufsize)
@@ -928,16 +872,73 @@
                 (else
                  (utf8z->string buf 0))))))))
 
-;; FIXME: Must be a SRFI-39 parameter
+;; FIXME: Must be a SRFI-39/R7RS parameter
 (define temp-file-prefix
   (make-parameter
    (let ((tmpdir (or (get-environment-variable "TMPDIR") "/tmp")))
      (string-append tmpdir "/" (number->string (sys_getpid))))))
 
-(define-optional (create-temp-file [(prefix #f)])
-  (error 'create-temp-file "TODO" prefix))
+(define (string-index-right str c)
+  (do ((i (fx- (string-length str) 1) (fx- i 1)))
+      ((or (fx=? i -1) (eqv? (string-ref str i) c))
+       i)))
 
-(define-optional (call-with-temporary-filename maker [(prefix #f)])
+(define make-temp-names
+  (let ((seed #f))
+    (lambda ()
+      (unless seed
+        (let ((bv (make-bytevector 8)))
+          (unless (with-restart
+                   (sys_getrandom (& bv) (bytevector-length bv) GRND_NONBLOCK
+                                  (lambda _ #f)))
+            ;; This only happens if this code runs extremely early in
+            ;; the boot process for some happy reason, when nobody is
+            ;; around to attack the filename creation anyway. So we
+            ;; just do a funny dance.
+            (bytevector-u64-native-set! bv 0 (bitwise-bit-field
+                                              (* (time-nanosecond (posix-time))
+                                                 (time-nanosecond (posix-time))
+                                                 (time-nanosecond (posix-time)))
+                                              0 64)))
+          (set! seed bv)
+          ;; TODO: Hook up a random number generator
+          )))))
+
+(define-optional (create-temp-file [(prefix (temp-file-prefix))])
+  (define who 'create-temp-file)
+  (define (raise-error errno)
+    (raise
+      (condition
+       (make-who-condition who)
+       (make-message-condition "Failed to create temporary file")
+       (make-irritants-condition (list prefix))
+       (make-syscall-error 'linkat errno))))
+  (let* ((slash (string-index-right prefix #\/))
+         (dir (if (eqv? slash -1)
+                  (errno-error EINVAL "mkstemp" prefix)
+                  (substring prefix 0 slash)))
+         (dir-bv (filename->c-string who dir)))
+    (let* ((fd (sys_openat AT_FDCWD (& dir-bv) (fxior O_TMPFILE O_WRONLY) #o600))
+           (procname (string-append "/proc/self/fd/" (number->string fd)))
+           (procname-bv (filename->c-string who procname)))
+      (let retry ((tries 0))
+        (let* ((tempname (string-append prefix "-TEMP-" (number->string tries)))
+               (tempname-bv (filename->c-string who tempname)))
+          (case (with-restart
+                 (sys_linkat AT_FDCWD (& procname-bv) AT_FDCWD (& tempname-bv) AT_SYMLINK_FOLLOW
+                             (lambda (errno)
+                               (cond ((and (eqv? errno EEXIST) (fx<? tries 100))
+                                      'exists)
+                                     (else
+                                      (sys_close fd)
+                                      (raise-error errno))))))
+            ((exists)
+             (retry (fx+ tries 1)))
+            (else
+             (sys_close fd)
+             tempname)))))))
+
+(define-optional (call-with-temporary-filename maker [(prefix (temp-file-prefix))])
   (error 'call-with-temporary-filename "TODO" maker prefix))
 
 (define (real-path path^)
@@ -957,8 +958,7 @@
                                      (make-message-condition error-msg)
                                      (make-irritants-condition (list path^))
                                      (make-i/o-file-protection-error filename)
-                                     (make-syscall-error 'lstat errno)
-                                     (make-errno-error errno real-path path^))))))))
+                                     (make-syscall-error 'lstat errno))))))))
         (eqv? (fxand (bytevector-u32-native-ref statbuf offsetof-stat-st_mode)
                      S_IFMT)
               S_IFLNK))))
@@ -980,8 +980,7 @@
          (make-who-condition 'real-path)
          (make-message-condition error-msg)
          (make-irritants-condition (list path^))
-         (make-i/o-filename-error path^)
-         (make-errno-error ELOOP real-path path^))))
+         (make-i/o-filename-error path^))))
     (let ((path (if (or (eqv? 0 (string-length path))
                         (not (eqv? #\/ (string-ref path 0))))
                     (string-append (working-directory) "/" path)
@@ -1008,8 +1007,7 @@
                                                   (make-who-condition 'real-path)
                                                   (make-message-condition error-msg)
                                                   (make-irritants-condition (list path tmppath))
-                                                  (make-i/o-filename-error path^)
-                                                  (make-errno-error ELOOP real-path path^)))
+                                                  (make-i/o-filename-error path^)))
                                                #t))
                                          #f)
                       (if (eqv? #\/ (string-ref target 0))
@@ -1021,39 +1019,6 @@
                     (lp (cons c x) c*))))]
           [()
            (join-components (reverse x))])))))
-
-;;; 3.4 Processes
-
-;; (spawn mode [config] prog arg[1] ...arg[n])     →     object
-;; (spawn-path mode [config] prog arg[1] ...arg[n])     →     object
-;; (file-spawn file)     →     object
-;; (fork [thunk or #f])     →     process-object or #f
-;; (exec [config] prog arg[1] ...arg[n])     →     never returns
-;; (exec-path [config] prog arg[1] ...arg[n])     →     never returns
-
-;;; 3.4.1 Process objects
-
-(define-record-type process-object
-  (fields (immutable pid process-object:pid)))
-
-;;; 3.4.2 Process waiting
-
-(define-optional (wait proc/pid [(flags #f)])
-  (error 'wait "TODO" proc/pid flags))
-
-(define-optional (wait-process-group pgrp [(flags #f)])
-  (error 'wait "TODO" pgrp flags))
-
-;;; 3.4.3 Analysing process status codes
-
-(define (status:exit-val status)
-  (error 'status:exit-val "TODO"))
-
-(define (status:stop-sig status)
-  (error 'status:stop-sig "TODO"))
-
-(define (status:term-sig status)
-  (error 'status:term-sig "TODO"))
 
 ;;; 3.5 Process state
 
@@ -1072,8 +1037,7 @@
        (make-who-condition 'working-directory)
        (make-message-condition "Could not get the working directory")
        (make-irritants-condition '())
-       (make-syscall-error 'getcwd errno)
-       (make-errno-error errno working-directory))))
+       (make-syscall-error 'getcwd errno))))
   (let lp ((size 128))
     (let* ((buf (make-bytevector size))
            (status
@@ -1097,8 +1061,7 @@
        (make-who-condition 'set-working-directory)
        (make-message-condition "Could not set the working directory")
        (make-irritants-condition (list fname))
-       (make-syscall-error 'chdir errno)
-       (make-errno-error errno set-working-directory fname))))
+       (make-syscall-error 'chdir errno))))
   (let ((fname (or fname (get-environment-variable "HOME"))))
     (unless fname
       (assertion-violation 'set-working-directory
@@ -1117,45 +1080,9 @@
 (define (process-group)
   (sys_getpgid 0))
 
-(define (->pid x)
-  (if (fixnum? x) x (process-object:pid x)))
-
-(define set-process-group
-  (case-lambda
-    [(pgrp)
-     (set-process-group 0 pgrp)]
-    [(proc/pid pgrp)
-     (define (raise-error errno)
-       (raise
-         (condition
-          (make-who-condition 'set-process-group)
-          (make-message-condition "Could not set the process group")
-          (make-irritants-condition (list proc/pid pgrp))
-          (make-syscall-error 'setpgid errno)
-          (make-errno-error errno set-process-group proc/pid pgrp))))
-     (let ((pid (->pid proc/pid)))
-       (with-restart (sys_setpgid pid pgrp raise-error)))]))
-
-(define (set-priority which who niceness)
-  'priority/process
-  'priority/process-group
-  'priority/user
-  (error 'set-priority "TODO" which who niceness))
-
-(define (priority which who)
-  'priority/process
-  'priority/process-group
-  'priority/user
-  (error 'priority "TODO" which who))
-
-(define-optional (nice [(proc/pid #f) (delta #f)])
-  ;; getpriority(PRIO_PROCESS, 0)
-  ;; setpriority(PRIO_PROCESS, 0, 5)
-  (error 'nice "TODO" proc/pid delta))
-
-(define (user-login-name)
-  (or (get-environment-variable "LOGNAME")
-      (get-environment-variable "USER")))
+(define-optional (nice [(delta 1)])
+  (let ((current (fx- 20 (sys_getpriority PRIO_PROCESS 0))))
+    (sys_setpriority PRIO_PROCESS 0 (fx+ current delta))))
 
 (define (user-uid)
   (sys_getuid))
@@ -1163,85 +1090,102 @@
 (define (user-gid)
   (sys_getgid))
 
-(define (user-supplementary-gids)
-  (error 'user-supplementary-gids "TODO"))
-
-(define (set-uid uid)
-  (define (raise-error errno)
-    (raise
-      (condition
-       (make-who-condition 'set-uid)
-       (make-message-condition "Failed to set the uid")
-       (make-irritants-condition (list uid))
-       (make-syscall-error 'setuid errno)
-       (make-errno-error errno set-uid uid))))
-  (sys_setreuid uid -1 raise-error)
-  (values))
-
-(define (set-gid gid)
-  (define (raise-error errno)
-    (raise
-      (condition
-       (make-who-condition 'set-gid)
-       (make-message-condition "Failed to set the gid")
-       (make-irritants-condition (list gid))
-       (make-syscall-error 'setregid errno)
-       (make-errno-error errno set-gid gid))))
-  (sys_setregid gid -1 raise-error)
-  (values))
-
 (define (user-effective-uid)
   (sys_geteuid))
-
-(define (set-user-effective-uid euid)
-  (define (raise-error errno)
-    (raise
-      (condition
-       (make-who-condition 'set-effective-uid)
-       (make-message-condition "Failed to set the effective uid")
-       (make-irritants-condition (list euid))
-       (make-syscall-error 'seteuid errno)
-       (make-errno-error errno set-user-effective-uid euid))))
-  (sys_setreuid -1 euid raise-error)
-  (values))
 
 (define (user-effective-gid)
   (sys_getegid))
 
-(define (set-user-effective-gid egid)
-  (define (raise-error errno)
-    (raise
-      (condition
-       (make-who-condition 'set-effective-gid)
-       (make-message-condition "Failed to set the effective gid")
-       (make-irritants-condition (list egid))
-       (make-syscall-error 'setegid errno)
-       (make-errno-error errno set-user-effective-gid egid))))
-  (sys_setregid -1 egid raise-error)
-  (values))
+(define (user-supplementary-gids)
+  (let* ((groups (sys_getgroups 0 0))
+         (buf (make-bytevector (fx* groups sizeof-gid_t))))
+    (sys_getgroups (bytevector-length buf) (& buf))
+    (bytevector->uint-list buf (native-endianness) sizeof-gid_t)))
 
 ;;; 3.6 User and group database access
 
 ;; This chapter is a pain to implement fully without access to libc on
-;; a system where everything else uses libc.
+;; a system where everything else uses libc. It would be nice, in a
+;; way, if /etc/passwd was a virtual file. Perhaps a file that you
+;; could send queries to. One can dream...
+
+;; If you're reading this because you found out about the limitation
+;; the hard way, then please open an issue. There's a way to solve
+;; this with a daemon that relays NSS info.
 
 (define (user-info uid/name)
-  (error 'user-info "TODO" uid/name))
+  (define who (if (fixnum? uid/name) "getpwuid" "getpwnam"))
+  (when (not (file-exists? "/etc/passwd"))
+    (errno-error ENOENT who uid/name))
+  (call-with-input-file "/etc/passwd"
+    (lambda (p)
+      (let lp ()
+        (let ((line (get-line p)))
+          (if (eof-object? line)
+              (errno-error ENOENT who uid/name)
+              (let ((parts (string-split line #\:)))
+                (if (not (fx=? (length parts) 7))
+                    (lp)
+                    (let ((name (car parts))
+                          (uid (string->number (list-ref parts 2) 10)))
+                      (if (or (equal? name uid/name) (equal? uid uid/name))
+                          (apply make-user-info parts)
+                          (lp)))))))))))
 
 (define-record-type (&user-info make-user-info user-info?)
   (fields (immutable name user-info:name)
+          passwd
           (immutable uid user-info:uid)
           (immutable gid user-info:gid)
+          (immutable full-name user-info:full-name) ;gecos
           (immutable home-dir user-info:home-dir)
           (immutable shell user-info:shell)))
 
+(define (user-info:parsed-full-name user-info)
+  (let ((parts (string-split (user-info:full-name user-info) #\,)))
+    (if (null? parts)
+        '()
+        (let ((part0
+               (call-with-string-output-port
+                 (lambda (p)
+                   (string-for-each
+                    (lambda (c)
+                      (if (eqv? c #\&)
+                          (let ((name (user-info:name user-info)))
+                            (let ((c0 (string-ref name 0)))
+                              (put-char p
+                                        (if (char<? c0 #\delete)
+                                            (char-upcase c0)
+                                            c0)))
+                            (put-string p (substring name 1 (string-length name))))
+                          (put-char p c)))
+                    (car parts))))))
+          (cons part0 (cdr parts))))))
+
 (define (group-info gid/name)
-  (error 'group-info "TODO" gid/name))
+  (define who (if (fixnum? gid/name) "getgrgid" "getgrnam"))
+  (when (not (file-exists? "/etc/group"))
+    (errno-error ENOENT who gid/name))
+  (call-with-input-file "/etc/group"
+    (lambda (p)
+      (let lp ()
+        (let ((line (get-line p)))
+          (if (eof-object? line)
+              (errno-error ENOENT who gid/name)
+              (let ((parts (string-split line #\:)))
+                (if (not (fx=? (length parts) 4))
+                    (lp)
+                    (let ((name (car parts))
+                          (uid (string->number (list-ref parts 2) 10)))
+                      (if (or (equal? name gid/name) (equal? uid gid/name))
+                          (apply make-group-info parts)
+                          (lp)))))))))))
 
 (define-record-type (&group-info make-group-info group-info?)
   (fields (immutable name group-info:name)
+          passwd
           (immutable gid group-info:gid)
-          (immutable members group-info:members)))
+          members))
 
 ;;; 3.8 System parameters
 
@@ -1253,9 +1197,6 @@
           (immutable machine uname:machine)
           (immutable domain-name uname:domain-name)))
 
-(define (system-name)
-  (uname:node-name (uname)))
-
 (define (uname)
   (let ((buf (make-bytevector sizeof-new_utsname #xff)))
     (sys_uname (& buf))
@@ -1266,42 +1207,24 @@
                 (utf8z->string buf offsetof-new_utsname-machine)
                 (utf8z->string buf offsetof-new_utsname-domainname))))
 
-(define (current-timezone)
-  #f)
-
-(define (current-locale)
-  #f)
-
-;;; 3.9 Signal system
-
-(define (signal-process proc/pid sig)
-  (error 'signal-process "TODO" proc/pid sig))
-
-(define (signal-process-group prgrp/pid sig)
-  (error 'signal-process-group "TODO" prgrp/pid sig))
-
 ;;; 3.10 Time
 
+(define (gettime clock)
+  (let* ((x (make-bytevector sizeof-timespec))
+         (_ (sys_clock_gettime clock (& x)))
+         (seconds (bytevector-u64-native-ref x offsetof-timespec-tv_sec))
+         (nanoseconds (bytevector-u64-native-ref x offsetof-timespec-tv_nsec)))
+    (make-time seconds nanoseconds 1)))
+
 (define (posix-time)
-  (error 'posix-time "TODO"))
+  (gettime CLOCK_REALTIME))
 
 (define (monotonic-time)
-  (error 'monotonic-time "TODO"))
-
-(define (timespec-difference timespec1 timespec2)
-  (error 'timespec-difference "TODO" timespec1 timespec2))
-
-(define (timespec=? timespec1 timespec2)
-  (equal? timespec1 timespec2))
-
-;;; 3.11 Environment variables
-
-(define exec-path-list
-  (string-split (get-environment-variable "PATH") #\:))
+  (gettime CLOCK_MONOTONIC))
 
 ;;; 3.12 Terminal device control
 
-(define (tty? port)
+(define (terminal? port)
   (cond ((port-file-descriptor port) =>
          (lambda (fd)
            (let ((buf (make-bytevector sizeof-termios)))
@@ -1310,49 +1233,77 @@
              #t)))
         (else #f)))
 
-(define (tty-file-name port)
-  (error 'tty-file-name "TODO"))
+(define (terminal-file-name port)
+  (unless (terminal? port)
+    (errno-error ENOTTY "ttyname" port))
+  (let ((proc (string-append "/proc/self/fd/"
+                             (number->string (port-file-descriptor port)))))
+    (let ((devname (read-symlink proc)))
+      (let ((portinfo (file-info port))
+            (devinfo (file-info devname)))
+        (unless (eqv? (file-info:device portinfo) (file-info:device devinfo))
+          (errno-error ENODEV "ttyname" port)))
+      devname)))
 
-;; TODO: Implement
-(define (with-raw-mode port min time thunk)
-  (dynamic-wind
-    (lambda () #f)
-    thunk
-    (lambda () #f)))
+(define (make-mode-swapper port update-termios!)
+  (define (tcgets port)
+    (let ((buf (make-bytevector sizeof-termios)))
+      (sys_ioctl (port-file-descriptor port) TCGETS (& buf))
+      buf))
+  (define (tcsetsw port buf)
+    (assert (fx=? (bytevector-length buf) sizeof-termios))
+    (sys_ioctl (port-file-descriptor port) TCSETSW (& buf)))
+  (let ((prev #f))
+    (lambda ()
+      (let ((t (tcgets port)))
+        (unless prev
+          (set! prev t)
+          (update-termios! prev))
+        (tcsetsw port prev)
+        (set! prev t)))))
 
-;; TODO: Implement
-(define (without-echo port thunk)
-  (dynamic-wind
-    (lambda () #f)
-    thunk
-    (lambda () #f)))
+(define (make-dual-swapper in out update-termios!)
+  (let ((in-info (file-info in))
+        (out-info (file-info out)))
+    (let ((swap-input (make-mode-swapper in update-termios!))
+          (swap-output
+           (if (and (eqv? (file-info:device in-info) (file-info:device out-info))
+                    (eqv? (file-info:inode in-info) (file-info:inode out-info)))
+               values
+               (make-mode-swapper out update-termios!))))
+      (lambda ()
+        (swap-input)
+        (swap-output)))))
 
-;; TODO: Implement
-(define (without-interrupt-chars port thunk)
-  (dynamic-wind
-    (lambda () #f)
-    thunk
-    (lambda () #f)))
+;; TODO: Integrate with fibers
 
-(define (open-control-tty tty-name)
-  (error 'open-control-tty "TODO" tty-name))
+(define (with-raw-mode input-port output-port min time proc)
+  (define (update-termios! buf)
+    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+      (let ((iflag (fxand iflag (fxnot (fxior BRKINT ICRNL INPCK ISTRIP IXON))))
+            (oflag (fxand oflag (fxnot OPOST)))
+            (cflag (fxior CS8 (fxand cflag (fxnot (fxior CSIZE PARENB)))))
+            (lflag (fxand lflag (fxnot (fxior ECHO ICANON IEXTEN ISIG)))))
+        (pack! "=4L" buf 0 iflag oflag cflag lflag)
+        (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) min)
+        (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) time))))
+  (define swap (make-dual-swapper input-port output-port update-termios!))
+  (dynamic-wind swap (lambda () (proc input-port output-port)) swap))
 
-(define (become-session-leader)
-  (define (raise-error errno)
-    (raise
-      (condition
-       (make-who-condition 'become-session-leader)
-       (make-message-condition "Could not become session leader")
-       (make-irritants-condition '())
-       (make-syscall-error 'setsid errno)
-       (make-errno-error errno become-session-leader))))
-  (sys_setsid raise-error))
+(define (with-rare-mode input-port output-port proc)
+  (define (update-termios! buf)
+    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+      (let ((lflag (fxand lflag (fxnot (fxior ECHO ICANON)))))
+        (pack! "=4L" buf 0 iflag oflag cflag lflag)
+        (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) 1)
+        (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) 0))))
+  (define swap (make-dual-swapper input-port output-port update-termios!))
+  (dynamic-wind swap (lambda () (proc input-port output-port)) swap))
 
-(define (tty-process-group port/fname)
-  (error 'tty-process-group "TODO" port/fname))
-
-(define (set-tty-process-group port/fname process-group)
-  (error 'set-tty-process-group "TODO" port/fname process-group))
-
-(define (control-tty-file-name)
-  (error 'control-tty-file-name "TODO")))
+(define (without-echo input-port output-port proc)
+  (define (update-termios! buf)
+    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+      (let ((lflag (fxand lflag (fxnot (fxior ECHO ECHOE ECHOK ECHONL)))))
+        (pack! "=4L" buf 0 iflag oflag cflag lflag))))
+  (define swap (make-dual-swapper input-port output-port update-termios!))
+  (dynamic-wind swap (lambda () (proc input-port output-port)) swap)))

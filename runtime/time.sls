@@ -26,6 +26,7 @@
   (export
     cumulative-process-time
     current-time
+    make-time
     time-second
     time-nanosecond
     time-resolution

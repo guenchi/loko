@@ -45,6 +45,7 @@
     __NR_getpgid
     __NR_getpid
     __NR_getppid
+    __NR_getpriority
     __NR_getrandom
     __NR_getsid
     __NR_getsockname
@@ -61,6 +62,7 @@
     __NR_mmap
     __NR_munmap
     __NR_open
+    __NR_openat
     __NR_pipe2
     __NR_preadv
     __NR_preadv2
@@ -77,6 +79,7 @@
     __NR_sendmsg
     __NR_sendto
     __NR_setpgid
+    __NR_setpriority
     __NR_setregid
     __NR_setreuid
     __NR_setsid
@@ -98,6 +101,7 @@
     __NR_utimensat
     __NR_wait4
     __NR_write
+    sizeof-gid_t
     EPERM
     ENOENT
     ESRCH
@@ -269,8 +273,58 @@
     IXANY
     IXOFF
     IMAXBEL
+    IUTF8
     OPOST
+    CBAUD
+    B0
+    B50
+    B75
+    B110
+    B134
+    B150
+    B200
+    B300
+    B600
+    B1200
+    B1800
+    B2400
+    B4800
+    B9600
+    B19200
+    B38400
+    EXTA
+    EXTB
+    CSIZE
+    CS5
+    CS6
+    CS7
     CS8
+    CSTOPB
+    CREAD
+    PARENB
+    PARODD
+    HUPCL
+    CLOCAL
+    CBAUDEX
+    BOTHER
+    B57600
+    B115200
+    B230400
+    B460800
+    B500000
+    B576000
+    B921600
+    B1000000
+    B1152000
+    B1500000
+    B2000000
+    B2500000
+    B3000000
+    B3500000
+    B4000000
+    CIBAUD
+    CMSPAR
+    CRTSCTS
     ISIG
     ICANON
     XCASE
@@ -626,6 +680,11 @@
     SO_LINGER
     SO_BSDCOMPAT
     SO_REUSEPORT
+    PRIO_MIN
+    PRIO_MAX
+    PRIO_PROCESS
+    PRIO_PGRP
+    PRIO_USER
     AF_UNSPEC
     AF_LOCAL
     AF_INET
@@ -732,6 +791,7 @@
 (define-inlined __NR_getpgid 121)
 (define-inlined __NR_getpid 39)
 (define-inlined __NR_getppid 110)
+(define-inlined __NR_getpriority 140)
 (define-inlined __NR_getrandom 318)
 (define-inlined __NR_getsid 124)
 (define-inlined __NR_getsockname 51)
@@ -748,6 +808,7 @@
 (define-inlined __NR_mmap 9)
 (define-inlined __NR_munmap 11)
 (define-inlined __NR_open 2)
+(define-inlined __NR_openat 257)
 (define-inlined __NR_pipe2 293)
 (define-inlined __NR_preadv 295)
 (define-inlined __NR_preadv2 327)
@@ -764,6 +825,7 @@
 (define-inlined __NR_sendmsg 46)
 (define-inlined __NR_sendto 44)
 (define-inlined __NR_setpgid 109)
+(define-inlined __NR_setpriority 141)
 (define-inlined __NR_setregid 114)
 (define-inlined __NR_setreuid 113)
 (define-inlined __NR_setsid 112)
@@ -785,6 +847,7 @@
 (define-inlined __NR_utimensat 280)
 (define-inlined __NR_wait4 61)
 (define-inlined __NR_write 1)
+(define-inlined sizeof-gid_t 4)
 
 ;;; asm/errno.h
 (define-inlined EPERM 1)
@@ -969,10 +1032,60 @@
 (define-inlined IXANY #o4000)
 (define-inlined IXOFF #o10000)
 (define-inlined IMAXBEL #o20000)
+(define-inlined IUTF8 #o40000)
 ;; c_oflag
 (define-inlined OPOST #o1)
 ;; c_cflag
+(define-inlined CBAUD #o10017)
+(define-inlined B0 #o0)
+(define-inlined B50 #o1)
+(define-inlined B75 #o2)
+(define-inlined B110 #o3)
+(define-inlined B134 #o4)
+(define-inlined B150 #o5)
+(define-inlined B200 #o6)
+(define-inlined B300 #o7)
+(define-inlined B600 #o10)
+(define-inlined B1200 #o11)
+(define-inlined B1800 #o12)
+(define-inlined B2400 #o13)
+(define-inlined B4800 #o14)
+(define-inlined B9600 #o15)
+(define-inlined B19200 #o16)
+(define-inlined B38400 #o17)
+(define-inlined EXTA #o16)
+(define-inlined EXTB #o17)
+(define-inlined CSIZE #o60)
+(define-inlined CS5 #o0)
+(define-inlined CS6 #o20)
+(define-inlined CS7 #o40)
 (define-inlined CS8 #o60)
+(define-inlined CSTOPB #o100)
+(define-inlined CREAD #o200)
+(define-inlined PARENB #o400)
+(define-inlined PARODD #o1000)
+(define-inlined HUPCL #o2000)
+(define-inlined CLOCAL #o4000)
+(define-inlined CBAUDEX #o10000)
+(define-inlined BOTHER #o10000)
+(define-inlined B57600 #o10001)
+(define-inlined B115200 #o10002)
+(define-inlined B230400 #o10003)
+(define-inlined B460800 #o10004)
+(define-inlined B500000 #o10005)
+(define-inlined B576000 #o10006)
+(define-inlined B921600 #o10007)
+(define-inlined B1000000 #o10010)
+(define-inlined B1152000 #o10011)
+(define-inlined B1500000 #o10012)
+(define-inlined B2000000 #o10013)
+(define-inlined B2500000 #o10014)
+(define-inlined B3000000 #o10015)
+(define-inlined B3500000 #o10016)
+(define-inlined B4000000 #o10017)
+(define-inlined CIBAUD #o2003600000)
+(define-inlined CMSPAR #o10000000000)
+(define-inlined CRTSCTS #o20000000000)
 ;; c_lflag
 (define-inlined ISIG #o1)
 (define-inlined ICANON #o2)
@@ -1373,6 +1486,13 @@
 (define-inlined SO_LINGER 13)
 (define-inlined SO_BSDCOMPAT 14)
 (define-inlined SO_REUSEPORT 15)
+
+;;; linux/resource.h
+(define-inlined PRIO_MIN -20)
+(define-inlined PRIO_MAX 20)
+(define-inlined PRIO_PROCESS 0)
+(define-inlined PRIO_PGRP 1)
+(define-inlined PRIO_USER 2)
 (define-inlined AF_UNSPEC 0)
 (define-inlined AF_LOCAL 1)
 (define-inlined AF_INET 2)

@@ -1089,6 +1089,7 @@
     ;; The (loko system time) library
     (cumulative-process-time  time)
     (current-time             time)
+    (make-time                time)
     (time-second              time)
     (time-nanosecond          time)
     (time-resolution          time)

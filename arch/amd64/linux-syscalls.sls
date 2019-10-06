@@ -23,6 +23,7 @@
   (export
     make-syscall-error &syscall-errno
     syscall-errno-condition?
+    condition-syscall-function
     condition-syscall-errno
     condition-syscall-symbol
     condition-syscall-message
@@ -58,9 +59,11 @@
     sys_getegid
     sys_geteuid
     sys_getgid
+    sys_getgroups
     sys_getpgid
     sys_getpid
     sys_getppid
+    sys_getpriority
     sys_getrandom
     sys_getsid
     sys_getsockopt
@@ -76,6 +79,7 @@
     sys_mmap
     sys_munmap
     sys_open
+    sys_openat
     sys_pipe2
     sys_read
     sys_readlinkat
@@ -86,6 +90,7 @@
     sys_rt_sigprocmask
     sys_sendto
     sys_setpgid
+    sys_setpriority
     sys_setregid
     sys_setreuid
     sys_setsid
@@ -232,9 +237,11 @@
 (define-syscall (getegid))
 (define-syscall (geteuid))
 (define-syscall (getgid))
+(define-syscall (getgroups gidsetsize *grouplist))
 (define-syscall (getpgid pid))
 (define-syscall (getpid))
 (define-syscall (getppid))
+(define-syscall (getpriority which who))
 (define-syscall (getrandom *buf count flags))
 (define-syscall (getsid pid))
 (define-syscall (getsockopt fd level optname *optval *optlen))
@@ -250,6 +257,7 @@
 (define-syscall (mmap addr length prot flags fd offset))
 (define-syscall (munmap addr length))
 (define-syscall (open *pathname flags mode))
+(define-syscall (openat dfd *pathname flags mode))
 (define-syscall (pipe2 *filedes flags))
 (define-syscall (preadv fd *vec vlen pos_l pos_h))
 (define-syscall (pwritev fd *vec vlen pos_l pos_h))
@@ -261,6 +269,7 @@
 (define-syscall (rt_sigprocmask how *set *oldset sigsetsize))
 (define-syscall (sendto fd *buff len flags *addr addr_len))
 (define-syscall (setpgid pid pgid))
+(define-syscall (setpriority which who niceval))
 (define-syscall (setregid rgid egid))
 (define-syscall (setreuid ruid euid))
 (define-syscall (setsid))
