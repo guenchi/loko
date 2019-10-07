@@ -15,10 +15,6 @@ Known non-conformance and extensions:
  * read-directory has an optional flag that causes it to return
    directory-entry objects instead of just filenames
 
- * make-directory-files-generator is not implemented here, but can
-   be implemented in a (srfi :170 posix) library without incurring
-   extra overhead from syscalls
-
  * uname is kept from SRFI 170 draft #6 as an extension
 
  * The user-info and group-info procedures do not try to access the
@@ -68,7 +64,7 @@ use (loko system time).
     file-info-directory? file-info-fifo? file-info-regular? file-info-symlink?
 
     directory-files
-    ;; make-directory-files-generator
+    make-directory-files-generator
     open-directory read-directory close-directory
     directory-entry-inode directory-entry-offset
     directory-entry-type directory-entry-filename
@@ -696,6 +692,18 @@ use (loko system time).
                (else ret))))
      (lambda ()
        (close-directory dir)))))
+
+(define-optional (make-directory-files-generator dirname [(dotfiles? #f)])
+  (let ((dir (open-directory dirname dotfiles?))
+        (closed #f))
+    (lambda ()
+      (cond
+        (closed (eof-object))
+        ((read-directory dir))
+        (else
+         (close-directory dir)
+         (set! closed #t)
+         (eof-object))))))
 
 (define (read-symlink filename)
   (define (raise-error errno)
