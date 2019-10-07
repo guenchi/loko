@@ -37,8 +37,11 @@ some packages from Akku. Follow these steps to compile Loko:
 Once Loko is bootstrapped you can optionally build it with itself
 using `make selfcompile`.
 
-Alternatively, get the pre-compiled `loko` binary from the GitLab CI
-system.
+Alternatively, get the pre-compiled binary from the GitLab CI system.
+Go to [tags](https://gitlab.com/weinholt/loko/-/tags), click the
+download drop-down on the right, and select the "build" artifact under
+*Download artifacts* (not one of the links on the top of the
+drop-down).
 
 Another option is the Docker base image [weinholt/loko:base][docker]:
 `docker run --rm -it weinholt/loko:base`. The image akkuscm/akku:loko
