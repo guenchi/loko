@@ -3,7 +3,7 @@
 ;; Copyright © 2019 Göran Weinholt
 #!r6rs
 
-;;; SRFI-170 (POSIX) for Loko on Linux
+;;; SRFI-170 (POSIX) support library for Linux
 
 #|
 
@@ -11,9 +11,6 @@ Known non-conformance and extensions:
 
  * temp-file-prefix is a Chez-style parameter, but should be a
    SRFI-39/R7RS parameter
-
- * The support for passing ports to file-info, etc, was kept from SRFI
-   170 draft #6
 
  * read-directory has an optional flag that causes it to return
    directory-entry objects instead of just filenames
@@ -28,12 +25,8 @@ Known non-conformance and extensions:
    databases via NSS and therefore will not see some users and groups.
    If this is a problem for you then please open an issue.
 
- * Some explicit error checking is missing. Probably everything here
-   should call errno-error instead of assertion-violation.
-
- * The terminal control procedures do not work as intended because the
-   fibers system uses call/cc to switch between tasks, which triggers
-   the dynamic-wind code.
+ * The with-/without- procedures are not based in dynamic-wind because
+   then they would not compose well with fibers.
 
 This library is meant to be used in (srfi :170 posix), in a file like
 srfi/%3a170/posix.loko.sls, perhaps in the chez-srfi package. With
@@ -43,106 +36,10 @@ between implementations.
 Both posix-time and monotonic-time assume that (srfi :174) will
 use (loko system time).
 
-The with-* procedures are provided, but are not recommended for use
-with Loko. They are based on dynamic-wind, which means that the
-handlers are called each time your fiber is suspended and resumed.
-This means a lot of overhead in syscalls.
-
 |#
 
 (library (loko posix)
   (export
-    ;; Aliases for the real names
-    (rename (EPERM errno/perm)
-            (E2BIG errno/e2big)
-            (EACCES errno/eacces)
-            (EADDRINUSE errno/eaddrinuse)
-            (EADDRNOTAVAIL errno/eaddrnotavail)
-            (EAFNOSUPPORT errno/eafnosupport)
-            (EAGAIN errno/eagain)
-            (EALREADY errno/ealready)
-            (EBADF errno/ebadf)
-            (EBADMSG errno/ebadmsg)
-            (EBUSY errno/ebusy)
-            (ECANCELED errno/ecanceled)
-            (ECHILD errno/echild)
-            (ECONNABORTED errno/econnaborted)
-            (ECONNREFUSED errno/econnrefused)
-            (ECONNRESET errno/econnreset)
-            (EDEADLK errno/edeadlk)
-            (EDESTADDRREQ errno/edestaddrreq)
-            (EDOM errno/edom)
-            (EDQUOT errno/edquot)
-            (EEXIST errno/eexist)
-            (EFAULT errno/efault)
-            (EFBIG errno/efbig)
-            (EHOSTUNREACH errno/ehostunreach)
-            (EIDRM errno/eidrm)
-            (EILSEQ errno/eilseq)
-            (EINPROGRESS errno/einprogress)
-            (EINTR errno/eintr)
-            (EINVAL errno/einval)
-            (EIO errno/eio)
-            (EISCONN errno/eisconn)
-            (EISDIR errno/eisdir)
-            (ELOOP errno/eloop)
-            (EMFILE errno/emfile)
-            (EMLINK errno/emlink)
-            (EMSGSIZE errno/emsgsize)
-            (EMULTIHOP errno/emultihop)
-            (ENAMETOOLONG errno/enametoolong)
-            (ENETDOWN errno/enetdown)
-            (ENETRESET errno/enetreset)
-            (ENETUNREACH errno/enetunreach)
-            (ENFILE errno/enfile)
-            (ENOBUFS errno/enobufs)
-            (ENODATA errno/enodata)
-            (ENODEV errno/enodev)
-            (ENOENT errno/enoent)
-            (ENOEXEC errno/enoexec)
-            (ENOLCK errno/enolck)
-            (ENOLINK errno/enolink)
-            (ENOMEM errno/enomem)
-            (ENOMSG errno/enomsg)
-            (ENOPROTOOPT errno/enoprotoopt)
-            (ENOSPC errno/enospc)
-            (ENOSR errno/enosr)
-            (ENOSTR errno/enostr)
-            (ENOSYS errno/enosys)
-            (ENOTCONN errno/enotconn)
-            (ENOTDIR errno/enotdir)
-            (ENOTEMPTY errno/enotempty)
-            (ENOTRECOVERABLE errno/enotrecoverable)
-            (ENOTSOCK errno/enotsock)
-            (EOPNOTSUPP errno/enotsup)
-            (ENOTTY errno/enotty)
-            (ENXIO errno/enxio)
-            (EOPNOTSUPP errno/eopnotsupp)
-            (EOVERFLOW errno/eoverflow)
-            (EOWNERDEAD errno/eownerdead)
-            (EPERM errno/eperm)
-            (EPIPE errno/epipe)
-            (EPROTO errno/eproto)
-            (EPROTONOSUPPORT errno/eprotonosupport)
-            (EPROTOTYPE errno/eprototype)
-            (ERANGE errno/erange)
-            (EROFS errno/erofs)
-            (ESPIPE errno/espipe)
-            (ESRCH errno/esrch)
-            (ESTALE errno/estale)
-            (ETIME errno/etime)
-            (ETIMEDOUT errno/etimedout)
-            (ETXTBSY errno/etxtbsy)
-            (EWOULDBLOCK errno/ewouldblock)
-            (EXDEV errno/exdev))
-
-    errno-error
-    (rename (syscall-errno-condition? syscall-error?)
-            (condition-syscall-errno syscall-error:errno)
-            (condition-syscall-message syscall-error:message)
-            (condition-irritants syscall-error:data))
-    syscall-error:procname
-
     fdes->textual-input-port
     fdes->binary-input-port
     fdes->textual-output-port
@@ -213,6 +110,7 @@ This means a lot of overhead in syscalls.
     with-raw-mode with-rare-mode without-echo)
   (import
     (rnrs (6))
+    (rnrs mutable-strings (6))
     (srfi :98 os-environment-variables)
     (struct pack)
     (only (loko) make-parameter port-file-descriptor port-file-descriptor-set!)
@@ -281,24 +179,6 @@ This means a lot of overhead in syscalls.
                                (retry))
                               (else
                                (handler errno)))))))))
-
-;;; 3.1 Errors
-;; Translation from Loko's &syscall-errno to SRFI 170 syscall-error
-
-(define syscall-error:errno condition-syscall-errno)
-
-(define syscall-error:message condition-syscall-message)
-
-(define (syscall-error:procname x)
-  (symbol->string (condition-syscall-function x)))
-
-(define syscall-error:data condition-irritants)
-
-(define (errno-error errno procname . data)
-  (raise
-    (condition
-     (make-syscall-error (string->symbol procname) errno)
-     (make-irritants-condition data))))
 
 ;;; 3.2 I/O
 
@@ -559,103 +439,70 @@ This means a lot of overhead in syscalls.
     (values)))
 
 (define (delete-directory fname)
-  (define (raise-error syswho errno)
+  (define (raise-error errno)
     (raise
       (condition
        (make-who-condition 'delete-directory)
        (make-message-condition "Failed to delete the directory")
        (make-irritants-condition (list fname))
-       (filename-condition syswho errno fname)
-       (make-syscall-error syswho errno))))
+       (filename-condition 'unlinkat errno fname)
+       (make-syscall-error 'unlinkat errno))))
   (let ((newname-bv (filename->c-string 'delete-directory fname)))
     (with-restart
-     (sys_unlinkat AT_FDCWD (& newname-bv) AT_REMOVEDIR
-                   (lambda (errno)
-                     (raise-error 'unlinkat errno))))
+     (sys_unlinkat AT_FDCWD (& newname-bv) AT_REMOVEDIR raise-error))
     (values)))
 
-(define (set-file-mode fname/port permission-bits)
+(define (set-file-mode fname permission-bits)
   (define (raise-error errno)
-    (let ((syswho (if (string? fname/port) 'fchmodat 'fchmod)))
-      (raise
-        (condition
-         (make-who-condition 'set-file-mode)
-         (make-message-condition "Could not set file mode")
-         (make-irritants-condition (list fname/port))
-         (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)))))
-  (if (string? fname/port)
-      (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
-        (with-restart
-         (sys_fchmodat AT_FDCWD (& fname-bv) permission-bits raise-error)))
-      (cond ((port-file-descriptor fname/port) =>
-             (lambda (fd)
-               (with-restart
-                (sys_fchmod fd permission-bits raise-error))))
-            (else
-             (assertion-violation 'set-file-mode
-                                  "Expected a filename or a port with a file descriptor"
-                                  fname/port))))
+    (raise
+      (condition
+       (make-who-condition 'set-file-mode)
+       (make-message-condition "Could not set file mode")
+       (make-irritants-condition (list fname))
+       (make-i/o-filename-error fname)
+       (make-syscall-error 'fchmodat errno))))
+  (let ((fname-bv (filename->c-string 'set-file-mode fname)))
+    (with-restart
+     (sys_fchmodat AT_FDCWD (& fname-bv) permission-bits raise-error)))
   (values))
 
-(define (set-file-owner fname/port uid)
+(define (set-file-owner fname uid)
   (define (raise-error errno)
-    (let ((syswho (if (string? fname/port) 'fchownat 'fchown)))
-      (raise
-        (condition
-         (make-who-condition 'set-file-mode)
-         (make-message-condition "Could not set file owner")
-         (make-irritants-condition (list fname/port uid))
-         (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)))))
-  (if (string? fname/port)
-      (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
-        (with-restart
-         (sys_fchownat AT_FDCWD (& fname-bv) uid -1 0 raise-error)))
-      (cond ((port-file-descriptor fname/port) =>
-             (lambda (fd)
-               (with-restart
-                (sys_fchown fd uid -1 raise-error))))
-            (else
-             (assertion-violation 'set-file-mode
-                                  "Expected a filename or a port with a file descriptor"
-                                  fname/port))))
+    (raise
+      (condition
+       (make-who-condition 'set-file-mode)
+       (make-message-condition "Could not set file owner")
+       (make-irritants-condition (list fname uid))
+       (make-i/o-filename-error fname)
+       (make-syscall-error 'fchownat errno))))
+  (let ((fname-bv (filename->c-string 'set-file-mode fname)))
+    (with-restart
+     (sys_fchownat AT_FDCWD (& fname-bv) uid -1 0 raise-error)))
   (values))
 
-(define (set-file-group fname/port gid)
+(define (set-file-group fname gid)
   (define (raise-error errno)
-    (let ((syswho (if (string? fname/port) 'fchownat 'fchown)))
-      (raise
-        (condition
-         (make-who-condition 'set-file-mode)
-         (make-message-condition "Could not set file group")
-         (make-irritants-condition (list fname/port gid))
-         (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)))))
-  (if (string? fname/port)
-      (let ((fname-bv (filename->c-string 'set-file-mode fname/port)))
-        (with-restart
-         (sys_fchownat AT_FDCWD (& fname-bv) -1 gid 0 raise-error)))
-      (cond ((port-file-descriptor fname/port) =>
-             (lambda (fd)
-               (with-restart
-                (sys_fchown fd -1 gid raise-error))))
-            (else
-             (assertion-violation 'set-file-mode
-                                  "Expected a filename or a port with a file descriptor"
-                                  fname/port))))
+    (raise
+      (condition
+       (make-who-condition 'set-file-mode)
+       (make-message-condition "Could not set file group")
+       (make-irritants-condition (list fname gid))
+       (make-i/o-filename-error fname)
+       (make-syscall-error 'fchownat  errno))))
+  (let ((fname-bv (filename->c-string 'set-file-mode fname)))
+    (with-restart
+     (sys_fchownat AT_FDCWD (& fname-bv) -1 gid 0 raise-error)))
   (values))
 
-(define-optional (set-file-timespecs fname/port [(access-timespec #f) (mod-timespec #f)])
+(define-optional (set-file-timespecs fname [(access-timespec #f) (mod-timespec #f)])
   (define (raise-error errno)
-    (let ((syswho 'utimensat))
-      (raise
-        (condition
-         (make-who-condition 'set-file-timespec)
-         (make-message-condition "Could not set file times")
-         (make-irritants-condition (list fname/port access-timespec mod-timespec))
-         (if (string? fname/port) (make-i/o-filename-error fname/port) (condition))
-         (make-syscall-error syswho errno)))))
+    (raise
+      (condition
+       (make-who-condition 'set-file-timespec)
+       (make-message-condition "Could not set file times")
+       (make-irritants-condition (list fname access-timespec mod-timespec))
+       (make-i/o-filename-error fname)
+       (make-syscall-error 'utimensat errno))))
   ;; Extension: either of the timespecs can be omitted
   (let ((access-timespec
          (or access-timespec (if mod-timespec (cons 0 UTIME_OMIT) (cons 0 UTIME_NOW))))
@@ -663,18 +510,9 @@ This means a lot of overhead in syscalls.
          (or mod-timespec (if access-timespec (cons 0 UTIME_OMIT) (cons 0 UTIME_NOW)))))
     (let ((utimes (pack "2Q 2Q" (car access-timespec) (cdr access-timespec)
                         (car mod-timespec) (cdr mod-timespec))))
-      (if (string? fname/port)
-          (let ((fname-bv (filename->c-string 'set-file-timespecs fname/port)))
-            (with-restart
-             (sys_utimensat AT_FDCWD (& fname-bv) (& utimes) 0 raise-error)))
-          (cond ((port-file-descriptor fname/port) =>
-                 (lambda (fd)
-                   (with-restart
-                    (sys_utimensat fd 0 (& utimes) 0 raise-error))))
-                (else
-                 (assertion-violation 'set-file-timespecs
-                                      "Expected a filename or a port with a file descriptor"
-                                      fname/port access-timespec mod-timespec))))))
+      (let ((fname-bv (filename->c-string 'set-file-timespecs fname)))
+        (with-restart
+         (sys_utimensat AT_FDCWD (& fname-bv) (& utimes) 0 raise-error)))))
   (values))
 
 (define (truncate-file fname/port len)
@@ -721,12 +559,12 @@ This means a lot of overhead in syscalls.
           (immutable ctime file-info:ctime)))
 
 ;; One of stat, lstat or fstat
-(define-optional (file-info filename/port [(chase? #t)])
+(define-optional (file-info filename/port [(follow? #t)])
   (define (bytevector-timespec-native-ref stat offset)
     (cons (bytevector-s64-native-ref stat offset)
           (bytevector-u64-native-ref stat (fx+ offset 8))))
   (define (raise-error errno)
-    (let ((syswho (if (string? filename/port) (if chase? 'stat 'lstat) 'fstat)))
+    (let ((syswho (if (string? filename/port) (if follow? 'stat 'lstat) 'fstat)))
       (raise (condition
               (make-who-condition 'file-info)
               (make-message-condition "Could not stat file")
@@ -739,7 +577,7 @@ This means a lot of overhead in syscalls.
     ;; Call the right stat syscall
     (if (string? filename/port)
         (let ((fn (filename->c-string 'file-info filename/port)))
-          (if chase?
+          (if follow?
               (with-restart (sys_stat (& fn) (& statbuf) raise-error))
               (with-restart (sys_lstat (& fn) (& statbuf) raise-error))))
         (cond ((port-file-descriptor filename/port) =>
@@ -777,22 +615,22 @@ This means a lot of overhead in syscalls.
 (define (file-info-symlink? file-info)
   (eqv? (fxand (file-info:mode file-info) S_IFMT) S_IFLNK))
 
-(define (open-directory dirname)
+(define-optional (open-directory dirname [(dot-files? #f)])
   (let* ((fn (filename->c-string 'open-directory dirname))
          (fd (with-restart
-              (sys_open (& fn)
-                        (bitwise-ior O_CLOEXEC O_DIRECTORY O_NONBLOCK)
-                        0
-                        (lambda (errno)
-                          (raise
-                            (condition
-                             (make-who-condition 'open-directory)
-                             (make-message-condition "Could not open directory")
-                             (make-irritants-condition (list dirname))
-                             (if (eqv? errno ENOENT)
-                                 (make-i/o-file-does-not-exist-error dirname)
-                                 (make-i/o-filename-error dirname))
-                             (make-syscall-error 'open errno))))))))
+              (sys_openat AT_FDCWD (& fn)
+                          (bitwise-ior O_CLOEXEC O_DIRECTORY O_NONBLOCK)
+                          0
+                          (lambda (errno)
+                            (raise
+                              (condition
+                               (make-who-condition 'open-directory)
+                               (make-message-condition "Could not open directory")
+                               (make-irritants-condition (list dirname))
+                               (if (eqv? errno ENOENT)
+                                   (make-i/o-file-does-not-exist-error dirname)
+                                   (make-i/o-filename-error dirname))
+                               (make-syscall-error 'open errno))))))))
     (define (read! bv start count)
       (let retry ()
         (with-restart
@@ -819,7 +657,10 @@ This means a lot of overhead in syscalls.
     (let ((p (make-custom-binary-input-port
               dirname read! get-position set-position! close)))
       (port-file-descriptor-set! p fd)
-      p)))
+      (make-dir p dot-files?))))
+
+(define-record-type dir
+  (fields port dot-files?))
 
 (define-record-type directory-entry
   (fields inode offset type filename))
@@ -828,30 +669,33 @@ This means a lot of overhead in syscalls.
   ;; Read and parse a "struct linux_dirent64" (which is apparently not
   ;; part of the UAPI headers). The full-info? argument is an
   ;; extension.
-  (if (port-eof? dir)
-      #f
-      (let-values ([(d_ino d_off d_reclen d_type) (get-unpack dir "QQSC")])
-        (let ((fn (utf8z->string (get-bytevector-n dir (fx- d_reclen (format-size "QQSC")))
-                                 0)))
-          (if full-info?
-              (make-directory-entry d_ino d_off d_type fn)
-              fn)))))
+  (let ((port (dir-port dir)))
+    (let lp ()
+      (if (port-eof? port)
+          #f
+          (let-values ([(d_ino d_off d_reclen d_type) (get-unpack port "QQSC")])
+            (let ((fn (utf8z->string (get-bytevector-n port (fx- d_reclen (format-size "QQSC")))
+                                     0)))
+              (if (or (and (not (dir-dot-files? dir)) (char=? (string-ref fn 0) #\.))
+                      (member fn '("." "..")))
+                  (lp)
+                  (if full-info?
+                      (make-directory-entry d_ino d_off d_type fn)
+                      fn))))))))
 
 (define (close-directory dir)
-  (close-port dir))
+  (close-port (dir-port dir)))
 
-(define-optional (directory-files [(dirname ".") (dotfiles? #f)])
-  (call-with-port (open-directory dirname)
-    (lambda (dir)
-      (let lp ((ret '()))
-        (cond ((read-directory dir) =>
-               (lambda (fn)
-                 (if (or (and (not dotfiles?)
-                              (char=? (string-ref fn 0) #\.))
-                         (member fn '("." "..")))
-                     (lp ret)
-                     (lp (cons fn ret)))))
-              (else ret))))))
+(define-optional (directory-files [(dirname ".") (dotfiles? #f) (full-info? #f)])
+  (let ((dir (open-directory dirname dotfiles?)))
+    (unwind-protectish
+     (lambda ()
+       (let lp ((ret '()))
+         (cond ((read-directory dir full-info?) =>
+                (lambda (fn) (lp (cons fn ret))))
+               (else ret))))
+     (lambda ()
+       (close-directory dir)))))
 
 (define (read-symlink filename)
   (define (raise-error errno)
@@ -883,26 +727,44 @@ This means a lot of overhead in syscalls.
       ((or (fx=? i -1) (eqv? (string-ref str i) c))
        i)))
 
-(define make-temp-names
-  (let ((seed #f))
+(define (make-xorshift32 seed)
+  ;; http://www.jstatsoft.org/v08/i14/paper
+  (let ((state seed))
     (lambda ()
-      (unless seed
-        (let ((bv (make-bytevector 8)))
-          (unless (with-restart
-                   (sys_getrandom (& bv) (bytevector-length bv) GRND_NONBLOCK
-                                  (lambda _ #f)))
-            ;; This only happens if this code runs extremely early in
-            ;; the boot process for some happy reason, when nobody is
-            ;; around to attack the filename creation anyway. So we
-            ;; just do a funny dance.
-            (bytevector-u64-native-set! bv 0 (bitwise-bit-field
-                                              (* (time-nanosecond (posix-time))
-                                                 (time-nanosecond (posix-time))
-                                                 (time-nanosecond (posix-time)))
-                                              0 64)))
-          (set! seed bv)
-          ;; TODO: Hook up a random number generator
-          )))))
+      (let* ((y state)
+             (y (fxxor y (fxarithmetic-shift y 13)))
+             (y (fxxor y (fxarithmetic-shift y -17)))
+             (y (fxxor y (fxarithmetic-shift y 5)))
+             (y (fxand y #xffffffff)))
+        (set! state y)
+        y))))
+
+(define make-temp-name
+  (let ((rng #f))
+    (lambda ()
+      (unless rng
+        (let ((seed
+               (or (let ((buf (make-bytevector (format-size "=L"))))
+                     (with-restart
+                      (sys_getrandom (& buf) (bytevector-length buf) GRND_NONBLOCK
+                                     (lambda _ #f)))
+                     (unpack "=L" buf))
+                   ;; This only happens if this code runs extremely early in
+                   ;; the boot process for some happy reason, when nobody is
+                   ;; around to attack the filename creation anyway. So we
+                   ;; just do a funny dance.
+                   (bitwise-bit-field (* (time-nanosecond (posix-time))
+                                         (time-nanosecond (posix-time)))
+                                      0 32))))
+          (set! rng (make-xorshift32
+                     (if (eqv? seed 0) (sys_getpid) seed)))))
+      (let* ((len (fx+ 8 (fxand (rng) 7)))
+             (ret (make-string len)))
+        (do ((i 0 (fx+ i 1)))
+            ((fx=? i len) ret)
+          (string-set! ret i (integer->char
+                              (fx+ (char->integer #\A)
+                                   (fxmod (rng) 26)))))))))
 
 (define-optional (create-temp-file [(prefix (temp-file-prefix))])
   (define who 'create-temp-file)
@@ -915,31 +777,46 @@ This means a lot of overhead in syscalls.
        (make-syscall-error 'linkat errno))))
   (let* ((slash (string-index-right prefix #\/))
          (dir (if (eqv? slash -1)
-                  (errno-error EINVAL "mkstemp" prefix)
+                  "."
                   (substring prefix 0 slash)))
          (dir-bv (filename->c-string who dir)))
+    ;; Create an anonymous file
     (let* ((fd (sys_openat AT_FDCWD (& dir-bv) (fxior O_TMPFILE O_WRONLY) #o600))
            (procname (string-append "/proc/self/fd/" (number->string fd)))
            (procname-bv (filename->c-string who procname)))
-      (let retry ((tries 0))
-        (let* ((tempname (string-append prefix "-TEMP-" (number->string tries)))
+      (let retry ((tries 100))
+        (let* ((tempname (string-append prefix (make-temp-name)))
                (tempname-bv (filename->c-string who tempname)))
+          ;; Try to link the file to a new name
           (case (with-restart
                  (sys_linkat AT_FDCWD (& procname-bv) AT_FDCWD (& tempname-bv) AT_SYMLINK_FOLLOW
                              (lambda (errno)
-                               (cond ((and (eqv? errno EEXIST) (fx<? tries 100))
+                               (cond ((and (eqv? errno EEXIST) (not (eqv? tries 0)))
                                       'exists)
                                      (else
                                       (sys_close fd)
                                       (raise-error errno))))))
             ((exists)
-             (retry (fx+ tries 1)))
+             (retry (fx- tries 1)))
             (else
              (sys_close fd)
              tempname)))))))
 
+;; XXX: Please don't use this to create temporary files; use the
+;; procedure above instead. It is hopefully secure against symlink
+;; attacks.
 (define-optional (call-with-temporary-filename maker [(prefix (temp-file-prefix))])
-  (error 'call-with-temporary-filename "TODO" maker prefix))
+  (let retry ((tries 100))
+    (let ((tempname (string-append prefix (make-temp-name))))
+      (let-values ([(x . rest)
+                    (guard (exn
+                            ((and (syscall-errno-condition? exn)
+                                  (not (eqv? 0 tries)))
+                             #f))
+                      (maker tempname))])
+        (if (not x)
+            (retry (fx- tries 1))
+            (apply values x rest))))))
 
 (define (real-path path^)
   (define error-msg "Failed to get the canonicalized absolute pathname")
@@ -1116,13 +993,13 @@ This means a lot of overhead in syscalls.
 (define (user-info uid/name)
   (define who (if (fixnum? uid/name) "getpwuid" "getpwnam"))
   (when (not (file-exists? "/etc/passwd"))
-    (errno-error ENOENT who uid/name))
+    (error 'user-info "No /etc/passwd file" uid/name))
   (call-with-input-file "/etc/passwd"
     (lambda (p)
       (let lp ()
         (let ((line (get-line p)))
           (if (eof-object? line)
-              (errno-error ENOENT who uid/name)
+              (error 'user-info "User not found in /etc/passwd" uid/name)
               (let ((parts (string-split line #\:)))
                 (if (not (fx=? (length parts) 7))
                     (lp)
@@ -1165,13 +1042,13 @@ This means a lot of overhead in syscalls.
 (define (group-info gid/name)
   (define who (if (fixnum? gid/name) "getgrgid" "getgrnam"))
   (when (not (file-exists? "/etc/group"))
-    (errno-error ENOENT who gid/name))
+    (error 'group-info "No /etc/group file" gid/name))
   (call-with-input-file "/etc/group"
     (lambda (p)
       (let lp ()
         (let ((line (get-line p)))
           (if (eof-object? line)
-              (errno-error ENOENT who gid/name)
+              (error 'group-info "Group not found in /etc/group" gid/name)
               (let ((parts (string-split line #\:)))
                 (if (not (fx=? (length parts) 4))
                     (lp)
@@ -1235,47 +1112,60 @@ This means a lot of overhead in syscalls.
 
 (define (terminal-file-name port)
   (unless (terminal? port)
-    (errno-error ENOTTY "ttyname" port))
+    (assertion-violation 'terminal-file-name
+                         "Expected a port connected to a terminal" port))
   (let ((proc (string-append "/proc/self/fd/"
                              (number->string (port-file-descriptor port)))))
     (let ((devname (read-symlink proc)))
       (let ((portinfo (file-info port))
             (devinfo (file-info devname)))
-        (unless (eqv? (file-info:device portinfo) (file-info:device devinfo))
-          (errno-error ENODEV "ttyname" port)))
+        (unless (and (eqv? (file-info:device portinfo) (file-info:device devinfo))
+                     (eqv? (file-info:inode portinfo) (file-info:inode devinfo)))
+          (error 'terminal-file-name
+                 "Symlink points to wrong device" port proc devname)))
       devname)))
 
-(define (make-mode-swapper port update-termios!)
-  (define (tcgets port)
-    (let ((buf (make-bytevector sizeof-termios)))
-      (sys_ioctl (port-file-descriptor port) TCGETS (& buf))
-      buf))
-  (define (tcsetsw port buf)
-    (assert (fx=? (bytevector-length buf) sizeof-termios))
-    (sys_ioctl (port-file-descriptor port) TCSETSW (& buf)))
-  (let ((prev #f))
-    (lambda ()
-      (let ((t (tcgets port)))
-        (unless prev
-          (set! prev t)
-          (update-termios! prev))
-        (tcsetsw port prev)
-        (set! prev t)))))
+(define (tcgets port)
+  (let ((buf (make-bytevector sizeof-termios)))
+    (sys_ioctl (port-file-descriptor port) TCGETS (& buf))
+    buf))
 
-(define (make-dual-swapper in out update-termios!)
+(define (tcsetsw port buf)
+  (assert (fx=? (bytevector-length buf) sizeof-termios))
+  (sys_ioctl (port-file-descriptor port) TCSETSW (& buf)))
+
+(define (set-port-modes in out update-termios!)
   (let ((in-info (file-info in))
         (out-info (file-info out)))
-    (let ((swap-input (make-mode-swapper in update-termios!))
-          (swap-output
-           (if (and (eqv? (file-info:device in-info) (file-info:device out-info))
-                    (eqv? (file-info:inode in-info) (file-info:inode out-info)))
-               values
-               (make-mode-swapper out update-termios!))))
-      (lambda ()
-        (swap-input)
-        (swap-output)))))
+    (cond ((and (eqv? (file-info:device in-info) (file-info:device out-info))
+                (eqv? (file-info:inode in-info) (file-info:inode out-info)))
+           (let ((x (tcgets in)))
+             (update-termios! x)
+             (tcsetsw in x)))
+          (else
+           (let ((x (tcgets in)))
+             (update-termios! x)
+             (tcsetsw in x))
+           (let ((x (tcgets out)))
+             (update-termios! x)
+             (tcsetsw out x))))))
 
-;; TODO: Integrate with fibers
+(define (unwind-protectish thunk on-exit)
+  (with-exception-handler
+    (lambda (exn)
+      (on-exit)
+      (raise exn))
+    (lambda ()
+      (let-values ([x (thunk)])
+        (on-exit)
+        (apply values x)))))
+
+(define (make-restorer input-port output-port)
+  (let ((saved-in (tcgets input-port))
+        (saved-out (tcgets output-port)))
+    (lambda ()
+      (tcsetsw output-port saved-out)
+      (tcsetsw input-port saved-in))))
 
 (define (with-raw-mode input-port output-port min time proc)
   (define (update-termios! buf)
@@ -1287,8 +1177,12 @@ This means a lot of overhead in syscalls.
         (pack! "=4L" buf 0 iflag oflag cflag lflag)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) min)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) time))))
-  (define swap (make-dual-swapper input-port output-port update-termios!))
-  (dynamic-wind swap (lambda () (proc input-port output-port)) swap))
+  (define restore (make-restorer input-port output-port))
+  (unwind-protectish
+   (lambda ()
+     (set-port-modes input-port output-port update-termios!)
+     (proc input-port output-port))
+   restore))
 
 (define (with-rare-mode input-port output-port proc)
   (define (update-termios! buf)
@@ -1297,13 +1191,22 @@ This means a lot of overhead in syscalls.
         (pack! "=4L" buf 0 iflag oflag cflag lflag)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) 1)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) 0))))
-  (define swap (make-dual-swapper input-port output-port update-termios!))
-  (dynamic-wind swap (lambda () (proc input-port output-port)) swap))
+  (define restore (make-restorer input-port output-port))
+  (unwind-protectish
+   (lambda ()
+     (set-port-modes input-port output-port update-termios!)
+     (proc input-port output-port))
+   restore))
 
 (define (without-echo input-port output-port proc)
   (define (update-termios! buf)
     (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
       (let ((lflag (fxand lflag (fxnot (fxior ECHO ECHOE ECHOK ECHONL)))))
         (pack! "=4L" buf 0 iflag oflag cflag lflag))))
-  (define swap (make-dual-swapper input-port output-port update-termios!))
-  (dynamic-wind swap (lambda () (proc input-port output-port)) swap)))
+  (define restore (make-restorer input-port output-port))
+  (set-port-modes input-port output-port update-termios!)
+  (unwind-protectish
+   (lambda ()
+     (set-port-modes input-port output-port update-termios!)
+     (proc input-port output-port))
+   restore)))
