@@ -338,23 +338,17 @@ class FrameId(object):
 
 
 class LokoUnwinder(Unwinder):
-    def __init__(self):
+    def __init__(self, bootstrap_unwind_table):
         super(LokoUnwinder, self).__init__("loko")
-        self.have_warned = False
+        self.bootstrap_unwind_table = bootstrap_unwind_table
 
     def __call__(self, pending_frame):
         sp = pending_frame.read_register('rsp')
         pc = pending_frame.read_register('rip')
         unwind_info = pending_frame.create_unwind_info(FrameId(sp, pc))
 
-        # FIXME: gdb is not finding the table...
-        table = gdb.lookup_global_symbol('bootstrap_unwind_table')
-        if table is None:
-            if not self.have_warned:
-                print("Warning: loko-gdb.py is using a hardcoded value")
-                self.have_warned = True
-            table = gdb.Value(0x489000).cast(gdb.lookup_type('unsigned long').pointer())
-        #print('table', table)
+        table = self.bootstrap_unwind_table.cast(
+            gdb.lookup_type('unsigned long').pointer())
 
         # Skip over the locals (unwind)
         table_size = table.dereference() >> shift_fixnum
@@ -379,4 +373,10 @@ class LokoUnwinder(Unwinder):
 
 
 gdb.pretty_printers.append(loko_lookup_function)
-gdb.unwinder.register_unwinder(None, LokoUnwinder())
+
+# For some reason gdb.lookup_global_symbol does not.
+table = gdb.parse_and_eval("&bootstrap_unwind_table")
+if table is None:
+    print("Failed to get the address of bootstrap_unwind_table")
+else:
+    gdb.unwinder.register_unwinder(None, LokoUnwinder(table))
