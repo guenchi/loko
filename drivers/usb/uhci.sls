@@ -581,6 +581,36 @@ reclamation.
                (log/debug "Last TD: " (TD->list &last-td))
                (values status #f))))))))
 
+  (define (perform-devreq/nodata dev endpoint req timeout)
+    (let ((low-speed? (eq? (usb-device-speed dev) 'low))
+          (address (usb-device-address dev)))
+      (let* ((&td0 &probe-mem)
+             (&td1 (fx+ &td0 TD-size))
+             (&data-setup (fx+ &td1 TD-size)))
+        (log/debug "-> " req)
+        (copy-bytevector-to-memory req &data-setup)
+        ;; Set the configuration
+        (TD-link-td!     &td0 &td1)
+        (TD-set-control! &td0 low-speed? #f #f)
+        (TD-set-token!   &td0 (bytevector-length req) DATA0 EndPt0 address PID-SETUP)
+        (TD-set-address! &td0 &data-setup)
+        ;; Read back the status
+        (TD-link-terminate! &td1)
+        (TD-set-control!    &td1 low-speed? #f #f)
+        (TD-set-token!      &td1 Length0 DATA1 EndPt0 address PID-IN)
+        (TD-set-address!    &td1 0)       ;unused
+        ;; Wait for the transfer to complete
+        (schedule-insert-td (if low-speed? idx-QLS idx-QFS) &td0)
+        (let ((status (await-transfer-descriptor &td1 timeout)))
+          (case status
+            ((ok)
+             (values 'ok #vu8()))
+            (else
+             (log/debug "Control transfer error")
+             (log/debug "TD0: " (TD->list &td0))
+             (log/debug "TD1: " (TD->list &td1))
+             (values status #f)))))))
+
   ;; TODO: perform-devreq/output
 
   ;; Synchronous bulk transfer
@@ -752,7 +782,7 @@ reclamation.
       ;; [('ClearHubFeature port) #f]
       ;; [('ClearPortFeature port) #f]
       ;; [('GetBusState port) #f]
-      [#('GetHubDescriptor 0)
+      [#('GetHubDescriptor)
        ;; Create a hub descriptor for UHCI
        (let ((x (pack "<uCCCSCC CC" (format-size "<uCCCSCC CC")
                       #x29 %num-ports
@@ -764,18 +794,20 @@ reclamation.
          (put-message ch (cons 'ok x)))]
       ;; [('GetHubStatus port) #f]
       [#('GetPortStatus port)
-       (if (not (fx<? -1 port %num-ports))
+       (if (not (fx<=? 1 port %num-ports))
            (put-message ch (cons 'fail 'bad-port))
-           (let ((x (PortSCn-ref port)))
+           (let* ((port (fx- port 1))
+                  (x (PortSCn-ref port)))
              (let ((wPortStatus (PortSCn->wPortStatus x))
                    (wChangeStatus (PortSCn->wChangeStatus x)))
                (put-message ch (cons 'ok (pack "<SS" wPortStatus wChangeStatus))))))]
       ;; [('SetHubDescriptor port) #f]
       ;; [('SetHubFeature port) #f]
       [#('SetPortFeature feature port)
-       (if (not (fx<? -1 port %num-ports))
+       (if (not (fx<=? 1 port %num-ports))
            (put-message ch (cons 'fail 'bad-port))
-           (let* ((x (PortSCn-ref port))
+           (let* ((port (fx- port 1))
+                  (x (PortSCn-ref port))
                   (ok (case feature
                         [(PORT_RESET)
                          ;; TODO: keep track of "reset change" and do
@@ -790,9 +822,10 @@ reclamation.
                         [else #f])))
              (put-message ch (if ok '(ok . #vu8()) '(fail . bad-request)))))]
       [#('ClearPortFeature feature port)
-       (if (not (fx<? -1 port %num-ports))
+       (if (not (fx<=? 1 port %num-ports))
            (put-message ch (cons 'fail 'bad-port))
-           (let* ((x (PortSCn-ref port))
+           (let* ((port (fx- port 1))
+                  (x (PortSCn-ref port))
                   (ok (case feature
                         [(C_PORT_RESET)
                          ;; FIXME: See PORT_RESET above
@@ -843,9 +876,8 @@ reclamation.
                    (wrap-operation sleep-op (lambda _ 'sleep)))))
         ['sleep
          ;; Every interval we probe the ports for change indications
-         ;; and prepare to send them. The change indication bit is
-         ;; cleared by writing it, which will happen when the port is
-         ;; tested.
+         ;; and prepare to send them. This is like the interrupt
+         ;; endpoint on regular USB hubs.
          (let ((changes (change-report)))
            (log/debug "Changes: #b" (number->string changes 2))
            (loop (sleep-operation 1) (put-operation notify-ch changes)))]
@@ -863,7 +895,10 @@ reclamation.
   (define (handle-hci-request req)
     (match req
       [('perform-devreq/response ch dev endpoint devreq timeout)
-       (let-values ([(status resp) (perform-devreq/response dev endpoint devreq timeout)])
+       (let-values ([(status resp)
+                     (if (eqv? 0 (devreq-wLength devreq))
+                         (perform-devreq/nodata dev endpoint devreq timeout)
+                         (perform-devreq/response dev endpoint devreq timeout))])
          (put-message ch (cons status resp)))]
       [('perform-bulk ch dev endpoint data timeout)
        (let-values ([(status resp) (perform-bulk dev endpoint data timeout)])
@@ -883,7 +918,7 @@ reclamation.
   (define request-ch (usb-controller-request-channel controller))
   (define notify-ch (usb-controller-notify-channel controller))
 
-  (define TIMEOUT (sleep-operation 30)) ;DEBUGGING
+  (define TIMEOUT (sleep-operation 10)) ;DEBUGGING
 
   (log/debug "Detected " %num-ports " USB ports")
 
@@ -902,6 +937,7 @@ reclamation.
                 (choice-operation
                  (wrap-operation (get-operation request-ch)
                                  (lambda (req) (cons 'req req)))
+                 #;
                  (wrap-operation TIMEOUT (lambda _ '(stop)))))))
         (case (car x)
           ((req)

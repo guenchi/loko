@@ -412,10 +412,12 @@
       bv))
   (assert (fx<? (bytevector-length data) 1280))
   (let-values ([(status resp)
-                (if (request-type:host->device? request-type)
-                    (error 'usb-control-transfer "TODO: Host to device")
-                    (let ((req (make-devreq request-type bRequest wValue wIndex)))
-                      (perform-devreq/response dev EndPt0 req timeout)))])
+                (let ((req (make-devreq request-type bRequest wValue wIndex)))
+                  (if (eqv? (bytevector-length data) 0)
+                      (perform-devreq/response dev EndPt0 req timeout)
+                      (if (request-type:host->device? request-type)
+                          (error 'usb-control-transfer "TODO: Host to device")
+                          (perform-devreq/response dev EndPt0 req timeout))))])
     (case status
       ((ok)
        ;; XXX: This data is copied twice

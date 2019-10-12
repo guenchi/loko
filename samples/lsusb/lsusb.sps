@@ -11,8 +11,7 @@
   (loko system fibers)
   (loko drivers pci)
   (loko drivers usb core)
-  (loko drivers usb uhci)
-  (loko drivers usb hub))
+  (loko drivers usb uhci))
 
 (define (manage-usb-hci controller)
   (let lp ()
@@ -21,7 +20,8 @@
        ;; (display "\nlsusb: Fetching descriptors\n")
        ;; Fetch all descriptors from the hardware and cache them
        ;; on the usb-device record
-       (usb-fetch-descriptors usbdev)
+       ;;(usb-fetch-descriptors usbdev)
+
        ;; At this point we should find a driver for the device and
        ;; spawn a fiber to handle it.
        (print-usb-descriptor (usb-get-device-descriptor usbdev))
@@ -30,11 +30,12 @@
                  (usb-device-$configurations usbdev))
        (write usbdev)
        (newline)
+       #;
        (cond
-         ((probe·usb·hub? usbdev)
+         ((probe·usb·mass-storage? usbdev)
           (spawn-fiber
            (lambda ()
-             (driver·usb·hub usbdev)))))])
+             (driver·usb·mass-storage usbdev)))))])
     (lp)))
 
 (display "Scanning the PCI bus\n")
