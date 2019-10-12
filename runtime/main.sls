@@ -112,9 +112,6 @@
        (loop-args (cons exec-name rest) '(freestanding))]
 
       [(exec-name "--compile" sps-fn "--output" out-fn)
-       (display "building with options ")
-       (write options)
-       (newline)
        (compile-program out-fn sps-fn options)
        (set-file-mode out-fn #o755)]
       [(exec-name)
