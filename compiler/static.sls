@@ -156,8 +156,7 @@
                        "loko/arch/amd64/linux-asm"
                        "loko/arch/amd64/pc-and-linux-asm")
                      '())
-               "pfds/queues/private/condition"          ;temporary
-               "pfds/queues/naive"          ;temporary
+               "loko/drivers/uart/ns8250" ;FIXME: exclude from linux builds
                "loko/arch/amd64/process-init"))
             (else '()))
         ,@(if (memq 'eval options)
