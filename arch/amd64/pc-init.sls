@@ -769,6 +769,7 @@
   ;; Start the boot process.
   (let ((boot (make-pcb 1 ($process-start 1))))
     (set! *runq* (pcb-link! *runq* boot))
+    (display "Starting first process\n")
     (hashtable-set! *pids* (pcb-pid boot) boot))
 
   (let scheduler-loop ()
@@ -1357,11 +1358,12 @@
             (list-sort (lambda (a b)
                          (< (area-base a) (area-base b)))
                        areas))
-  ;; Put 1MB last, 1MB-4GB second, 4GB+ last. Only the first 4GB is
+  ;; Put 1MB last, 1MB-4GB second, 4GB+ first. Only the first 4GB is
   ;; identity mapped when we get here from the boot loader, so that
   ;; memory is needed for page table. And it's better to not waste the
   ;; first 1MB, since some hardware needs that memory.
-  (let ((usable (list-sort (lambda (a b)
+  (let ((early-limit (* 4 1024 1024 1024))
+        (usable (list-sort (lambda (a b)
                              (let ((a (area-top a))
                                    (b (area-top b)))
                                (cond ((fx<? a (* 1024 1024)) #f)
@@ -1369,34 +1371,35 @@
                                      (else
                                       (fx<? a b)))))
                            (find-usable areas))))
+    (define (make-area-buddy area)
+      (make-buddy (area-base area) (- (area-top area) (area-base area)) 12))
     ;; (for-each print-area usable)
     (print "Free RAM: "
            (fmt-human-readable-bytes
             (fold-left (lambda (acc area)
                          (+ acc (- (area-top area) (area-base area))))
                        0 usable)))
-    ;; Make buddy allocators for all usable areas.
-    (set! *buddies*
-          (map (lambda (area)
-                 (make-buddy (area-base area)
-                             (- (area-top area) (area-base area))
-                             12))
-               usable))
-    (print "Buddy allocators:")
-    (for-each (lambda (buddy)
-                (print " [" (number->string (buddy-start-address buddy) 16)
-                       "," (number->string (+ (buddy-start-address buddy)
-                                              (buddy-capacity buddy)) 16)
-                       ") " (fmt-human-readable-bytes (buddy-capacity buddy))))
-              *buddies*)
-    ;; Identity-map all RAM. Only the first 4GB is identity-mapped
-    ;; initially.
-    (for-each (lambda (base top)
-                (when (or (> base (* 4 1024 1024 1024))
-                          (> top (* 4 1024 1024 1024)))
-                  (longmode-mmap base (fx- top base) 'identity)))
-              (map area-base usable)
-              (map area-top usable)))
+    ;; Make buddy allocators for low areas first, identity map the
+    ;; high RAM using these, and then make buddy allocators for the
+    ;; high areas.
+    (let-values ([(usable-low usable-high)
+                  (partition (lambda (area)
+                               (and (fx<? (area-base area) early-limit)
+                                    (fx<? (area-top area) early-limit)))
+                             usable)])
+      (set! *buddies* (map make-area-buddy usable-low))
+      (for-each (lambda (area)
+                  (longmode-mmap (area-base area)
+                                 (fx- (area-top area) (area-base area)) 'identity))
+                usable-high)
+      (set! *buddies* (append (map make-area-buddy usable-high) *buddies*))
+      (print "Buddy allocators:")
+      (for-each (lambda (buddy)
+                  (print " [" (number->string (buddy-start-address buddy) 16)
+                         "," (number->string (+ (buddy-start-address buddy)
+                                                (buddy-capacity buddy)) 16)
+                         ") " (fmt-human-readable-bytes (buddy-capacity buddy))))
+                *buddies*)))
 
   ;; A null page might catch some bugs.
   ;; (longmode-unmap 0 #x1000)
@@ -1461,7 +1464,6 @@
         (print "AP boot page: #x" (and temp-page (number->string temp-page 16)))
         (when temp-page
           (boot-application-processors temp-page APIC:ICR-low busywait))
-        (newline)
         #;(pc-dma-free temp-page)
         (pc-scheduler cpu-freq interval pc-dma-allocate pc-dma-free)))))
 
