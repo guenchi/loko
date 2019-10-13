@@ -477,7 +477,6 @@
         (cg-void ctxt))))
 
   (define (cg-put-i/o eax operand* ctxt env)
-    ;; TODO: rdx is not a good temporary
     (let ((port (car operand*))
           (value (cadr operand*)))
       (cond ((and (constant? port)
@@ -488,13 +487,14 @@
                      `(sar eax ,(shift 'fixnum))
                      `(out ,port ,eax))))
             (else
-             (if (constant? port)
-                 (emit `(mov edx ,(constant-value port)))
-                 (emit `(mov rdx ,(cg port 'value env #f))
-                       `(sar edx ,(shift 'fixnum))))
-             (emit `(mov rax ,(cg value 'value env #f))
-                   `(sar rax ,(shift 'fixnum))
-                   `(out dx ,eax))))
+             (let ((reg-port (reg)) (reg-value (reg)))
+               (emit `(mov ,reg-port ,(cg port 'value env #f)))
+               (emit `(mov ,reg-value ,(cg value 'value env #f)))
+               (emit `(mov rdx ,reg-port)
+                     `(sar edx ,(shift 'fixnum))
+                     `(mov rax ,reg-value)
+                     `(sar rax ,(shift 'fixnum))
+                     `(out dx ,eax)))))
       (cg-void ctxt)))
 
   (define (cg-get-mem mem+ movzx/sx reg operand* ctxt env)
