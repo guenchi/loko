@@ -378,18 +378,29 @@ record-constructor-descriptors:
                                 ((not t) #f)
                                 (else (lp (record-type-parent t))))))))))))
 
+(define (record-field-name rtd k)
+  (let lp ((t rtd) (len ($record-length rtd)))
+    (let* ((names (record-type-field-names t))
+           (idx0 (fx- len (vector-length names))))
+      (if (fx>=? k idx0)
+          (vector-ref names (fx- k idx0))
+          (lp (record-type-parent t) idx0)))))
+
 (define (record-accessor rtd k)
   (assert (record-type-descriptor? rtd))
   (assert (and (fixnum? k) (fx>=? k 0)))
   (let* ((prtd (record-type-parent rtd))
          (k (if prtd (fx+ k ($record-length prtd)) k)))
     (assert (fx<? k ($record-length rtd)))
-    (let ((right-type? (record-predicate rtd)))
+    (let ((right-type? (record-predicate rtd))) ;XXX: can be faster
       (lambda (r)
         (if (right-type? r)
             ($box-ref r k)
-            ;; XXX: give a more readable error message
-            (error 'some-accessor "Accessor applied to wrong type" r rtd))))))
+            (let ((typename (symbol->string (record-field-name rtd k)))
+                  (fieldname (symbol->string (record-type-name rtd))))
+              (assertion-violation (string->symbol (string-append typename "-" fieldname))
+                                   (string-append "Expected a record of type " typename)
+                                   r)))))))
 
 (define (record-mutator rtd k)
   (assert (record-type-descriptor? rtd))
@@ -402,9 +413,14 @@ record-constructor-descriptors:
           (lambda (r v)
             (if (right-type? r)
                 ($box-set! r k v)
-                ;; XXX: give a more readable error message
-                (error 'some-mutator "Mutator applied to wrong type" r rtd))))
-        (error 'some-mutator "This field is not mutable" rtd k))))
+                ;; XXX: The syntactic layer would know the true name
+                ;; of the mutator and would be preferable. Same above.
+                (let ((typename (symbol->string (record-field-name rtd k)))
+                      (fieldname (symbol->string (record-type-name rtd))))
+                  (assertion-violation (string->symbol (string-append typename "-" fieldname "-set!"))
+                                       (string-append "Expected a record of type " typename)
+                                       r v)))))
+        (assertion-violation 'record-mutator "Expected a mutable field" rtd k))))
 
 ;;; Inspection
 
@@ -415,7 +431,7 @@ record-constructor-descriptors:
 
 (define (record-rtd* x)
   (if (not ($box? x))
-      (error 'record-rtd "Expected a record (this is not even a box)" x)
+      (error 'record-rtd "Expected a record" x)
       (let ((t ($box-type x)))
         (if (not (record-type-descriptor? t))
             (error 'record-rtd "Expected a record" x)
@@ -469,7 +485,7 @@ record-constructor-descriptors:
 (define (default-record-writer v p wr)
   (let ((t (record-rtd* v)))
     (display "#[" p)
-    (display (or (record-type-uid t) (record-type-name t)) p)
+    (display (or (record-type-name t) (record-type-uid t)) p)
     (let lp ((t t))
       (when (and t (not (record-type-opaque? t)))
         (lp (record-type-parent t))
