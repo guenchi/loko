@@ -328,16 +328,20 @@
 (update-screen)
 
 (let ((devs *devs*))
-  (for-each
-   (lambda (dev)
-     (when (probe-pci-rtl8139 dev)
-       (print "Found an rtl8139 on ")
-       (println (list (pcidev-bus dev)
-                      (pcidev-dev dev)
-                      (pcidev-func dev)))
-       (spawn-fiber (lambda ()
-                      (driver-pci-rtl8139 dev)))))
-   devs))
+  (or
+    (find
+     (lambda (dev)
+       (cond ((probe-pci-rtl8139 dev)
+              (print "Found an rtl8139 on ")
+              (println (list (pcidev-bus dev)
+                             (pcidev-dev dev)
+                             (pcidev-func dev)))
+              (spawn-fiber (lambda ()
+                             (driver-pci-rtl8139 dev)))
+              #t)
+             (else #f)))
+     devs)
+    (println "No rtl8139 found!")))
 
 ;; Keep the screen updated. Not multiprocessing safe, but fibers are
 ;; currently cooperative anyway.
