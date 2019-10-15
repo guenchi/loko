@@ -296,6 +296,7 @@
 ;;; Operations
 
 (define-record-type op
+  (sealed #t)
   (fields wrap          ;procedure to wrap the return value
           try           ;procedure to optimistically try the operation
           block))       ;procedure to run after blocking
@@ -399,6 +400,7 @@
 
 (define-record-type channel
   (opaque #t)
+  (sealed #t)
   (fields recvq sendq)
   (protocol
    (lambda (new)
@@ -556,6 +558,7 @@
 ;;; Condition variables
 
 (define-record-type cvar
+  (sealed #t)
   (fields (mutable state)
           (mutable waiting))
   (protocol

@@ -145,6 +145,7 @@
 ;;; Models
 
 (define-record-type model
+  (sealed #t)
   (fields verts faces))
 
 (define (string-split str c)

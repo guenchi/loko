@@ -83,6 +83,7 @@
 
 ;; A PCI device
 (define-record-type pcidev
+  (sealed #t)
   (fields bus                           ;bus number
           dev                           ;device number
           func                          ;function number
@@ -102,9 +103,11 @@
           size))                        ;size of the registers
 
 (define-record-type pcibar-i/o          ;I/O bus
+  (sealed #t)
   (parent pcibar))
 
 (define-record-type pcibar-mem          ;memory bus
+  (sealed #t)
   (parent pcibar)
   (fields type                          ;32-bit, 64-bit, 20-bit ISA (1 MB)
           prefetchable?))               ;memory can be prefetched

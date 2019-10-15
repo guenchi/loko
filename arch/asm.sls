@@ -35,6 +35,7 @@
   '((%utf8z "Built with Loko Scheme <https://scheme.fail/>")))
 
 (define-record-type target
+  (sealed #t)
   (fields cpu-id kernel-id
           assembler
           code-generator
