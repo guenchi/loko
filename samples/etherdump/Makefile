@@ -20,7 +20,7 @@ run: $(PROGRAM)
 	  -debugcon vc -serial stdio \
 	  -net nic,model=rtl8139 \
 	  -net tap,ifname=tap0,script=no,downscript=no \
-	  -append 'LOKO_LIBRARY_PATH=/boot/.akku/lib' \
+	  -append 'LOKO_LIBRARY_PATH=/boot/.akku/lib CONSOLE=com1' \
 	  -initrd .akku/lib/text-mode/terminfo/builtins.sls
 
 clean:

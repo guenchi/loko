@@ -54,7 +54,8 @@ pre-installed.
 
 Loko uses the environment variable `LOKO_LIBRARY_PATH` to find
 libraries. This is a colon-separated list of directories. It uses the
-file extensions `.loko.sls` and `.sls`.
+file extensions `.loko.sls` and `.sls`. This is automatically handled
+by Akku.
 
 R6RS top-level programs can be run from the command line with `loko
 --program program.sps`. If Loko is installed as `scheme-script` then
@@ -70,10 +71,10 @@ works as an inferior Scheme for Emacs):
 qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
 ```
 
-There are these additional options you can try:
+If you create a script with this command then you can easily run it as
+an "Inferior Scheme" in e.g. Emacs. There are some additional options
+you can try:
 
-* Get debug output from the scheduler in a special window in QEMU:
-  `-debugcon vc`.
 * Add files to `/boot` using `-initrd filename`.
 * Set environment variables with e.g. `-append
   LOKO_LIBRARY_PATH=/boot`.

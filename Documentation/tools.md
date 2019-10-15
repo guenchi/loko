@@ -40,6 +40,16 @@ trapping instruction with a disassembler.
 
  [gdb]: https://www.gnu.org/software/gdb/
 
+## Debug logs
+
+The PC port of Loko can have debug logging redirected from the VGA
+console with the `CONSOLE` environment variable:
+
+* `CONSOLE=vga` prints to the VGA text mode console.
+* `CONSOLE=com1` prints to COM1 (BIOS's default baud rate).
+* `CONSOLE=debug` prints to QEMU's debug console. This is enabled with
+  e.g. `-debugcon vc`.
+
 ## Profiling
 
 Loko can be profiled with Linux [perf][perf].

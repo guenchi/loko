@@ -47,7 +47,8 @@
     (loko runtime buddy)
     (loko system $x86)
     (loko system $host)
-    (loko system $primitives))
+    (loko system $primitives)
+    (only (akku metadata) main-package-version))
 
 ;; Boot modules.
 ;; (("filename" (args ...) base-address length) ...)
@@ -189,8 +190,6 @@
 ;;; Early serial driver
 
 (define (init-early-serial-driver)
-  ;; Trivial early serial driver
-  (define debugcon #xe9)
   (define com1 #x3f8)
   (define thb (+ com1 0))
   (define lsr (+ com1 5))
@@ -204,14 +203,71 @@
          (i start (fx+ i 1)))
         ((fx=? i end) count)
       (serial-put-u8 (bytevector-u8-ref bv i))))
+  ($init-standard-ports (lambda _ 0) serial-put serial-put (eol-style crlf)))
+
+;;; Early debug console driver
+
+(define (init-early-debug-console-driver)
+  (define debugcon #xe9)
   (define (debug-put bv start count)
     (do ((end (fx+ start count))
          (i start (fx+ i 1)))
         ((fx=? i end) count)
       (put-i/o-u8 debugcon (bytevector-u8-ref bv i))))
-  ($init-standard-ports (lambda _ 0)
-                        debug-put debug-put
-                        (eol-style crlf)))
+  ($init-standard-ports (lambda _ 0) debug-put debug-put (eol-style crlf)))
+
+;;; Early VGA text mode stuff
+
+(define init-early-text-mode-driver
+  (let ((height 25)
+        (width 80)
+        (attr #x4e))
+    (lambda ()
+      (define reg-base #x3c0)
+      (define crtc-addr (fx+ reg-base 20))
+      (define crtc-data (fx+ reg-base 21))
+      (define cursor-location-high #x0e)
+      (define cursor-location-low #x0f)
+      (define vga-base #xb8000)
+      (define (crtc-read addr)
+        (put-i/o-u8 crtc-addr addr)
+        (get-i/o-u8 crtc-data))
+      (define (crtc-write addr byte)
+        (put-i/o-u8 crtc-addr addr)
+        (put-i/o-u8 crtc-data byte))
+      (define (textmode-put-u8 b)
+        (define pos
+          (fx* 2 (fxior (fxarithmetic-shift-left (crtc-read cursor-location-high) 8)
+                        (crtc-read cursor-location-low))))
+        (cond ((eqv? b (char->integer #\newline))
+               (let ((line (fxdiv pos (fx* 2 width))))
+                 (cond ((eqv? line (fx- height 1))
+                        ;; Scroll
+                        (do ((i 0 (fx+ i 4)))
+                            ((fx=? i (fx* (fx* width 2) height)))
+                          (put-mem-u32 (fx+ vga-base i)
+                                       (get-mem-u32 (fx+ (fx+ vga-base (fx* width 2))
+                                                         i))))
+                        (set! pos (fx* (fx- height 1) (fx* width 2))))
+                       (else
+                        (set! pos (fx* (fx+ line 1) (fx* width 2)))))))
+              (else
+               (put-mem-u8 (fx+ vga-base pos) b)
+               (put-mem-u8 (fx+ pos (fx+ vga-base 1)) attr)
+               (set! pos (fx+ pos 2))))
+        (let ((cursor (fxarithmetic-shift-right pos 1)))
+          (crtc-write cursor-location-high (fxbit-field cursor 8 16))
+          (crtc-write cursor-location-low (fxbit-field cursor 0 8))))
+      (define (textmode-put bv start count)
+        (do ((end (fx+ start count))
+             (i start (fx+ i 1)))
+            ((fx=? i end) count)
+          (textmode-put-u8 (bytevector-u8-ref bv i))))
+      (do ((last (fx* (fx* width 2) height))
+           (i 0 (fx+ i 4)))
+          ((fx=? i (fx* width 2)))
+        (put-mem-u32 (fx+ (fx+ last vga-base) i) (fx* attr #x01000100)))
+      ($init-standard-ports (lambda _ 0) textmode-put textmode-put (native-eol-style)))))
 
 ;;; PIC Interrupt controller code (i8259)
 
@@ -769,7 +825,7 @@
   ;; Start the boot process.
   (let ((boot (make-pcb 1 ($process-start 1))))
     (set! *runq* (pcb-link! *runq* boot))
-    (display "Starting first process\n")
+    (display "Starting the first process...\n")
     (hashtable-set! *pids* (pcb-pid boot) boot))
 
   (let scheduler-loop ()
@@ -1255,12 +1311,23 @@
 
 ;;; The fun starts here
 
-  (init-early-serial-driver)
+  (init-early-text-mode-driver)
+  (when (set? flag-cmdline)
+    (let-values ([(env cmdline) (pc-init-parse-command-line
+                                 (utf8->string (copy-utf8z (mbi-ref field-cmdline))))])
+      (init-set! 'environment-variables env)
+      (init-set! 'command-line cmdline)))
+  (let ((console (get-environment-variable "CONSOLE")))
+    (cond ((equal? console "debug")
+           (init-early-debug-console-driver))
+          ((equal? console "com1")
+           (init-early-serial-driver))
+          (else
+           'nop)))
+
   (check-cpu)
   (check-apic-base)
-  (print " ┃  ┏━┃┃ ┃┏━┃  ┏━┛┏━┛┃ ┃┏━┛┏┏ ┏━┛")
-  (print " ┃  ┃ ┃┏┛ ┃ ┃  ━━┃┃  ┏━┃┏━┛┃┃┃┏━┛")
-  (print " ━━┛━━┛┛ ┛━━┛  ━━┛━━┛┛ ┛━━┛┛┛┛━━┛")
+  (print "Loko Scheme " main-package-version " <https://scheme.fail>")
   (init-set! '$mmap longmode-mmap)
   (init-set! 'exit
              (lambda (status)
@@ -1286,11 +1353,6 @@
   ;;      (set! bios-data bv))
   ;;   (bytevector-u32-native-set! bv i (get-mem-u32 addr)))
 
-  (when (set? flag-cmdline)
-    (let-values ([(env cmdline) (pc-init-parse-command-line
-                                 (utf8->string (copy-utf8z (mbi-ref field-cmdline))))])
-      (init-set! 'environment-variables env)
-      (init-set! 'command-line cmdline)))
   (when (set? flag-boot-loader-name)
     (init-set! 'environment-variables
                (cons (cons "BOOT_LOADER_NAME"
@@ -1338,8 +1400,7 @@
         ;; Mark the code so we don't accidentally overwrite it.
         (mark-area start (fx- end start) (cons 'module str))
         ;; TODO: free the pages used by the modules after using them
-        (let-values ([(env cmdline)
-                      (pc-init-parse-command-line str)])
+        (let-values ([(_env cmdline) (pc-init-parse-command-line str)])
           (set! *boot-modules* (cons (list (car cmdline) (cdr cmdline)
                                            start (fx- end start))
                                      *boot-modules*))))))
@@ -1353,11 +1414,11 @@
   ;; Alright... at this point all reserved memory has been marked as
   ;; such. The multiboot info will be clobbered and all available
   ;; RAM will be identity-mapped.
-  (print "RAM areas:")
-  (for-each print-area
-            (list-sort (lambda (a b)
-                         (< (area-base a) (area-base b)))
-                       areas))
+  ;; (print "RAM areas:")
+  ;; (for-each print-area
+  ;;           (list-sort (lambda (a b)
+  ;;                        (< (area-base a) (area-base b)))
+  ;;                      areas))
   ;; Put 1MB last, 1MB-4GB second, 4GB+ first. Only the first 4GB is
   ;; identity mapped when we get here from the boot loader, so that
   ;; memory is needed for page table. And it's better to not waste the
@@ -1440,11 +1501,10 @@
     (let* ((scheduler-frequency 1/100)
            (interval (max (div bus-freq (* apic-divisor (/ scheduler-frequency)))
                           100)))
-      (print "CPU frequency: " cpu-freq " Hz")
-      (print "APIC frequency: " bus-freq " Hz")
-      (print "Timer set to " interval)
-      (print "Preemption frequency: " (/ scheduler-frequency) " Hz")
-      (print "Hardware uptime: " (div (rdtsc) cpu-freq) " seconds")
+      (print "CPU frequency = " cpu-freq
+             " Hz, APIC frequency = " bus-freq " Hz")
+      (print "APIC timer = " interval)
+      (print "Hardware uptime = " (div (rdtsc) cpu-freq) " seconds")
       (write-timer-initial-count interval)
       (write-timer-vector (fxior APIC-vector-timer LVT-TMM))
       (write-timer-divide apic-divisor)
@@ -1461,10 +1521,24 @@
                 (unless (and (> current start)
                              (> current target))
                   (lp))))))
-        (print "AP boot page: #x" (and temp-page (number->string temp-page 16)))
+        #; (print "AP boot page: #x" (and temp-page (number->string temp-page 16)))
         (when temp-page
           (boot-application-processors temp-page APIC:ICR-low busywait))
         #;(pc-dma-free temp-page)
+
+        ;; Useful info
+        (unless (null? *boot-modules*)
+          (display "Boot modules: ")
+          (write (map car *boot-modules*))
+          (newline))
+        (display "Boot environment: ")
+        (write (get-environment-variables))
+        (newline)
+        (display "Boot command line: ")
+        (write (command-line))
+        (newline)
+
+        ;; Switch over to the scheduler, which will start the first process
         (pc-scheduler cpu-freq interval pc-dma-allocate pc-dma-free)))))
 
 (when (eq? ($boot-loader-type) 'multiboot)
