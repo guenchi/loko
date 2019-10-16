@@ -68,7 +68,11 @@ install: all
 	$(INSTALL) -m 0644 drivers/usb/uhci.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/hub.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 lib/match.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
-#	$(INSTALL) -m 0644 lib/posix.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi
+	$(INSTALL) -m 0644 srfi/170.loko.sls             $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170.sls
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170
+	$(INSTALL) -m 0644 srfi/170/posix.loko.sls       $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170
+	$(INSTALL) -m 0644 srfi/170/linux.loko.sls       $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170/compat.loko.sls
 # Libraries needed when compiling programs
 	(cd .akku/lib; find * -type d | \
 	  while read fn; do \

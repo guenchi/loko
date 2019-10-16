@@ -1,5 +1,5 @@
 ;; -*- mode: scheme; coding: utf-8 -*-
-;; SPDX-License-Identifier: AGPL-3.0-or-later
+;; SPDX-License-Identifier: MIT
 ;; Copyright © 2019 Göran Weinholt
 #!r6rs
 
@@ -22,19 +22,14 @@ Known non-conformance and extensions:
    If this is a problem for you then please open an issue.
 
  * The with-/without- procedures are not based in dynamic-wind because
-   then they would not compose well with fibers.
-
-This library is meant to be used in (srfi :170 posix), in a file like
-srfi/%3a170/posix.loko.sls, perhaps in the chez-srfi package. With
-some simple care in these things you can make your code portable
-between implementations.
+   then they would not compose well with fibers (this is bug #26).
 
 Both posix-time and monotonic-time assume that (srfi :174) will
 use (loko system time).
 
 |#
 
-(library (loko posix)
+(library (srfi :170 compat)
   (export
     fdes->textual-input-port
     fdes->binary-input-port
@@ -108,13 +103,11 @@ use (loko system time).
     (rnrs (6))
     (rnrs mutable-strings (6))
     (srfi :98 os-environment-variables)
-    (struct pack)
     (only (loko) make-parameter port-file-descriptor port-file-descriptor-set!)
     (loko match)
     (loko system fibers)
     (loko system time)
     (loko system unsafe)
-    (loko runtime utils)
     (loko arch amd64 linux-syscalls)
     (loko arch amd64 linux-numbers))
 
@@ -163,6 +156,16 @@ use (loko system time).
            (case-lambda
              #,@(opt-clauses #'name #'(args ...) #'((lhs* rhs*) ...))
              [(args ... lhs* ...) . body]))])))
+
+(define (string-split str c)
+  (let lp ((start 0) (end 0))
+    (cond ((fx=? end (string-length str))
+           (list (substring str start end)))
+          ((char=? c (string-ref str end))
+           (cons (substring str start end)
+                 (lp (fx+ end 1) (fx+ end 1))))
+          (else
+           (lp start (fx+ end 1))))))
 
 (define-syntax with-restart
   (syntax-rules ()
@@ -504,8 +507,11 @@ use (loko system time).
          (or access-timespec (if mod-timespec (cons 0 UTIME_OMIT) (cons 0 UTIME_NOW))))
         (mod-timespec
          (or mod-timespec (if access-timespec (cons 0 UTIME_OMIT) (cons 0 UTIME_NOW)))))
-    (let ((utimes (pack "2Q 2Q" (car access-timespec) (cdr access-timespec)
-                        (car mod-timespec) (cdr mod-timespec))))
+    (let ((utimes (make-bytevector 32)))
+      (bytevector-u64-native-set! utimes 24 (cdr mod-timespec))
+      (bytevector-u64-native-set! utimes 16 (car mod-timespec))
+      (bytevector-u64-native-set! utimes 8 (cdr access-timespec))
+      (bytevector-u64-native-set! utimes 0 (car access-timespec))
       (let ((fname-bv (filename->c-string 'set-file-timespecs fname)))
         (with-restart
          (sys_utimensat AT_FDCWD (& fname-bv) (& utimes) 0 raise-error)))))
@@ -665,19 +671,24 @@ use (loko system time).
   ;; Read and parse a "struct linux_dirent64" (which is apparently not
   ;; part of the UAPI headers). The full-info? argument is an
   ;; extension.
+  (define sizeof-linux_dirent64 19)
   (let ((port (dir-port dir)))
     (let lp ()
       (if (port-eof? port)
           #f
-          (let-values ([(d_ino d_off d_reclen d_type) (get-unpack port "QQSC")])
-            (let ((fn (utf8z->string (get-bytevector-n port (fx- d_reclen (format-size "QQSC")))
-                                     0)))
-              (if (or (and (not (dir-dot-files? dir)) (char=? (string-ref fn 0) #\.))
-                      (member fn '("." "..")))
-                  (lp)
-                  (if full-info?
-                      (make-directory-entry d_ino d_off d_type fn)
-                      fn))))))))
+          (let ((bv (get-bytevector-n port sizeof-linux_dirent64)))
+            (let ((d_ino (bytevector-u64-native-ref bv 0))
+                  (d_off (bytevector-u64-native-ref bv 8))
+                  (d_reclen (bytevector-u16-native-ref bv 16))
+                  (d_type (bytevector-u8-ref bv 18)))
+              (let ((fn (utf8z->string (get-bytevector-n port (fx- d_reclen sizeof-linux_dirent64))
+                                       0)))
+                (if (or (and (not (dir-dot-files? dir)) (char=? (string-ref fn 0) #\.))
+                        (member fn '("." "..")))
+                    (lp)
+                    (if full-info?
+                        (make-directory-entry d_ino d_off d_type fn)
+                        fn)))))))))
 
 (define (close-directory dir)
   (close-port (dir-port dir)))
@@ -752,11 +763,11 @@ use (loko system time).
     (lambda ()
       (unless rng
         (let ((seed
-               (or (let ((buf (make-bytevector (format-size "=L"))))
+               (or (let ((buf (make-bytevector 4)))
                      (with-restart
                       (sys_getrandom (& buf) (bytevector-length buf) GRND_NONBLOCK
                                      (lambda _ #f)))
-                     (unpack "=L" buf))
+                     (bytevector-u32-native-ref buf 0))
                    ;; This only happens if this code runs extremely early in
                    ;; the boot process for some happy reason, when nobody is
                    ;; around to attack the filename creation anyway. So we
@@ -999,7 +1010,6 @@ use (loko system time).
 ;; this with a daemon that relays NSS info.
 
 (define (user-info uid/name)
-  (define who (if (fixnum? uid/name) "getpwuid" "getpwnam"))
   (when (not (file-exists? "/etc/passwd"))
     (error 'user-info "No /etc/passwd file" uid/name))
   (call-with-input-file "/etc/passwd"
@@ -1048,7 +1058,6 @@ use (loko system time).
           (cons part0 (cdr parts))))))
 
 (define (group-info gid/name)
-  (define who (if (fixnum? gid/name) "getgrgid" "getgrnam"))
   (when (not (file-exists? "/etc/group"))
     (error 'group-info "No /etc/group file" gid/name))
   (call-with-input-file "/etc/group"
@@ -1158,6 +1167,7 @@ use (loko system time).
              (update-termios! x)
              (tcsetsw out x))))))
 
+;; FIXME: Should be replaced with dynamic-wind once issue #26 is fixed.
 (define (unwind-protectish thunk on-exit)
   (with-exception-handler
     (lambda (exn)
@@ -1177,12 +1187,18 @@ use (loko system time).
 
 (define (with-raw-mode input-port output-port min time proc)
   (define (update-termios! buf)
-    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+    (let ((iflag (bytevector-u32-native-ref buf offsetof-termios-c_iflag))
+          (oflag (bytevector-u32-native-ref buf offsetof-termios-c_oflag))
+          (cflag (bytevector-u32-native-ref buf offsetof-termios-c_cflag))
+          (lflag (bytevector-u32-native-ref buf offsetof-termios-c_lflag)))
       (let ((iflag (fxand iflag (fxnot (fxior BRKINT ICRNL INPCK ISTRIP IXON))))
             (oflag (fxand oflag (fxnot OPOST)))
             (cflag (fxior CS8 (fxand cflag (fxnot (fxior CSIZE PARENB)))))
             (lflag (fxand lflag (fxnot (fxior ECHO ICANON IEXTEN ISIG)))))
-        (pack! "=4L" buf 0 iflag oflag cflag lflag)
+        (bytevector-u32-native-set! buf offsetof-termios-c_iflag iflag)
+        (bytevector-u32-native-set! buf offsetof-termios-c_oflag oflag)
+        (bytevector-u32-native-set! buf offsetof-termios-c_cflag cflag)
+        (bytevector-u32-native-set! buf offsetof-termios-c_lflag lflag)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) min)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) time))))
   (define restore (make-restorer input-port output-port))
@@ -1194,9 +1210,9 @@ use (loko system time).
 
 (define (with-rare-mode input-port output-port proc)
   (define (update-termios! buf)
-    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+    (let ((lflag (bytevector-u32-native-ref buf offsetof-termios-c_lflag)))
       (let ((lflag (fxand lflag (fxnot (fxior ECHO ICANON)))))
-        (pack! "=4L" buf 0 iflag oflag cflag lflag)
+        (bytevector-u32-native-set! buf offsetof-termios-c_lflag lflag)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VMIN) 1)
         (bytevector-u8-set! buf (+ offsetof-termios-c_cc VTIME) 0))))
   (define restore (make-restorer input-port output-port))
@@ -1208,9 +1224,9 @@ use (loko system time).
 
 (define (without-echo input-port output-port proc)
   (define (update-termios! buf)
-    (let-values ([(iflag oflag cflag lflag) (unpack "=4L" buf)])
+    (let ((lflag (bytevector-u32-native-ref buf offsetof-termios-c_lflag)))
       (let ((lflag (fxand lflag (fxnot (fxior ECHO ECHOE ECHOK ECHONL)))))
-        (pack! "=4L" buf 0 iflag oflag cflag lflag))))
+        (bytevector-u32-native-set! buf offsetof-termios-c_lflag lflag))))
   (define restore (make-restorer input-port output-port))
   (set-port-modes input-port output-port update-termios!)
   (unwind-protectish

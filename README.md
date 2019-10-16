@@ -125,7 +125,7 @@ overridden using the `LOKO_SOURCE` environment variable.
 formulate an application exception to this license. For now, there is
 no exception.**
 
-**The samples/ directory is covered by a different license.**
+**The samples/ and srfi/ directories are covered by a different license.**
 
 Copyright © 2019 Göran Weinholt
 

@@ -78,3 +78,16 @@ that it should work more or less the same across all targets.
 * The `linux` target needs support for threads in order to utilize all
   cores in a system, and in order to work the same as the `loko`
   target on a multicore system.
+
+### Library philosophy
+
+Loko Scheme comes with a few libraries out of the box. This should
+mostly be kept to Loko-specific libraries and drivers, as well as
+inherently unportable implementations of SRFIs.
+
+Portable SRFI implementations should be contributed to chez-srfi so
+that they may benefit all R6RS implementations.
+
+Generally portable non-SRFI libraries should be packaged
+in [Akku](https://akkuscm.org/) so that they may benefit the wider
+Scheme community. That is also where you may find Loko's "batteries".
