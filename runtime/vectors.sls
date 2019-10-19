@@ -40,12 +40,14 @@
     ((n)
      (make-vector n 0))
     ((n fill)
-     (if (eqv? n 0)
-         '#()
-         (let ((v ($make-vector n)))
-           (unless (eqv? fill 0)
-             (vector-fill! v fill))
-           v)))))
+     (cond ((not (and (fixnum? n) (fx>=? n 0)))
+            (assertion-violation 'make-vector "Expected a non-negative fixnum" n fill))
+           ((eqv? n 0) '#())
+           (else
+            (let ((v ($make-vector n)))
+              (unless (eqv? fill 0)
+                (vector-fill! v fill))
+              v))))))
 
 (define vector
   (case-lambda
@@ -58,6 +60,12 @@
      (let ((v ($make-vector 2)))
        (vector-set! v 0 a)
        (vector-set! v 1 b)
+       v))
+    ((a b c)
+     (let ((v ($make-vector 3)))
+       (vector-set! v 0 a)
+       (vector-set! v 1 b)
+       (vector-set! v 2 c)
        v))
     (x
      (list->vector x))))
