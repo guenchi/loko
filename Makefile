@@ -25,6 +25,11 @@ loko: .akku/env
 	mv -f loko.out loko
 
 selfcompile: .akku/env loko
+	LOKO_SOURCE=.akku/lib .akku/env ./loko -feval --compile loko.sps --output loko.out
+	if [ -f loko ]; then mv -f loko loko.old; fi
+	mv -f loko.out loko
+
+munchausen: .akku/env loko
 	LOKO_SOURCE=.akku/lib .akku/env ./loko --program compile-loko.sps
 	chmod +x loko.out
 	if [ -f loko ]; then mv -f loko loko.old; fi
