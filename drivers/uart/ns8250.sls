@@ -127,9 +127,9 @@
   (define rx-buf (make-u8ring 1024))
 
   (uart-init)
-  (enable-irq irq)
   (uart-handle-irq)
   (acknowledge-irq irq)
+  (enable-irq irq)
 
   (let lp ((tx-resp-op #f))
     (if (u8ring-empty? tx-buf)
@@ -164,6 +164,4 @@
        ;; accepted.
        (let ((n (u8ring-enqueue-bytevector! tx-buf bv start count)))
          (uart-tx-loop)
-         (lp (wrap-operation (put-operation ch n) (lambda _ 'tx-ack))))])))
-
-)
+         (lp (wrap-operation (put-operation ch n) (lambda _ 'tx-ack))))]))))

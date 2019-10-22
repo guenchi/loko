@@ -252,7 +252,7 @@
                                    (else
                                     (fx* (fx+ line 1) (fx* width 2))))))
                           (else
-                           (let ((pos (cond ((eqv? pos (fx* 2 (fx* width height)))
+                           (let ((pos (cond ((fx>=? pos (fx* 2 (fx* width height)))
                                              (scroll)
                                              (fx- pos (fx* 2 width)))
                                             (else pos))))
@@ -277,8 +277,8 @@
 
 ;; Intel reserves the first 32 interrupt vectors for exceptions
 ;; and such. Let's put the legacy IRQs immediately after that.
-(define PIC1-vector-offset 32)
-(define PIC2-vector-offset (+ PIC1-vector-offset 8))
+(define PIC-vector-offset 32)
+(define PIC2-vector-offset (fx+ PIC-vector-offset 8))
 (define picm #x20)
 (define pics #xA0)
 (define *picm-mask* #b11111111)
@@ -326,7 +326,7 @@
       (OCW1 base (fxand mask #b11111011)) ;enable cascade
       (OCW1 base mask)))
 
-(define (pic-ack irq)
+(define (pic-seoi irq)
   ;; Signal End of Interrupt and set `irq' to the bottom
   ;; priority level.
   (cond ((fx<? irq 8)
@@ -360,6 +360,16 @@
         ((fx<? irq 16)
          (let ((bit (fxarithmetic-shift-left 1 (fx- irq 8))))
            (set! *pics-mask* (fxand *pics-mask* (fxnot bit)))
+           (pic-mask pics *pics-mask*)))))
+
+(define (pic-disable irq)
+  (cond ((fx<? irq 8)
+         (let ((bit (fxarithmetic-shift-left 1 irq)))
+           (set! *picm-mask* (fxior *picm-mask* bit))
+           (pic-mask picm *picm-mask*)))
+        ((fx<? irq 16)
+         (let ((bit (fxarithmetic-shift-left 1 (fx- irq 8))))
+           (set! *pics-mask* (fxior *pics-mask* bit))
            (pic-mask pics *pics-mask*)))))
 
 ;;; Advanced PIC
@@ -477,18 +487,14 @@
   (define TMR2-OUT-STS   #b100000)
   (define SPKR-DAT-EN    #b000010) ;Speaker Data Enable
   (define TIM-CNT2-EN    #b000001) ;Timer Counter 2 Enable
-  ;; Disable the spaker and enable the timer counter 2
+  ;; Disable the speaker and enable the timer counter 2
   ;; output bit. Then start the PIT timer.
   (put-i/o-u8 NMI-S&C
-               (fxand (fxior (get-i/o-u8 #x61)
-                             TIM-CNT2-EN)
-                      (fxnot NMI-MBZ)
-                      (fxnot SPKR-DAT-EN)))
+              (fxand (fxior (get-i/o-u8 #x61) TIM-CNT2-EN)
+                     (fxnot (fxior NMI-MBZ SPKR-DAT-EN))))
   (put-i/o-u8 CONTROL
-               (fxior COUNT-BINARY
-                      MODE-INTERRUPT-ON-TERMINAL-COUNT
-                      COUNTER-WORD
-                      SELECT-2))
+              (fxior COUNT-BINARY MODE-INTERRUPT-ON-TERMINAL-COUNT
+                     COUNTER-WORD SELECT-2))
   (put-i/o-u8 COUNTER-2 (fxand PIT-count #xff))
   (put-i/o-u8 COUNTER-2 (fxarithmetic-shift-right PIT-count 8))
   (write-timer-vector APIC-vector-timer)
@@ -512,6 +518,14 @@
     ;; TODO: investigate what the divisor is for
     (let* ((current-count (read-timer-current-count))
            (current-tsc (rdtsc))) ;FIXME: can wrap
+
+      ;; While we're messing with the PIT anyway, let's fix counter 0
+      (put-i/o-u8 CONTROL (fxior COUNT-BINARY MODE-PROGRAMMABLE-ONESHOT
+                                 COUNTER-WORD SELECT-0))
+      (put-i/o-u8 COUNTER-0 0)
+      (put-i/o-u8 COUNTER-0 0)
+      (pic-enable 0)                    ;will be disabled as spurious
+
       (values (* (- #xffffffff current-count)
                  (* apic-divisor (/ PIT-delay)))
               (* (- current-tsc initial-tsc)
@@ -605,32 +619,42 @@
     (let ((IRQ ($processor-data-ref CPU-VECTOR:LAST-INTERRUPT-VECTOR)))
       ($processor-data-set! CPU-VECTOR:LAST-INTERRUPT-VECTOR #f)
       IRQ))
+  (define (handle-single-PIC-irq irq poll?)
+    (cond
+      ((and (eqv? irq 7) (not (fxbit-set? (pic-get-isr) 7)))
+       ;; Spurious IRQ7
+       #f)
+      ((and (eqv? irq 15) (not (fxbit-set? (pic-get-isr) 15)))
+       ;; Spurious IRQ15 from pics, but picm thinks IRQ 2
+       ;; actually happened so it needs to be acked.
+       (pic-seoi 2))
+      ((vector-ref *irq-vectors* (fx+ irq PIC-vector-offset)) =>
+       (lambda (pcb)
+         ;; TODO: IRQ sharing
+         (when DEBUG
+           (write (list 'irq irq))
+           (newline))
+         ;; Disable and acknowledge this IRQ. We use special mask mode.
+         (pic-disable irq)
+         (pic-seoi irq)
+         (pcb-enqueue-message! pcb irq)))
+      ((not poll?)
+       ;; Unwanted IRQ. Disable it until some process enables it.
+       (pic-disable irq)
+       (pic-seoi irq)
+       (when DEBUG
+         (display (cons 'sirq irq))
+         (flush-output-port (current-output-port))))))
   (define (handle-irq)
     (let ((vec (get-saved-irq!)))
       ;; First make runnable any process that was waiting for this
       ;; IRQ. If a runnable process would receive an IRQ then it must
       ;; be queued as a message.
-
       (when (fixnum? vec)
-        (cond ((and (eqv? vec (+ PIC1-vector-offset 7))
-                    (not (fxbit-set? (pic-get-isr) 7)))
-               ;; Spurious IRQ7
-               #f)
-              ((and (eqv? vec (+ PIC1-vector-offset 15))
-                    (not (fxbit-set? (pic-get-isr) 15)))
-               ;; Spurious IRQ15 from pics, but picm thinks IRQ 2
-               ;; actually happened so it needs to be acked.
-               (pic-ack 2))
-              ((eqv? vec APIC-vector-timer)
+        (cond ((eqv? vec APIC-vector-timer)
                (apic-EOI))
-              ((vector-ref *irq-vectors* vec) =>
-               (lambda (pcb)
-                 ;; TODO: IRQ sharing
-                 (when DEBUG
-                   (write (list 'irq vec))
-                   (newline))
-                 (let ((irq (fx- vec PIC1-vector-offset)))
-                   (pcb-enqueue-message! pcb irq))))
+              ((fx<=? PIC-vector-offset vec (fx+ PIC-vector-offset 15))
+               (handle-single-PIC-irq (fx- vec PIC-vector-offset) #f))
               ((eqv? vec APIC-vector-spurious)
                ;; XXX: if the spurious interrupts come
                ;; without end, then probably an
@@ -640,9 +664,10 @@
                ;; (flush-output-port (current-output-port))
                #f)
               (else
-               ;; TODO: disable the IRQ
-               (display (cons 'sirq vec))
-               (newline))))))
+               (pic-disable vec)
+               (when DEBUG
+                 (display (cons 'sirq vec))
+                 (flush-output-port (current-output-port))))))))
   (define (handle-wait-queue current-time)
     ;; TODO: this implementation of the wait queue conses too much and
     ;; is O(n) in the number of sleeping processes.
@@ -744,7 +769,7 @@
                   (pcb-msg-set! pcb #f)))))
         ((free)
          (let ((addr (vector-ref msg 1)))
-           ;; Allocate a consecutive memory region.
+           ;; Deallocate a previously allocated region.
            (cond ((dma-free addr) =>
                   (lambda (addr)
                     (pcb-msg-set! pcb 'ok)))
@@ -755,19 +780,40 @@
         ((enable-irq)
          (let ((irq (vector-ref msg 1)))
            (pic-enable irq)
+           (when DEBUG
+             (write msg)
+             (flush-output-port (current-output-port)))
            ;; XXX: Only one pcb per interrupt
-           (cond ((fx<? irq 8)
-                  (vector-set! *irq-vectors*
-                               (+ PIC1-vector-offset irq)
-                               pcb))
-                 ((fx<? irq 16)
-                  (vector-set! *irq-vectors*
-                               (+ PIC2-vector-offset (fx- irq 8))
-                               pcb)))
-           (pcb-msg-set! pcb 'ok)))
+           (cond ((fx<=? 0 irq 15)
+                  (vector-set! *irq-vectors* (fx+ PIC-vector-offset irq) pcb)
+                  (pcb-msg-set! pcb 'ok))
+                 (else
+                  (pcb-msg-set! pcb 'error)))))
+        ((disable-irq)
+         (let ((irq (vector-ref msg 1)))
+           (when DEBUG
+             (write msg)
+             (flush-output-port (current-output-port)))
+           ;; XXX: Only one pcb per interrupt
+           (cond ((fx<=? 0 irq 15)
+                  (vector-set! *irq-vectors* (fx+ PIC-vector-offset irq) #f)
+                  (pcb-msg-set! pcb 'ok))
+                 (else
+                  (pcb-msg-set! pcb 'error)))))
         ((acknowledge-irq)
          (let ((irq (vector-ref msg 1)))
-           (pic-ack irq)
+           (when DEBUG
+             (write msg)
+             (flush-output-port (current-output-port)))
+           (cond ((fx<=? 0 irq 15)
+                  ;; We use special mask mode and already sent SEOI.
+                  ;; Now unmask the IRQ so we can receive it again
+                  ;; later.
+                  (when (vector-ref *irq-vectors* (fx+ PIC-vector-offset irq))
+                    (pic-enable irq))
+                  (pcb-msg-set! pcb 'ok))
+                 (else
+                  (pcb-msg-set! pcb 'error)))
            (handle-message pcb (vector-ref msg 2) current-time)))
 
         ;;; Processes
@@ -842,17 +888,16 @@
     (write-timer-vector (fxior APIC-vector-timer LVT-TMM))
     (write-timer-divide apic-divisor)
     (cond ((not *runq*)
-           (cond ((null? *waitq*)
-                  (error 'scheduler "The last process has exited"))
-                 (else
-                  ;; Wait for an interrupt. In the scheduler, this is
-                  ;; the only place where interrupts can happen while
-                  ;; the scheduler is running.
-                  (when DEBUG
-                    (display #\H)
-                    (flush-output-port (current-output-port)))
-                  (sys_hlt)
-                  (scheduler-loop))))
+           (when (null? *waitq*)
+             (error 'scheduler "The last process has exited"))
+           (when DEBUG
+             (display #\H)
+             (display (list (number->string (pic-get-isr) 2)
+                            (number->string (pic-get-irr) 2)))
+             (display " ")
+             (flush-output-port (current-output-port)))
+           (sys_hlt)
+           (scheduler-loop))
           (else
            ;; Schedule the next runnable process
            (when DEBUG
@@ -862,6 +907,9 @@
                   (msg ($switch-stack (pcb-sp pcb) (pcb-msg pcb))))
              ;; (write-timer-vector LVT-MASK)
              (pcb-sp-set! pcb (get-saved-sp!))
+             (when (and DEBUG (eq? msg 'preempted))
+               (display #\P)
+               (flush-output-port (current-output-port)))
              (unless (eq? msg 'preempted)
                (pcb-msg-set! pcb #f))
              (handle-message pcb msg current-time)
@@ -1475,7 +1523,7 @@
   ;; processor, and without this initialization the AP will get
   ;; interrupts at the same vectors BIOS uses (e.g. IRQ0 = #DF's
   ;; vector).
-  (pic-init picm PIC1-vector-offset)
+  (pic-init picm PIC-vector-offset)
   (pic-init pics PIC2-vector-offset)
   (pic-mask picm #b11111111)
   (pic-mask pics #b11111111)

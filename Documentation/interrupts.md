@@ -180,9 +180,9 @@ for calling the error handler, which is written in Scheme.
 
 The IRQ handling in Loko relies on the processor's *interrupt stack
 table* (IST) and the interrupt controller's *specific end of
-interrupt* (SEOI). On AMD64 systems the SEOI feature is available in
-the legacy PIC and the APIC (except in early versions). Interrupt
-priorities are not meant to be used.
+interrupt* (SEOI) and *special mask mode*. On AMD64 systems the SEOI
+feature is available in the legacy PIC and the APIC (except in early
+versions). Interrupt priorities (nesting) are not meant to be used.
 
 Interrupt masking is a very important part of Loko's IRQ handling.
 There are three places where interrupts can be masked: the device

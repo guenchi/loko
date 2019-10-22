@@ -28,7 +28,7 @@
 (library (loko arch amd64 process-init)
   (export
     dma-allocate dma-free
-    enable-irq
+    enable-irq disable-irq
     acknowledge-irq
     wait-irq-operation)
   (import
@@ -44,7 +44,7 @@
     (only (loko runtime time) time-init-set!)
     (loko runtime fibers)
     (except (loko system $host) dma-allocate dma-free
-            enable-irq acknowledge-irq wait-irq-operation)
+            enable-irq disable-irq acknowledge-irq wait-irq-operation)
     (loko system $primitives)
     (loko arch amd64 linux-numbers)
     (loko arch amd64 linux-syscalls)
@@ -147,6 +147,10 @@
   (unless (vector-ref *interrupt-cvars* irq)
     (vector-set! *interrupt-cvars* irq (make-cvar)))
   ($process-yield `#(enable-irq ,irq)))
+
+(define (disable-irq irq)
+  (assert (fx<=? 0 irq 15))
+  ($process-yield `#(disable-irq ,irq)))
 
 (define (acknowledge-irq irq)
   (define timeout 0)

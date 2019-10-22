@@ -1144,6 +1144,7 @@
     (dma-allocate             $host)
     (dma-free                 $host)
     (enable-irq               $host)
+    (disable-irq              $host)
     (acknowledge-irq          $host)
     (wait-irq-operation       $host)
 
