@@ -11,6 +11,7 @@
     u8ring-start u8ring-length u8ring-data
     u8ring-empty? u8ring-full? u8ring-free-amount
     u8ring-head
+    u8ring-clear!
     u8ring-dequeue! u8ring-dequeue-n! u8ring-dequeue-all!
     u8ring-enqueue! u8ring-enqueue-bytevector!)
   (import
@@ -29,6 +30,10 @@
          (fxarithmetic-shift-left 1 (fxlength (fx- n 1))))
        (let ((size (next-power-of-2 smallest-size)))
          (p 0 0 (make-bytevector size)))))))
+
+(define (u8ring-clear! r)
+  (u8ring-start-set! r 0)
+  (u8ring-length-set! r 0))
 
 (define (u8ring-empty? r)
   (eqv? (u8ring-length r) 0))
