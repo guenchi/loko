@@ -65,12 +65,7 @@
                          (wrap-operation (sleep-operation (/ timeout 1000))
                                          (lambda _ 'timeout))
                          (choice-operation))
-                     (wrap-operation (get-operation (PS/2-port-rx-channel port))
-                                     (lambda (byte)
-                                       ;; (display "<= ")
-                                       ;; (display (number->string byte 16))
-                                       ;; (newline)
-                                       byte)))))
+                     (get-operation (PS/2-port-rx-channel port)))))
 
 ;; Write a byte to a port. The response shows up on the read port. If
 ;; there is a timeout then this procedure returns 'timeout; otherwise

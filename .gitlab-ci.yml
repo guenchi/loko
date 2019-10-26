@@ -50,6 +50,7 @@ test:
     - .akku/env ./loko.out --program tests/test-fibers.sps
     - LOKO_SOURCE=.akku/lib .akku/env ./loko.out --compile tests/test-buddy.sps --output tests/test-buddy
     - tests/test-buddy
+    - .akku/env ./loko.out --program tests/test-drivers-ps2-keyboard.sps
 
 build_samples:
   stage: test

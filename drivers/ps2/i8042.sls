@@ -176,7 +176,7 @@
   (let ((resp (i8042-command KBC-SELF-TEST-AND-RESET #f 1 5000)))
     (unless (equal? resp #vu8(#x55))
       (display "i8042 self-test & reset failed\n")))
-  (i8042-init #f)
+  (i8042-init #f)                       ;FIXME: disable keyboard here for now?
   (i8042-rx)
   (acknowledge-irq irq-port-1)
   (acknowledge-irq irq-port-2)

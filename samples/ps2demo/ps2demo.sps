@@ -9,15 +9,16 @@
   (rnrs (6))
   (loko match)
   (loko system fibers)
+  (loko drivers keyboard)
   (loko drivers ps2 core)
   (loko drivers ps2 i8042)
   (loko drivers ps2 mouse)
   (loko drivers ps2 keyboard)
-  #;(loko drivers pci)
+  (loko drivers pci)
   (loko system unsafe))
 
 (define MOUSE-CHANNEL (make-channel))   ;TODO: fix something nicer
-(define KEYBOARD-CHANNEL (make-channel))
+(define keyboard-manager (make-keyboard-manager))
 
 (define (manage-ps/2 controller)
   (define hotplug-channel (make-channel))
@@ -39,7 +40,8 @@
            ((probe·PS/2·keyboard port)
             => (lambda (id)
                  (spawn-fiber (lambda ()
-                                (driver·PS/2·keyboard port hotplug-channel id KEYBOARD-CHANNEL)))))
+                                (let ((keyboard (make-managed-keyboard keyboard-manager)))
+                                  (driver·PS/2·keyboard port hotplug-channel id keyboard))))))
            (else
             ;; Probing failed, we have no driver. Start the hotplug
             ;; driver, that should tell us when a new device has been
@@ -62,9 +64,6 @@
     (lambda (p)
       (display x p))))
 
-(display "Starting i8042 controller...\n")
-
-#;
 (begin
   (display "Disabling USB legacy support...\n")
   (for-each
@@ -76,10 +75,11 @@
      (define (uhci-disable-legacy dev)
        ;; Disable keyboard and mouse legacy support
        (pci-put-u16 dev #xC0 #x0000))
-     (when  (probe·pci·uhci? dev)
+     (when (probe·pci·uhci? dev)
        (uhci-disable-legacy dev)))
    (pci-scan-bus #f)))
 
+(display "Starting i8042 controller...\n")
 (spawn-fiber
  (lambda ()
    (let ((controller (make-PS/2-controller)))
@@ -89,16 +89,26 @@
 (put-text "Move the mouse or press any key")
 (let lp ((x 0) (y 0) (z 0) (key-presses 0))
   (match (perform-operation
-          (choice-operation (get-operation MOUSE-CHANNEL)
-                            (get-operation KEYBOARD-CHANNEL)))
-    [#(xd yd zd buttons)
+          (choice-operation (wrap-operation (get-operation MOUSE-CHANNEL)
+                                            (lambda (x) (cons 'mouse x)))
+                            (wrap-operation (get-operation
+                                             (keyboard-event-channel keyboard-manager))
+                                            (lambda (x) (cons 'kbd x)))))
+    [(mouse . #(xd yd zd buttons))
      (let ((x (fxmax 0 (fxmin 80 (fx+ x xd))))
            (y (fxmax 0 (fxmin 25 (fx+ y yd))))
            (z (+ z zd)))
        (put-text (->string (list x y z key-presses 'mouse xd yd z buttons)))
        (lp x y z key-presses))]
-    [#(set is-press scancode)
-     ;; TODO: a translation to USB HID codes would be excellent before
-     ;; going further with this
-     (put-text (->string (list x y z key-presses 'keyboard set is-press scancode)))
+    [(kbd . #(make/break set scancode page usage symbolic))
+     (display (list make/break (number->string scancode 16)
+                    (and page (number->string page 16))
+                    (and page (number->string usage 16))
+                    symbolic))
+     (newline)
+     (put-text (->string (list x y z key-presses 'keyboard make/break
+                               (number->string scancode 16))))
+     (lp x y z (+ key-presses 1))]
+    [(kbd . event)
+     (put-text (->string (list x y z key-presses 'keyboard event)))
      (lp x y z (+ key-presses 1))]))
