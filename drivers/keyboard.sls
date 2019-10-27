@@ -19,20 +19,13 @@
 
     make-keyboard-manager
     make-managed-keyboard
-    keyboard-manager-remove-keyboard
-
-    LED-PAGE LED-PAGE-NUM-LOCK LED-PAGE-CAPS-LOCK
-    LED-PAGE-SCROLL-LOCK LED-PAGE-COMPOSE)
+    keyboard-manager-remove-keyboard)
   (import
     (rnrs (6))
+    (rnrs mutable-pairs (6))
     (loko match)
-    (loko system fibers))
-
-(define LED-PAGE #x08)
-(define LED-PAGE-NUM-LOCK #x01)
-(define LED-PAGE-CAPS-LOCK #x02)
-(define LED-PAGE-SCROLL-LOCK #x03)
-(define LED-PAGE-COMPOSE #x04)
+    (loko system fibers)
+    (loko drivers keymaps))
 
 (define-record-type keyboard
   (fields event-channel
@@ -52,6 +45,9 @@
   (protocol
    (lambda (p)
      (lambda ()
+       ;; The manager's mux event channel is the one that the managed
+       ;; keyboards send their events on. These are processed and
+       ;; forwarded to the regular event channel.
        (let ((manager-kbd ((p) (make-channel) 0)))
          (spawn-fiber (lambda () (manager·keyboard manager-kbd)))
          manager-kbd)))))
@@ -60,94 +56,68 @@
 ;; caps lock, etc., and can bind multiple keyboards together.
 (define (manager·keyboard manager-kbd)
   (define (broadcast cmd keyboards)
-    (for-each (lambda (kbd)
-                (put-message (keyboard-command-channel kbd) cmd))
+    (for-each (lambda (kbd+state)
+                (put-message (keyboard-command-channel (car kbd+state)) cmd))
               keyboards))
-  (define (keymap page usage leds mods)
-    ;; TODO: Make this handle all keys.
-    (let-values ([(sym str)
-                  (case page
-                    ((7)
-                     ;; TODO: Where to take the symbolic name from?
-                     ;; These are from X11.
-                     (case usage
-                       ((#x53) (values 'Num_Lock #f))
-                       ((#x39) (values 'Caps_Lock #f))
-                       ((#x47) (values 'Scroll_Lock #f))
-                       ((#xE1) (values 'Shift_L #f))
-                       ((#xE5) (values 'Shift_R #f))
-                       ((#x04)
-                        (if (or (fxbit-set? mods 5)
-                                (fxbit-set? mods 1)
-                                (fxbit-set? leds LED-PAGE-CAPS-LOCK))
-                            (values 'A "A")
-                            (values 'a "a")))
-                       (else (values #f #f))))
-                    (else (values #f #f)))])
-      (vector sym str leds mods)))
-  (let lp ((real* '()) (leds 0) (mods 0))
-    (match (perform-operation
-            (choice-operation (wrap-operation
-                               (get-operation
-                                (keyboard-command-channel manager-kbd))
-                               (lambda (x) (cons 'cmd x)))
-                              (wrap-operation
-                               (get-operation
-                                (keyboard-manager-mux-event-channel manager-kbd))
-                               (lambda (x) (cons 'event x)))))
-      [('cmd . cmd)
-       (match cmd
-         ;; This handler adds two commands for adding and removing
-         ;; keyboards from the handler. Everything else is broadcast
-         ;; to all real keyboards.
-         [('new-keyboard . new-kbd)
-          (let ((real* (cons new-kbd (remq new-kbd real*))))
-            (keyboard-manager-number-keyboards-set! manager-kbd (length real*))
-            (lp real* leds mods))]
-         [('remove-keyboard . old-kbd)
-          (let ((real* (remq old-kbd real*)))
-            (keyboard-manager-number-keyboards-set! manager-kbd (length real*))
-            (lp real* leds mods))]
-         [else
-          (broadcast cmd real*)
-          (lp real* leds mods)])]
-      [('event . event)
-       ;; This passes the event to the keymap and handles the buttons
-       ;; that toggle the LEDs.
-       (letrec ((handle-event
-                 (match-lambda
-                   [#(make/break set scancode page usage #f)
-                    (let* ((symbolic (keymap page usage leds mods))
-                           (new-event (vector make/break set scancode page usage symbolic))
-                           (sym (vector-ref symbolic 0)))
-                      (case sym
-                        [(Num_Lock Scroll_Lock Caps_Lock)
-                         (if (eq? make/break 'make)
-                             (let* ((led (case sym
-                                           ([Num_Lock] LED-PAGE-NUM-LOCK)
-                                           ([Scroll_Lock] LED-PAGE-SCROLL-LOCK)
-                                           (else LED-PAGE-CAPS-LOCK)))
-                                    (leds (fxxor leds (fxarithmetic-shift-left 1 led))))
-                               (broadcast `(set-leds ,leds) real*)
-                               (values new-event leds mods))
-                             (values new-event leds mods))]
-                        ;; FIXME: Generic handling
-                        [(Shift_R)
-                         (let ((mods (if (eq? make/break 'make)
-                                         (fxior mods #x20)
-                                         (fxand mods (fxnot #x20)))))
-                           (values new-event leds mods))]
-                        [(Shift_L)
-                         (let ((mods (if (eq? make/break 'make)
-                                         (fxior mods #x02)
-                                         (fxand mods (fxnot #x02)))))
-                           (values new-event leds mods))]
-                        [else (values new-event leds mods)]))]
-                   [event
-                    (values event leds mods)])))
-         (let-values ([(event leds mods) (handle-event event)])
-           (put-message (keyboard-event-channel manager-kbd) event)
-           (lp real* leds mods)))])))
+  ;; All managed keyboards have their own state (kbd* is an alist of
+  ;; keyboard to state). They all share LEDs and modifier states. This
+  ;; allows a user to have e.g. a foot pedal for their shift key.
+  (let loop ((kbd* '()) (leds 0) (mods 0))
+    (let lp-kbd ((kbd* kbd*))
+      (match (perform-operation
+              (choice-operation (wrap-operation
+                                 (get-operation
+                                  (keyboard-command-channel manager-kbd))
+                                 (lambda (x) (cons 'cmd x)))
+                                (wrap-operation
+                                 (get-operation
+                                  (keyboard-manager-mux-event-channel manager-kbd))
+                                 (lambda (x) (cons 'event x)))))
+        [('cmd . cmd)
+         (match cmd
+           ;; This handler adds two commands for adding and removing
+           ;; keyboards from the handler. Everything else is broadcast
+           ;; to all real keyboards.
+           [('new-keyboard . new-kbd)
+            (let ((kbd* (cons (cons new-kbd (make-keymap-state default-keymap))
+                               (remp (lambda (x) (eq? (car x) new-kbd)) kbd*))))
+              (keyboard-manager-number-keyboards-set! manager-kbd (length kbd*))
+              (lp-kbd kbd*))]
+           [('remove-keyboard . old-kbd)
+            (let ((kbd* (remp (lambda (x) (eq? (car x) old-kbd)) kbd*)))
+              (keyboard-manager-number-keyboards-set! manager-kbd (length kbd*))
+              (lp-kbd kbd*))]
+           [else
+            (broadcast cmd kbd*)
+            (lp-kbd kbd*)])]
+        [('event . event)
+         (match event
+           [(kbd . kbd-event)
+            (cond ((assq kbd kbd*) =>
+                   (lambda (kbd+state)
+                     ;; We received an event from one of the managed
+                     ;; keyboards. Let the keymap process it and
+                     ;; record the new state. The keymap will fill in
+                     ;; an interpretation of the key event, such as
+                     ;; which character the press corresponds to.
+                     (let-values ([(state^ leds^ mods^ mapping)
+                                   (map-key (cdr kbd+state) leds mods kbd-event)])
+                       (match kbd-event
+                         [#(make/break raw page usage _)
+                          (let ((event^ (vector make/break raw page usage
+                                                (list leds^ mods^ mapping))))
+                            (put-message (keyboard-event-channel manager-kbd) event^))])
+                       (set-cdr! kbd+state state^)
+                       (unless (fx=? leds leds^)
+                         (broadcast `(set-leds ,leds^) kbd*))
+                       (loop kbd* leds^ mods^))))
+                  (else
+                   ;; Unknown keyboard... should not happen.
+                   (put-message (keyboard-event-channel manager-kbd) event)
+                   (loop kbd* leds mods)))]
+           [else
+            (put-message (keyboard-event-channel manager-kbd) event)
+            (loop kbd* leds mods)])]))))
 
 ;; Make a new keyboard that is managed by the given manager. The event
 ;; channel of the new keyboard is directed to the manager's event

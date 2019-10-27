@@ -67,17 +67,19 @@ install: all
 	$(INSTALL) -m 0644 arch/amd64/linux-numbers.sls  $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0644 arch/amd64/linux-syscalls.sls $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
-	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/keyboard.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+	$(INSTALL) -m 0644 drivers/keymaps.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/core.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
-	$(INSTALL) -m 0644 drivers/usb/uhci.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
+	$(INSTALL) -m 0644 drivers/usb/hid-numbers.sls   $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/hub.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
+	$(INSTALL) -m 0644 drivers/usb/uhci.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
 	$(INSTALL) -m 0644 drivers/ps2/core.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
 	$(INSTALL) -m 0644 drivers/ps2/i8042.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
-	$(INSTALL) -m 0644 drivers/ps2/mouse.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
 	$(INSTALL) -m 0644 drivers/ps2/keyboard.sls      $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
+	$(INSTALL) -m 0644 drivers/ps2/mouse.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
 	$(INSTALL) -m 0644 lib/match.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi
 	$(INSTALL) -m 0644 srfi/170.loko.sls             $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170.sls

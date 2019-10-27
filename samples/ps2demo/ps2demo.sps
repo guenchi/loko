@@ -50,6 +50,7 @@
                            (driver·PS/2·hotplug port hotplug-channel))))))])
     (lp)))
 
+;; TODO: Some graphics instead would be nice
 (define (put-text str)
   (define mem-base #xb8000)
   (do ((i 0 (fx+ i 1)))
@@ -100,14 +101,10 @@
            (z (+ z zd)))
        (put-text (->string (list x y z key-presses 'mouse xd yd z buttons)))
        (lp x y z key-presses))]
-    [(kbd . #(make/break set scancode page usage symbolic))
-     (display (list make/break (number->string scancode 16)
-                    (and page (number->string page 16))
-                    (and page (number->string usage 16))
-                    symbolic))
-     (newline)
+    [(kbd . #(make/break ('PS/2 set scancode) page usage mapped))
      (put-text (->string (list x y z key-presses 'keyboard make/break
-                               (number->string scancode 16))))
+                               (number->string scancode 16)
+                               mapped)))
      (lp x y z (+ key-presses 1))]
     [(kbd . event)
      (put-text (->string (list x y z key-presses 'keyboard event)))

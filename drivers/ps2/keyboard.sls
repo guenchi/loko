@@ -22,7 +22,8 @@
     (loko match)
     (loko system fibers)
     (loko drivers keyboard)
-    (loko drivers ps2 core))
+    (loko drivers ps2 core)
+    (loko drivers usb hid-numbers))
 
 (define SCANCODE-TIMEOUT 100)
 (define COMMAND-TIMEOUT 1000)
@@ -321,7 +322,8 @@
               (match-lambda
                [(make/break . scancode)
                 (let-values ([(page usage) (translator scancode)])
-                  (callback (vector make/break code-set scancode page usage #f)))])))
+                  (callback (vector make/break (list 'PS/2 code-set scancode)
+                                    page usage #f)))])))
        (state-init)]
       [('cmd . cmd)
        (match cmd
@@ -331,9 +333,9 @@
           (state-init)]
          [('set-leds state)
           ;; State is according to USB HUT, LED page
-          (let ((leds (fxior (if (fxbit-set? state LED-PAGE-SCROLL-LOCK) #b1 0)
-                             (if (fxbit-set? state LED-PAGE-NUM-LOCK) #b10 0)
-                             (if (fxbit-set? state LED-PAGE-CAPS-LOCK) #b100 0))))
+          (let ((leds (fxior (if (fxbit-set? state HID-LED-Scroll-Lock) #b1 0)
+                             (if (fxbit-set? state HID-LED-Num-Lock) #b10 0)
+                             (if (fxbit-set? state HID-LED-Caps-Lock) #b100 0))))
             (PS/2-write port PS/2-KBD-SET-LEDS COMMAND-TIMEOUT)
             (PS/2-write port leds COMMAND-TIMEOUT))
           (state-init)]
@@ -361,7 +363,7 @@
   ;; well and buggy USB legacy emulation BIOSes.
   (define command-ch (keyboard-command-channel keyboard))
   (define (callback event)
-    (put-message (keyboard-event-channel keyboard) event))
+    (put-message (keyboard-event-channel keyboard) (cons keyboard event)))
   (PS/2-kbd-set-scancode-set port 2)
   (let ((set (PS/2-kbd-get-scancode-set port)))
     (PS/2-command port PS/2-ENABLE-SCANNING)
