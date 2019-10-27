@@ -63,32 +63,39 @@
     (error 'test-equal "Nope, not equal" expect actual)))
 
 ;; Escape
-(test-equal '(#(make 2 #x76 7 41 #f) #(break 2 #x76 7 41 #f))
+(test-equal '(#(make (PS/2 2 #x76) 7 41 #f) #(break (PS/2 2 #x76) 7 41 #f))
             (xlate-ps/2 #vu8(#x76 #xF0 #x76) 2))
 
-(test-equal '(#(make 1 1 7 41 #f) #(break 1 1 7 41 #f))
+(test-equal '(#(make (PS/2 1 1) 7 41 #f) #(break (PS/2 1 1) 7 41 #f))
             (xlate-ps/2 #vu8(#x01 #x81) 1))
 
 ;; Pause
-(test-equal '(#(make 2 #xE11477 7 72 #f) #(break 2 #xE11477 7 72 #f))
+(test-equal '(#(make (PS/2 2 #xE11477) 7 72 #f) #(break (PS/2 2 #xE11477) 7 72 #f))
             (xlate-ps/2 #vu8(#xE1 #x14 #x77   #xE1 #xF0 #x14 #xF0 #x77) 2))
-(test-equal '(#(make 1 #xE11D45 7 72 #f) #(break 1 #xE11D45 7 72 #f))
+(test-equal '(#(make (PS/2 1 #xE11D45) 7 72 #f) #(break (PS/2 1 #xE11D45) 7 72 #f))
             (xlate-ps/2 #vu8(#xE1 #x1D #x45  #xE1 #x9D #xC5) 1))
 
 ;; Break
-(test-equal '(#(make 2 #xE07E 7 72 #f) #(break 2 #xE07E 7 72 #f))
+(test-equal '(#(make (PS/2 2 #xE07E) 7 72 #f) #(break (PS/2 2 #xE07E) 7 72 #f))
             (xlate-ps/2 #vu8(#xE0 #x7E   #xE0 #xF0 #x7E) 2))
-(test-equal '(#(make 2 #xE07E 7 72 #f) #(break 2 #xE07E 7 72 #f))
+(test-equal '(#(make (PS/2 2 #xE07E) 7 72 #f) #(break (PS/2 2 #xE07E) 7 72 #f))
             (xlate-ps/2 #vu8(#xE0 #x7E   #xE0 #xF0 #x7E) 2))
 
 ;; Print Screen
-(test-equal '(#(make 2 #xE012 #f #f #f) #(make 2 #xE07C 7 70 #f) #(break 2 #xE07C 7 70 #f) #(break 2 #xE012 #f #f #f))
+(test-equal '(#(make (PS/2 2 #xE012) #f #f #f)
+              #(make (PS/2 2 #xE07C) 7 70 #f)
+              #(break (PS/2 2 #xE07C) 7 70 #f)
+              #(break (PS/2 2 #xE012) #f #f #f))
             (xlate-ps/2 #vu8(#xE0 #x12  #xE0 #x7C  #xE0 #xF0 #x7C  #xE0 #xF0 #x12) 2))
-(test-equal '(#(make 1 #xE02A #f #f #f) #(make 1  #xE037 7 70 #f) #(break 1 #xE037 7 70 #f) #(break 1 #xE02A #f #f #f))
+(test-equal '(#(make (PS/2 1 #xE02A) #f #f #f)
+              #(make (PS/2 1 #xE037) 7 70 #f)
+              #(break (PS/2 1 #xE037) 7 70 #f)
+              #(break (PS/2 1 #xE02A) #f #f #f))
             (xlate-ps/2 #vu8(#xE0 #x2A  #xE0 #x37  #xE0 #xB7  #xE0 #xAA) 1))
 
 ;; Left gui
-(test-equal '(#(make 2 #xE01F 7 227 #f) #(break 2 #xE01F 7 227 #f))
+(test-equal '(#(make (PS/2 2 #xE01F) 7 227 #f)
+              #(break (PS/2 2 #xE01F) 7 227 #f))
             (xlate-ps/2 #vu8(#xE0 #x1F #xE0 #xF0 #x1F) 2))
 
 (display "PS/2 keyboard test passed\n")

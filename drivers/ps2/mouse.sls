@@ -15,6 +15,7 @@
     (rnrs (6))
     (loko match)
     (loko system fibers)
+    (loko drivers mouse)
     (loko drivers ps2 core))
 
 (define PS/2-MOUSE-SET-SAMPLE-RATE  #xF3)
@@ -85,7 +86,7 @@
     (values (decode-signed-9-bit (fxarithmetic-shift-right x-sign 4) x)
             (decode-signed-9-bit (fxarithmetic-shift-right y-sign 5) y))))
 
-(define (driver·PS/2·mouse port hotplug-channel device-type MOUSE)
+(define (driver·PS/2·mouse port hotplug-channel device-type mouse)
   (define (decode-s8 x)
     (if (fx>? x (fx- (fxarithmetic-shift-left 1 7) 1))
         (fx- x (fxarithmetic-shift-left 1 8))
@@ -95,7 +96,8 @@
         (fx- x (fxarithmetic-shift-left 1 4))
         x))
   ;; TODO: Send an echo command during inactivity to see if the device
-  ;; has been removed, maybe detect #xAA #x00.
+  ;; has been removed, maybe detect #xAA #x00. TODO: Handle commands
+  ;; on the mouse-command-channel.
   (let ((device-type (probe-mouse-type port device-type)))
     (case device-type
       ((mouse)
@@ -105,7 +107,7 @@
                        [(x y) (parse-mouse-flags flags x y)])
            (let ((buttons (fxand flags #b00000111))
                  (z 0))
-             (put-message MOUSE (vector x y z buttons))
+             (put-message (mouse-event-channel mouse) (vector x y z buttons #f))
              ;; (display (list x y 0 buttons))
              ;; (newline)
              (loop)))))
@@ -116,7 +118,7 @@
                        [(x y) (parse-mouse-flags flags x y)])
            (let ((buttons (fxand flags #b00000111))
                  (z (decode-s8 z)))
-             (put-message MOUSE (vector x y z buttons))
+             (put-message (mouse-event-channel mouse) (vector x y z buttons #f))
              ;; (display (list x y z (number->string buttons 2)))
              ;; (newline)
              (loop)))))
@@ -128,7 +130,7 @@
            (let ((buttons (fxior (fxand flags #b00111)
                                  (fxarithmetic-shift-right (fxand z/btn #b110000) 1)))
                  (z (decode-s4 (fxbit-field z/btn 0 4))))
-             (put-message MOUSE (vector x y z buttons))
+             (put-message (mouse-event-channel mouse) (vector x y z buttons #f))
              ;; (display (list x y z (number->string buttons 2)))
              ;; (newline)
              (loop)))))

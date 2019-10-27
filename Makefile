@@ -69,6 +69,7 @@ install: all
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/keyboard.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/keymaps.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
+	$(INSTALL) -m 0644 drivers/mouse.sls             $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/core.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
