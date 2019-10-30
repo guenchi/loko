@@ -524,7 +524,6 @@
                                  COUNTER-WORD SELECT-0))
       (put-i/o-u8 COUNTER-0 0)
       (put-i/o-u8 COUNTER-0 0)
-      (pic-enable 0)                    ;will be disabled as spurious
 
       (values (* (- #xffffffff current-count)
                  (* apic-divisor (/ PIT-delay)))
@@ -890,6 +889,8 @@
     (cond ((not *runq*)
            (when (null? *waitq*)
              (error 'scheduler "The last process has exited"))
+           ;; FIXME: Poll the PICs for interrupts that were asserted
+           ;; but never delivered (they are set in ISR).
            (when DEBUG
              (display #\H)
              (display (list (number->string (pic-get-isr) 2)
