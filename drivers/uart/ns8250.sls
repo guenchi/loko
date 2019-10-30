@@ -118,7 +118,7 @@
 
   (define (uart-init)
     (uart-set-protocol 8 'none 1)
-    (uart-set-baudrate 9600)
+    (uart-set-baudrate 115200)
     (put-i/o-u8 MCR (fxior MCR-DTR MCR-RTS MCR-OUT2))
     (put-i/o-u8 FCR (fxior FCR-TRIGGER-LEVEL-4 FCR-CLEAR-RX FCR-CLEAR-TX FCR-ENABLE))
     (put-i/o-u8 IER 0))
