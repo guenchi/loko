@@ -372,4 +372,7 @@
       ;; The controller is translating to set 1
       ((#x43 #x41 #x3f) (driver-PS/2-kbd-scancodes port 1 command-ch callback))
       (else
+       (display "PS/2 keyboard scancode set response not understood: ")
+       (write set)
+       (newline)
        (driver·PS/2·hotplug port hotplug-ch))))))

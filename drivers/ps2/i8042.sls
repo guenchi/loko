@@ -89,7 +89,47 @@
              (lp (fx- timeout 1)))
             (else #f))))
 
-  (define (i8042-init enable-irq?)
+  (define (i8042-init)
+    ;; We don't want data from the keyboard or mouse during setup
+    (i8042-tx-wait 100)
+    (write-command KBC-DISABLE-KEYBOARD)
+    (i8042-tx-wait 100)
+    (write-command KBC-DISABLE-AUX)
+    (sleep 2/1000)
+    (i8042-discard)
+    (vector-for-each u8ring-clear! rx-bufs)
+
+    ;; Let's do a self test. Continue even if the self test fails
+    ;; because the keyboard can still be working.
+    (i8042-configure 'only-controller)
+    (let ((resp (i8042-command KBC-SELF-TEST-AND-RESET #f 1 5000)))
+      (unless (equal? resp #vu8(#x55))
+        (display "i8042 self-test & reset failed: ")
+        (display resp)
+        (newline)))
+    (i8042-discard)
+
+    ;; Enable the ports and send the command to disable scanning. This
+    ;; may reset the devices, but it prevents problems during setup.
+    (i8042-configure 'polling)
+    (do ((port 0 (fx+ port 1)))
+        ((fx=? port (vector-length data-ports)))
+      (sleep #e0.008)
+      (i8042-tx port #xF5 1000)
+      (sleep #e0.008)
+      (i8042-discard))
+    (vector-for-each u8ring-clear! rx-bufs)
+
+    ;; Normal operations. Enables IRQs and the ports.
+    (acknowledge-irq irq-port-1)
+    (acknowledge-irq irq-port-2)
+    (enable-irq irq-port-1)
+    (enable-irq irq-port-2)
+    (i8042-configure 'normal))
+
+  ;; Configure the controller. We may want to talk with the controller
+  ;; only, in polling mode, or we want normal operation with IRQs.
+  (define (i8042-configure mode)
     (define CONF-PORT-1-IRQ-ENABLE    #b00000001)
     (define CONF-PORT-2-IRQ-ENABLE    #b00000010)
     (define CONF-SYSTEM-FLAG          #b00000100)
@@ -98,18 +138,23 @@
     (define CONF-PORT-1-TRANSLATION   #b01000000)
     (let ((conf (i8042-command KBC-READ-COMMAND-BYTE #f 1 1000)))
       (unless (eqv? (bytevector-length conf) 1)
-        (error 'i8042-init "Could not read current command byte"))
+        (error 'i8042-configure "Could not read current command byte"))
       (let* ((cfgbyte (bytevector-u8-ref conf 0))
              (cfgbyte (fxior (fxand cfgbyte
-                                    ;; We try to disable translation,
-                                    ;; but it might not take.
                                     (fxnot (fxior CONF-PORT-1-TRANSLATION
                                                   CONF-PORT-1-CLOCK-DISABLE
                                                   CONF-PORT-2-CLOCK-DISABLE)))
-                             (if enable-irq?
-                                 (fxior CONF-PORT-1-IRQ-ENABLE
-                                        CONF-PORT-2-IRQ-ENABLE)
-                                 0))))
+                             (case mode
+                               ((polling)
+                                0)
+                               ((only-controller)
+                                (fxior CONF-PORT-1-CLOCK-DISABLE
+                                       CONF-PORT-2-CLOCK-DISABLE
+                                       CONF-PORT-1-IRQ-ENABLE
+                                       CONF-PORT-2-IRQ-ENABLE))
+                               (else
+                                (fxior CONF-PORT-1-IRQ-ENABLE
+                                       CONF-PORT-2-IRQ-ENABLE))))))
         (i8042-command KBC-WRITE-COMMAND-BYTE cfgbyte 0 1000))))
 
   ;; Send a command to the i8042 itself and read n response bytes. On
@@ -133,23 +178,40 @@
                      (put-u8 p (read-data))
                      (lp timeout (fx- n 1))))))))))
 
-  ;; Receive data from the KBC and place it in the right buffer
-  (define (i8042-rx)
-    (let lp ()
-      (let ((status (read-status)))
-        (unless (fxzero? (fxand status STS-OUTPUT-BUFFER-FULL))
-          (let ((data (read-data))
-                (port-num (if (fxzero? (fxand status STS-AUX)) 0 1)))
-            (when (fxzero? (fxand status (fxior STS-TIMEOUT STS-PARITY)))
-              (u8ring-enqueue! (vector-ref rx-bufs port-num) data))
-            (when DEBUG
-              (write (list '< port-num (number->string data 16)))
-              (newline))
-            (lp))))))
+  ;; Receive data from the KBC and place it in the right buffer. The
+  ;; STS-AUX flag is only updated ahead of an IRQ.
+  (define (i8042-handle-irq)
+    ;; FIXME: STS-AUX is not working correctly. Sometimes STS-AUX is
+    ;; set but the data is keyboard data. This shows up in QEMU and on
+    ;; a test laptop, but not on a another motherboard. Could be that
+    ;; these i8042 controllers hope that IRQ 1 will always interrupt
+    ;; IRQ 12?
+    (let ((status (read-status)))
+      (unless (fxzero? (fxand status STS-OUTPUT-BUFFER-FULL))
+        (let* ((data (read-data))
+               (port-num (if (fxzero? (fxand status STS-AUX)) 0 1)))
+          (when (fxzero? (fxand status (fxior STS-TIMEOUT STS-PARITY)))
+            (u8ring-enqueue! (vector-ref rx-bufs port-num) data))
+          (when DEBUG
+            (write (list '< port-num (number->string data 16)))
+            (newline))))))
+
+  ;; Discard all buffered data
+  (define (i8042-discard)
+    (let lp ((n 16))
+      (unless (eqv? n 0)
+        (let ((status (read-status)))
+          ;; XXX: Old systems need a 7µs sleep here if this is not in
+          ;; response to an IRQ.
+          (sleep #e7e-6)
+          (unless (fxzero? (fxand status STS-OUTPUT-BUFFER-FULL))
+            (read-data)
+            (lp (fx- n 1)))))))
 
   ;; Transmit data to one of the ports on the KBC (e.g. the keyboard
   ;; or the mouse). Timeout in milliseconds.
   (define (i8042-tx port byte timeout)
+    (i8042-tx-wait timeout)
     (when (eqv? port 1)
       (write-command KBC-WRITE-AUX-PORT))
     (or (i8042-tx-wait timeout)
@@ -171,19 +233,7 @@
     (wrap-operation (get-operation (PS/2-port-tx-channel (vector-ref data-ports port)))
                     (lambda (data) (cons 'tx (cons port data)))))
 
-  (i8042-rx)
-  (vector-for-each u8ring-clear! rx-bufs)
-  (let ((resp (i8042-command KBC-SELF-TEST-AND-RESET #f 1 5000)))
-    (unless (equal? resp #vu8(#x55))
-      (display "i8042 self-test & reset failed\n")))
-  (i8042-init #f)                       ;FIXME: disable keyboard here for now?
-  (i8042-rx)
-  (acknowledge-irq irq-port-1)
-  (acknowledge-irq irq-port-2)
-  (enable-irq irq-port-1)
-  (enable-irq irq-port-2)
-  (i8042-init #t)
-
+  (i8042-init)
   (let loop ()
     (match (perform-operation
             (choice-operation
@@ -196,11 +246,11 @@
              (rx-op 1)))
       ;; Handle and acknowledge IRQs
       ['int-port-1
-       (i8042-rx)
+       (i8042-handle-irq)
        (acknowledge-irq irq-port-1)
        (loop)]
       ['int-port-2
-       (i8042-rx)
+       (i8042-handle-irq)
        (acknowledge-irq irq-port-2)
        (loop)]
 
@@ -217,21 +267,28 @@
          (newline))
        (put-message ch (i8042-tx port byte timeout))
        (loop)]
-      [('cmd . #(ch cmd-byte data-byte read-bytes timeout))
-       ;; TODO: put-operation
-       (put-message ch (i8042-command cmd-byte data-byte read-bytes timeout))
-       (loop)])))
+
+      [('cmd . cmd)
+       (match cmd
+         [((? channel? ch) 'flush (? fixnum? port))
+          (cond ((fx<=? 1 port (vector-length rx-bufs))
+                 (u8ring-clear! (vector-ref rx-bufs (fx- port 1)))
+                 (put-message ch 'ok)
+                 (loop))
+                (else
+                 (put-message ch 'out-of-range)
+                 (loop)))]
+         [((? channel? ch) . _)
+          (put-message ch 'bad-command)
+          (loop)]
+         [else
+          (loop)])])))
 
 (define (driver·isa·i8042 controller)
   (define port-1 (make-PS/2-port controller 1))
   (define port-2 (make-PS/2-port controller 2))
   (define ports (vector port-1 port-2))
-  (define command-ch (make-channel))
-  ;; i8042 commands
-  (define (write-command cmd-byte data-byte read-bytes timeout)
-    (let ((ch (make-channel)))
-      (put-message command-ch (vector ch cmd-byte data-byte read-bytes timeout))
-      (get-message ch)))
+  (define command-ch (PS/2-controller-command-channel controller))
 
   (spawn-fiber (lambda () (driver-i8042 ports command-ch)))
 

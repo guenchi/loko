@@ -11,6 +11,7 @@
   (export
     make-PS/2-controller
     PS/2-controller-notify-channel
+    PS/2-controller-command-channel
 
     make-PS/2-port
     PS/2-port-controller PS/2-port-number
@@ -43,11 +44,19 @@
 
 (define-record-type PS/2-controller
   (sealed #t)
-  (fields notify-channel)
+  (fields notify-channel command-channel)
   (protocol
    (lambda (p)
      (lambda ()
-       (p (make-channel))))))
+       (p (make-channel) (make-channel))))))
+
+(define (PS/2-controller-command controller cmd)
+  (let ((ch (make-channel)))
+    (put-message (PS/2-controller-command-channel controller) (cons ch cmd))
+    (let ((resp (get-message ch)))
+      (unless (eq? resp 'ok)
+        (error 'PS/2-controller-command "Error from the controller driver"
+               controller cmd resp)))))
 
 ;;; PS/2 port abstraction
 
@@ -78,32 +87,36 @@
     (put-message (PS/2-port-tx-channel port) (vector ch byte timeout))
     (get-message ch)))
 
-;; Send a PS/2 command and handle the response.
+;; Send a PS/2 command and handle the response. Scanning needs to be
+;; disabled while this procedure is used or the response may be mixed
+;; up with scan data.
 (define (PS/2-command port byte)
   (PS/2-flush port)
   (let lp ((retries 10))
     (sleep #e0.008)
     (or (PS/2-write port byte 500)
-        (let ((resp (PS/2-read port 1000)))
-          (cond ((eqv? resp RESP-PS/2-ACK) #t)
-                ((eqv? resp RESP-PS/2-RESEND)
-                 ;; TODO: Limit the number of retries?
-                 (if (eqv? retries 0)
-                     (error 'PS/2-command "Exceeded number of retries")
-                     (lp (fx- retries 1))))
-                ((eqv? resp RESP-PS/2-ERROR)
-                 (error 'PS/2-command "Error from device"
-                        port byte resp))
-                (else
-                 ;; TODO: Could be junk data, maybe try to resync?
-                 (error 'PS/2-command "Unknown response from device"
-                        port byte resp)))))))
+        (let lp-read ((retries retries))
+          (let ((resp (PS/2-read port 1000)))
+            (cond ((eqv? resp RESP-PS/2-ACK) #t)
+                  ((eqv? resp RESP-PS/2-RESEND)
+                   (sleep #e0.008)
+                   (if (eqv? retries 0)
+                       (error 'PS/2-command "Exceeded number of retries")
+                       (lp (fx- retries 1))))
+                  ((eqv? resp RESP-PS/2-ERROR)
+                   (error 'PS/2-command "Error from device"
+                          port byte resp))
+                  ((eqv? retries 0)
+                   (error 'PS/2-command "Unknown response from device"
+                          port byte resp))
+                  (else
+                   ;; Could be junk data; try to resync.
+                   (lp-read (fx- retries 1)))))))))
 
 ;; Flush the receive buffer
 (define (PS/2-flush port)
-  (let lp ()
-    (unless (eq? (PS/2-read port 100) 'timeout)
-      (lp))))
+  (PS/2-controller-command (PS/2-port-controller port)
+                           (list 'flush (PS/2-port-number port))))
 
 ;;; Basic hotplug driver for when there is no device
 

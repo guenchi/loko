@@ -34,13 +34,15 @@
                 (let ((result (PS/2-read port 4000)))
                   (PS/2-read port 1000)))))
          (cond
-           ((and (eqv? reset-id 0) (probe·PS/2·mouse port))
+           ((probe·PS/2·mouse port)
             => (lambda (id)
+                 (write (list 'mouse id port)) (newline)
                  (spawn-fiber (lambda ()
                                 (let ((mouse (make-managed-mouse mouse-manager)))
                                   (driver·PS/2·mouse port hotplug-channel id mouse))))))
            ((probe·PS/2·keyboard port)
             => (lambda (id)
+                 (write (list 'keyboard id port)) (newline)
                  (spawn-fiber (lambda ()
                                 (let ((keyboard (make-managed-keyboard keyboard-manager)))
                                   (driver·PS/2·keyboard port hotplug-channel id keyboard))))))
@@ -48,6 +50,7 @@
             ;; Probing failed, we have no driver. Start the hotplug
             ;; driver, that should tell us when a new device has been
             ;; attached.
+            (display "Unknown PS/2 device\n")
             (spawn-fiber (lambda ()
                            (driver·PS/2·hotplug port hotplug-channel))))))])
     (lp)))

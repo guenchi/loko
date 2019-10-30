@@ -18,12 +18,17 @@
     (loko drivers mouse)
     (loko drivers ps2 core))
 
+(define PS/2-MOUSE-SET-RESOLUTION   #xE8)
 (define PS/2-MOUSE-SET-SAMPLE-RATE  #xF3)
 (define PS/2-MOUSE-DISABLE-SCANNING #xF5)
 
+(define RESOLUTION-1/mm #x00)
+(define RESOLUTION-2/mm #x01)
+(define RESOLUTION-4/mm #x02)
+(define RESOLUTION-8/mm #x03)
+
 (define (probe·PS/2·mouse port)
   (PS/2-flush port)
-  (PS/2-command port PS/2-MOUSE-DISABLE-SCANNING)
   (identify port))
 
 (define (identify port)
@@ -34,6 +39,12 @@
     ((#x04) 'mouse/5-buttons)
     (else #f)))
 
+;; Set the resolution (1-8 counts/mm)
+(define (PS/2-mouse-set-resolution port value)
+  (PS/2-command port PS/2-MOUSE-SET-RESOLUTION)
+  (PS/2-command port value))
+
+;; Set the sample rate (10, 20, 40, 60, 80, 100, 200 Hz)
 (define (PS/2-mouse-set-sample-rate port rate)
   (PS/2-command port PS/2-MOUSE-SET-SAMPLE-RATE)
   (PS/2-command port rate))
@@ -99,6 +110,7 @@
   ;; has been removed, maybe detect #xAA #x00. TODO: Handle commands
   ;; on the mouse-command-channel.
   (let ((device-type (probe-mouse-type port device-type)))
+    (PS/2-mouse-set-sample-rate port 60)
     (case device-type
       ((mouse)
        (PS/2-command port PS/2-ENABLE-SCANNING)
