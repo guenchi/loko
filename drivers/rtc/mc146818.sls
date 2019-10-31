@@ -20,16 +20,16 @@
 
 ;; TODO: Consider setting the chip to 24-hour mode and binary.
 
-(library (loko drivers rtc)
+(library (loko drivers rtc mc146818)
   (export
-    driver-rtc)
+    driver-mc146818)
   (import
     (rnrs (6))
     (loko system fibers)
     (loko system unsafe))
 
 ;; TODO: Figure out what API is needed and add channels
-(define (driver-rtc)
+(define (driver-mc146818)
   ;; I/O ports
   (define reg-index #x70)
   (define reg-data #x71)
