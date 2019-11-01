@@ -52,12 +52,12 @@ certain conditions.\n"))
       (lambda (k)
         (with-exception-handler
           (lambda (exn)
-            ;; TODO: what about warnings?
             ;; TODO: flush output ports?
             (let ((p (current-error-port)))
               (stack-trace p)
               (print-condition exn p))
-            (k 'restart))
+            (when (serious-condition? exn)
+              (k 'restart)))
           (lambda ()
             (let loop ()
               (display "> ")
