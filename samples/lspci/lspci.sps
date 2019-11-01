@@ -7,7 +7,9 @@
 
 (import
   (rnrs (6))
-  (loko drivers pci))
+  (loko system fibers)
+  (loko drivers pci)
+  (loko drivers pci roms))
 
 (define (print . x)
   (for-each display x)
@@ -130,7 +132,7 @@
 ;; Given a pcidev from (loko drivers pci) and a pciid-db, print some
 ;; useful information.
 (define (print-pcidev dev db)
-  (define (hex x) (number->string x 16))
+  (define (hex x) (if x (number->string x 16) "#f"))
   (define (lookup-class base sub int)
     (cond
       ((hashtable-ref (pciid-db-classes% db) base #f) =>
@@ -165,10 +167,12 @@
                         (else
                          (values (pciid-vendor-name vendordata)
                                  (pciid-device-name devicedata)
-                                 (string-append (hex subvendor) ":" (hex subdevice)))))))
+                                 (and subvendor
+                                      (string-append (hex subvendor) ":" (hex subdevice))))))))
                (else (values (pciid-vendor-name vendordata)
                              #f
-                             (string-append (hex subvendor) ":" (hex subdevice)))))))
+                             (and subvendor
+                                  (string-append (hex subvendor) ":" (hex subdevice))))))))
       (else (values #f #f (string-append (hex subvendor) ":" (hex subdevice))))))
 
   (let*-values ([(subvendor subdevice)
@@ -193,7 +197,8 @@
       (print " Vendor: " vname))
     (when dname
       (print " Device: " dname))
-    (print " Subsystem: " sname)
+    (when sname
+      (print " Subsystem: " sname))
     (unless (and (not ifname) (eqv? (pcidev-interface dev) 0))
       (print " Programming interface: " ifname)))
   (when (eqv? #x00 (pcidev-header-layout dev))
@@ -211,8 +216,35 @@
                " #x+" (hex (pcibar-size BAR))))))
   (cond ((pcidev-ROM-size dev) =>
          (lambda (size)
-           (print " ROM size #x" (hex size)))))
-  )
+           (print " ROM size #x" (hex size))
+           (let* ((ROM (pcidev-get-ROM dev))
+                  (images (pci-parse-ROM ROM)))
+             (print "  ROM images: " (length images))
+             (when (null? images)
+               (print "  No images in ROM? ROM starts with "
+                      (call-with-port (open-bytevector-input-port ROM)
+                        (lambda (p) (get-bytevector-n p 16)))))
+             (for-each (lambda (img)
+                         (print "  Image size #x" (hex (bytevector-length (pcirom-image img))))
+                         (print "   Code type: "
+                                (let ((type (pcirom-code-type img)))
+                                  (cond ((eqv? type ROM-CODE-TYPE-x86) "Intel x86")
+                                        ((eqv? type ROM-CODE-TYPE-OpenFirmware) "OpenFirmware")
+                                        ((eqv? type ROM-CODE-TYPE-PARISC) "HP PA RISC")
+                                        ((eqv? type ROM-CODE-TYPE-EFI) "EFI")
+                                        (else type)))
+                                " " (list (pcirom-code-type img)))
+                         (print "   Header revision: " (pcirom-header-revision img))
+                         (print "   Class code: #x" (hex (pcirom-class-code img)))
+                         (print "   Image revision level: " (pcirom-revision-level img))
+                         (for-each
+                          (lambda (device-id)
+                            (print "   Supports " (hex (pcirom-vendor-id img))
+                                   ":" (hex device-id)))
+                          (pcirom-device-ids img))
+                         (print "   Checksum: " (if (pcirom-checksum-ok? img)
+                                                    "OK" "INVALID")))
+                       images))))))
 
 (display "Scanning the PCI bus...\n")
 
@@ -224,3 +256,5 @@
             devs))
 
 (display "End of output\n\n")
+(flush-output-port (current-output-port))
+(sleep 10)
