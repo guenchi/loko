@@ -73,6 +73,9 @@ install: all
 	$(INSTALL) -m 0644 drivers/pci.sls               $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/pci
 	$(INSTALL) -m 0644 drivers/pci/roms.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/pci
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video
+	$(INSTALL) -m 0644 drivers/video/bga.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video
+	$(INSTALL) -m 0644 drivers/video/vbe.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/core.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb
 	$(INSTALL) -m 0644 drivers/usb/hid-numbers.sls   $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/usb

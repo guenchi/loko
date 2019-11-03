@@ -5,5 +5,8 @@
   (synopsis "Sample bga-graphics for Loko")
   (authors "Göran Weinholt")
   (license "MIT")
-  (depends)
+  (depends ("zabavno"
+            (version "0.2.0-alpha.0")
+            (location (git "https://github.com/weinholt/zabavno.git"))
+            (revision "8d35ef82383bf2a5612363cdd81c3cb7d27ef0c3")))
 )

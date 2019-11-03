@@ -1,10 +1,10 @@
 SUBDIRS = \
-  bga-graphics \
   etherdump \
   hello \
   lspci \
   lsusb \
   ps2demo \
+  video \
   web-server
 
 default: all

@@ -8,72 +8,21 @@
   (rnrs)
   (loko system fibers)
   (loko system unsafe)
-  (loko drivers pci))
+  (loko drivers pci)
+  (loko drivers video bga))
 
 ;;; Bochs Graphics Array
-
-;; I/O registers for the BGA device
-(define bga-index #x01ce)
-(define bga-data #x01cf)
-
-;; Registers selected by the bga-index port
-(define VBE_DISPI_INDEX_ID 0)
-(define VBE_DISPI_INDEX_XRES 1)
-(define VBE_DISPI_INDEX_YRES 2)
-(define VBE_DISPI_INDEX_BPP 3)
-(define VBE_DISPI_INDEX_ENABLE 4)
-(define VBE_DISPI_INDEX_BANK 5)
-(define VBE_DISPI_INDEX_VIRT_WIDTH 6)
-(define VBE_DISPI_INDEX_VIRT_HEIGHT 7)
-(define VBE_DISPI_INDEX_X_OFFSET 8)
-(define VBE_DISPI_INDEX_Y_OFFSET 9)
-
-;; Write a BGA register
-(define (bga-write reg value)
-  (put-i/o-u16 bga-index reg)
-  (put-i/o-u16 bga-data value))
-
-;; Read a BGA register
-(define (bga-read reg)
-  (put-i/o-u16 bga-index reg)
-  (get-i/o-u16 bga-data))
-
-;; Change the BGA graphics mode
-(define (bga-set-mode width height bit-depth
-                      enable-lfb? clear-memory?)
-  (bga-write VBE_DISPI_INDEX_ENABLE 0)
-  (bga-write VBE_DISPI_INDEX_XRES width)
-  (bga-write VBE_DISPI_INDEX_YRES height)
-  (bga-write VBE_DISPI_INDEX_BPP bit-depth)
-  (bga-write VBE_DISPI_INDEX_ENABLE
-             (fxior 1
-                    (if enable-lfb? #x40 0)
-                    (if clear-memory? 0 #x80))))
-
-(display "Starting Bochs graphics\n")
-(unless (fx<=? #xB0C0 (bga-read VBE_DISPI_INDEX_ID) #xB0CF)
-  (error 'bga "No Bochs graphics detected"))
 
 (define w 640)
 (define h 480)
 
-(bga-set-mode w h 32 #t #t)
-
 (define framebuffer
-  (let lp ((devs (pci-scan-bus #f)))
-    (when (null? devs)
-      (error 'bga-graphics "Could not find Bochs graphics"))
-    (let ((dev (car devs)))
-      (cond
-        ;; Magic numbers for the Bochs graphics
-        ((and (eqv? (pcidev-vendor-id dev) #x1234)
-              (eqv? (pcidev-device-id dev) #x1111)
-              (eqv? (pci-get-u16 dev PCI-CFG-00-SUBSYSTEM-VENDOR-ID) #x1af4)
-              (eqv? (pci-get-u16 dev PCI-CFG-00-SUBSYSTEM-ID) #x1100))
-         ;; BAR 0 is the framebuffer
-         (pcibar-base (vector-ref (pcidev-BARs dev) 0)))
-        (else
-         (lp (cdr devs)))))))
+  (let ((dev (find probe·pci·bga? (pci-scan-bus #f))))
+    (when (not dev)
+      (error #f "Could not find Bochs graphics"))
+    (let ((bga (make·pci·bga dev)))
+      (bga-set-mode bga w h 32 #t #t)
+      (bga-framebuffer-address bga))))
 
 ;;; Pixel drawing
 
