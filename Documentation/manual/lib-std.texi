@@ -1,0 +1,33 @@
+@node Standard libraries
+@section Standard libraries
+
+The standard @url{https://r6rs.org, R6RS Scheme} libraries are
+provided. Please see the documents on the website for the official
+versions. Unofficial versions of
+@url{https://weinholt.se/scheme/r6rs/, R6RS updated with errata} are
+also available online.
+
+@node SRFI implementations
+@subsection SRFI implementations
+
+These following SRFIs are provided with Loko.
+
+@itemize
+@item
+@code{(srfi :98 os-environment-variables)} -- read-only access to
+environment variables. Documented at
+@url{https://srfi.schemers.org/srfi-98/srfi-98.html}.
+
+@item
+@code{(srfi :170 posix)} -- access to common POSIX operations,
+currently only available on Linux. This is up to date with draft #7.
+Documented at @url{https://srfi.schemers.org/srfi-170/srfi-170.html}.
+
+@end itemize
+
+See the package @url{https://akkuscm.org/packages/chez-srfi/,
+chez-srfi} for the majority of other SRFIs.
+
+@c Local Variables:
+@c TeX-master: "loko.texi"
+@c End:

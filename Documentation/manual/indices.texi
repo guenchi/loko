@@ -1,0 +1,6 @@
+@page
+@node Index
+@unnumbered Index
+@printindex cp
+
+@c TODO: More indices?

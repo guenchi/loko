@@ -1,0 +1,20 @@
+@node Target libraries
+@section Target libraries
+
+The following Linux-specific libraries are provided. Their usage
+mirrors 1:1 the functionality in the Linux manpages, section 2.
+
+@itemize
+@item
+@code{(loko arch amd64 linux-numbers)} -- constants used in the Linux
+syscall interface (UAPI).
+
+@item
+@code{(loko arch amd64 linux-syscalls)} -- thin wrappers around Linux
+syscalls.
+
+@end itemize
+
+@c Local Variables:
+@c TeX-master: "loko.texi"
+@c End:

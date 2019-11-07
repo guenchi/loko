@@ -1,0 +1,75 @@
+@node Tools support
+@section Tools support
+
+@subsection Disassembly
+
+Loko can be disassembled using any regular disassembler that supports
+ELF and amd64. There is also a built-in disassembler for procedures,
+@pxref{Base library, disassemble}.
+
+@subsection Debugging
+
+Loko can be debugged with @url{https://www.gnu.org/software/gdb/, GNU
+gdb} with the help of @file{loko-gdb.py}. Stack traces and pretty
+printing should work. Line information is currently missing.
+
+Scheme objects can get very big. Limit the output with e.g. @code{set
+print elements 5}.
+
+Traps from the processor are translated into conditions with a
+@code{&program-counter} condition, e.g.@: this error from trying to
+evaluate @code{(#f)}:
+
+@example
+ The condition has 5 components:
+ 1. &assertion &violation &serious
+ 2. &who: apply
+ 3. &message: "Tried to call a non-procedural object"
+ 4. &irritants: (#f)
+ 5. &program-counter: 3184533
+End of condition components.
+@end example
+
+You can translate the program counter value to hex and look up the
+trapping instruction with a disassembler.
+
+@subsection Debug logs
+
+The PC port of Loko can have debug logging redirected from the VGA
+console with the @env{CONSOLE} environment variable:
+
+@itemize
+@item
+@code{CONSOLE=vga} prints to the VGA text mode console.
+
+@item
+@code{CONSOLE=com1} prints to COM1 (BIOS's default baud rate).
+
+@item
+@code{CONSOLE=debug} prints to QEMU's debug console. This is enabled
+with e.g. @code{-debugcon vc}.
+
+@end itemize
+
+@subsection Profiling
+
+Loko on Linux can be profiled with
+@url{https://perf.wiki.kernel.org/index.php/Main_Page, perf}.
+
+Some micro benchmarks can be done with the built-in procedure
+@code{time-it*}.
+
+@subsection Memory checking
+
+It's possible to run Loko in @code{http://valgrind.org/, Valgrind}.
+Valgrind does not support alignment checking, so Loko will print a
+warning about that. Loko also does not use the ``red zone'', so
+Valgrind will think that a lot of what Loko is doing uses
+uninitialized memory. Don't believe it.
+
+@subsection Fuzzing
+
+Loko can be run with @url{http://lcamtuf.coredump.cx/afl/, AFL}. This
+requires an instrumented binary, which has some overhead. The support
+needs to be enabled in @code{(loko arch amd64 codegen)} first. Change
+@code{use-branch-instrumentation} to @code{#t} and recompile.

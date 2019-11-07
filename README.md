@@ -10,6 +10,7 @@ language.
 
 ## Current status
 
+* It works surprisingly well.
 * Most of R6RS Scheme is present and accounted for.
 * Most SRFIs in [chez-srfi][chez-srfi] are supported.
 * Supports non-blocking I/O with lightweight concurrency.

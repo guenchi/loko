@@ -1,0 +1,63 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
+@node Preface
+@unnumbered Preface
+
+This is the developer's manual for Loko Scheme. It is an early draft
+and a work in progress.
+
+@menu
+* Loko License::
+@end menu
+
+@node Loko License
+@unnumberedsec The Loko Scheme License
+@cindex AGPL
+@cindex copying
+@cindex license
+
+Loko Scheme is copyrighted software. The default legal state of
+software is that no rights are granted. However, Loko Scheme is
+licensed under a free software license. This license grants many
+permissions, but they are conditional on following the terms of the
+license.
+
+Most files carry their license information in brief using an
+SPDX-License-Identifier.
+
+@itemize @bullet
+@item
+Loko Scheme as a whole, including the compiler, the runtime, the
+drivers, etc, is published under the terms of the GNU Affero General
+Public License version 3 or later (AGPL-3.0-or-later). See the file
+@file{COPYING} in the source code tree.
+
+Any binaries produced by the compiler are also under this license.
+This means that all binaries created by the Loko Scheme compiler must
+use a compatible license due to the restrictions in AGPL-3.0-or-later.
+(If this is a problem for your use of Loko Scheme, then please see
+issue #2 in the bug tracker).
+
+@item
+This manual is published under the GNU Free Documentation License
+(@pxref{GNU Free Documentation License}).
+
+@item
+The files under the samples directory are published under the terms of
+the MIT license. See the file @file{samples/LICENSE.txt} in the source
+code tree.
+
+@item
+The files under the srfi directory are also published under the terms
+of the MIT license. See the file @file{srfi/LICENSE.txt} in the source
+code tree. This license is conventional for SRFI implementations.
+
+@end itemize
+
+
+@c Local Variables:
+@c TeX-master: "loko.texi"
+@c End:

@@ -49,6 +49,20 @@ header-snarfer: header-snarfer.c
 arch/amd64/linux-numbers.sls: header-snarfer
 	./header-snarfer > arch/amd64/linux-numbers.sls
 
+manual:: Documentation/manual/loko.info Documentation/manual/loko.html Documentation/manual/loko.pdf
+
+Documentation/manual/loko.info: Documentation/manual/*.texi Documentation/manual/version.texi
+	cd Documentation/manual && makeinfo loko
+
+Documentation/manual/loko.html: Documentation/manual/*.texi Documentation/manual/version.texi
+	cd Documentation/manual && makeinfo --no-split --html loko
+
+Documentation/manual/loko.pdf: Documentation/manual/*.texi Documentation/manual/version.texi
+	cd Documentation/manual && texi2pdf loko.texi
+
+Documentation/manual/version.texi: Documentation/manual/mkversion.sps loko
+	cd Documentation/manual && ../../.akku/env ../../loko --program mkversion.sps
+
 samples:: loko
 	$(MAKE) -C samples
 
@@ -57,6 +71,7 @@ clean:
 	rm -f loko loko.out
 	rm -f scheme-script scheme-script.old
 	rm -f config.sls
+	rm -f Documentation/manual/version.texi Documentation/manual/loko*.info Documentation/manual/loko.pdf
 	$(MAKE) -C samples clean
 
 install: all
