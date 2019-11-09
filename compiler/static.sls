@@ -191,6 +191,8 @@
                               (memq 'freestanding options))])
     (let* ((primlocs (lambda (x)
                        (cond ((assq x locs) => cdr)
+                             ((memq x '(eval environment))
+                              (error 'compile-loko "Eval needs -feval"))
                              (else
                               (error 'compile-loko "No location for primitive" x)))))
            (codes
