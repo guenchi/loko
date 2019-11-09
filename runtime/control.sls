@@ -303,6 +303,10 @@
                                           (write x p))
                                         (cdr x))
                               (display #\) p))
+                             ((and (eq? '&program-counter (record-type-name rtd))
+                                   (fixnum? x))
+                              (display "#x" p)
+                              (display (number->string x 16) p))
                              (else
                               (write x p))))))))
              (newline p)))
