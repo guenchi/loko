@@ -1549,9 +1549,9 @@
   (write-spurious-int 'enable APIC-vector-spurious)
 
   ;; Calibrate the timer against the i8253/i8254 PIT and set
-  ;; the local APIC timer to fire periodically at 100 Hz.
+  ;; the local APIC timer to fire periodically at 1000 Hz.
   (let-values ([(bus-freq cpu-freq) (calibrate-APIC&CPU-against-PIT)])
-    (let* ((scheduler-frequency 1/100)
+    (let* ((scheduler-frequency 1/1000)
            (interval (max (div bus-freq (* apic-divisor (/ scheduler-frequency)))
                           100)))
       (print "CPU frequency = " cpu-freq
