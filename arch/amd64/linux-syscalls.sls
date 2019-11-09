@@ -36,6 +36,7 @@
     sys_clock_getres
     sys_clock_gettime
     (rename (sys_close/finalizer sys_close))
+    sys_connect
     ;; instead of sys_dup you can use (sys_fcntl fd F_DUPFD 0)
     sys_dup3
     sys_epoll_create1
