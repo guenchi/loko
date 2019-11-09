@@ -1,12 +1,16 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Base library
 @section Base library
 
 The @code{(loko)} library is automatically loaded into the repl. It
 provides all exports from the R6RS libraries, SRFI 98, and the exports
-shown below here. It is intended as a convenient starting point for
-the repl user and a place to put features that are expected from a
-Scheme implementation, but which have for some reason or other not
-been standardized.
+shown below. It is intended as a convenient starting point for the
+repl user and a place to put features that are expected from a Scheme
+implementation, but that do not belong to any other library.
 
 @deffn Procedure interaction-environment
 @end deffn
@@ -15,6 +19,19 @@ been standardized.
 @end deffn
 
 @deffn Procedure void
+Returns a void object.
+
+The value that came from nowhere. Even though it has never been
+standardized, it is customary for Scheme implementations to use void
+for @code{(if #f #f)}, @code{(values)} and the value of @code{set!}
+and other mutating operations.
+
+In Loko Scheme, void objects carry a copy of the program counter.
+
+@lisp
+(list (void))
+@result{} (#<void #x21731F>)
+@end lisp
 @end deffn
 
 @defvr Parameter library-directories
@@ -56,7 +73,8 @@ format of the returned forms should not be relied on.
 @end defvr
 
 @deffn Procedure disassemble procedure
-Print the disassembly of @var{procedure}.
+Print the disassembly of @var{procedure}. It is annotated with labels
+for local jump destinations and some simple code equivalents.
 
 @example
 > (disassemble car)
@@ -179,7 +197,7 @@ place of the new value. A typical use of this procedure is to do some
 type checks on the new value.
 @end deffn
 
-@deffn Syntax parameterize ((name value) ...) body ...
+@deffn Syntax parameterize ((name value) @dots{}) body@dots{}
 Parameterize rebinds the parameter @var{name} to @var{value} for the
 dynamic extent of @var{body}. This means that while @var{body} is
 running, @var{name} will be set to @var{value}. The value is possibly

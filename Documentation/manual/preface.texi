@@ -6,17 +6,99 @@
 @node Preface
 @unnumbered Preface
 
-This is the developer's manual for Loko Scheme. It is an early draft
-and a work in progress.
+I've been writing Scheme code for some time now. While doing so I was
+also working on Scheme implementations. This is the first one that
+seems to have come out okay.
+
+@i{Göran Weinholt, 2019}
 
 @menu
+* Purpose::
+* Credits::
 * Loko License::
 @end menu
+
+
+@node Purpose
+@unnumberedsec Purpose, audience and scope
+
+This manual has two major parts: usage and internals. The first part
+is intended to let the developer start using Loko to write useful
+software. The second part goes into details on how Loko works and why
+things are the way they are.
+
+Some knowledge of Scheme is assumed for the usage part. The reader who
+has no prior knowledge of any Lisp dialect will initially find it
+difficult to parse the language.
+
+This is not a complete description of the Scheme language. The reader
+who wants a more detailed description of Scheme may want to read
+@url{https://www.scheme.com/tspl4/, The Scheme Programming Language}
+(TSPL) by R.@: Kent Dybvig. The language described in that book is the
+same language that you can use in Loko Scheme.
+
+This manual is also not a replacement for comments and descriptions in
+the code. Loko Scheme is not meant to be a closed box; you are
+supposed to open it up and look at the parts. Maybe even fix some to
+suit your situation. Loko Scheme needs its own source code to compile
+your programs, so every installation should come with source code.
+
+
+@node Credits
+@unnumberedsec Credits
+
+Many have brought ideas, techniques and instructions to fruition that
+later went into making Loko Scheme. It would not be what it is without
+their contributions to science.
+
+The syntax-case implementation is from @emph{r6rs-libraries} by
+Abdulaziz Ghuloum and R.@: Kent Dybvig, with bug fixes and
+improvements from Llewellyn Pritchard.
+
+The high-level optimizer @emph{cp0} is based on the chapter @emph{Fast
+and Effective Procedure Integration} from @emph{Extending the Scope of
+Syntactic Abstraction} by Oscar Waddell (Ph.D.@: thesis).
+
+The low-level optimizer is based on concepts taught in a course given
+by David Whalley in 2011.
+
+The register allocator, except for the bugs, is from @emph{Register
+Allocation via Graph Coloring} by Preston Briggs (Ph.D.@: thesis).
+
+The letrec handling is from @emph{Fixing Letrec (reloaded)} by
+Abdulaziz Ghuloum and R.@: Kent Dybvig.
+
+The bignum algorithms are based on algorithms from @emph{BigNum Math}
+by Tom St Denis.
+
+The @code{list?} procedure uses Olin Shiver's version of Robert W.@:
+Floyd's cycle-finding algorithm.
+
+Some intricate parts of the records implementation are from the
+reference implementation of SRFI-76 by Michael Sperber.
+
+The list sorting code is from SLIB, was written Richard A.@: O'Keefe and
+is based on Prolog code by David H.@: D.@: Warren.
+
+The dynamic-wind code is from SLIB and was written by Aubrey Jaffer.
+
+The division magic, and many other wonderful hacks, is from the
+excellent book @emph{Hacker's Delight} by Henry S.@: Warren, Jr.@:,
+with foreword by one Guy L.@: Steele, Jr.!
+
+The fibers library is loosely based on @emph{Parallel Concurrent ML}
+by John Reppy, Claudio V.@: Russo and Yingqi Xiao. The API is based on
+Guile fibers by Andy Wingo and the implementation is closely related
+to his blog post @emph{a new concurrent ml}.
+
+Thanks also to Abdulaziz Ghuloum for @emph{An Incremental Approach to
+Compiler Construction}, which helped me consolidate the Scheme
+compiler experience I had already accumulated through experimentation.
+
 
 @node Loko License
 @unnumberedsec The Loko Scheme License
 @cindex AGPL
-@cindex copying
 @cindex license
 
 Loko Scheme is copyrighted software. The default legal state of
@@ -25,21 +107,19 @@ licensed under a free software license. This license grants many
 permissions, but they are conditional on following the terms of the
 license.
 
-Most files carry their license information in brief using an
-SPDX-License-Identifier.
-
 @itemize @bullet
 @item
 Loko Scheme as a whole, including the compiler, the runtime, the
-drivers, etc, is published under the terms of the GNU Affero General
+drivers, etc.@:, is published under the terms of the GNU Affero General
 Public License version 3 or later (AGPL-3.0-or-later). See the file
 @file{COPYING} in the source code tree.
 
 Any binaries produced by the compiler are also under this license.
 This means that all binaries created by the Loko Scheme compiler must
 use a compatible license due to the restrictions in AGPL-3.0-or-later.
-(If this is a problem for your use of Loko Scheme, then please see
-issue #2 in the bug tracker).
+
+If this is a problem for your use of Loko Scheme, then please see
+issue #2 in the bug tracker.
 
 @item
 This manual is published under the GNU Free Documentation License
@@ -56,6 +136,9 @@ of the MIT license. See the file @file{srfi/LICENSE.txt} in the source
 code tree. This license is conventional for SRFI implementations.
 
 @end itemize
+
+Most files carry their license information in brief using an
+SPDX-License-Identifier.
 
 
 @c Local Variables:

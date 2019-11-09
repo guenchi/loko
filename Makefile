@@ -7,6 +7,7 @@ LINUX_SOURCE := /lib/modules/$(shell uname -r)/source
 DESTDIR=
 PREFIX=/usr/local
 INSTALL=install
+INSTALLINFO=install-info
 
 do_subst = sed -e 's,[@]PREFIX[@],$(PREFIX),g'
 
@@ -119,10 +120,20 @@ install: all
 	    $(INSTALL) -m 0644 $$fn $(DESTDIR)$(PREFIX)/lib/loko/$$fn; \
 	  done)
 
-install-all: install
+install-info: Documentation/manual/loko.info
+	mkdir -p $(DESTDIR)$(PREFIX)/share/info
+	$(INSTALL) -m 0644 Documentation/manual/loko.info* \
+	  $(DESTDIR)$(PREFIX)/share/info
+	$(INSTALLINFO) --info-dir='$(DESTDIR)$(PREFIX)/share/info' \
+	  '$(DESTDIR)$(PREFIX)/share/info/loko.info'
+
+install-all: install install-info
 	ln -f $(DESTDIR)$(PREFIX)/bin/loko $(DESTDIR)$(PREFIX)/bin/scheme-script
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/loko
 	rm -rf $(DESTDIR)$(PREFIX)/share/loko
 	rm -rf $(DESTDIR)$(PREFIX)/lib/loko
+	$(INSTALLINFO) --info-dir='$(DESTDIR)$(PREFIX)/share/info' \
+	  --delete '$(DESTDIR)$(PREFIX)/share/info/loko.info' || true
+	rm -f $(DESTDIR)$(PREFIX)/share/info/loko.info*

@@ -1,0 +1,266 @@
+@node Using Loko
+@chapter Using Loko
+
+
+@node Building
+@section Building Loko
+
+Download a release tarball from @url{https://scheme.fail} or clone the
+git repository: @code{git clone https://scheme.fail/git/loko.git/}.
+Release tarballs, git commits and tags are signed with the OpenPGP key
+0xE33E61A2E9B8C3A2.
+
+Loko Scheme needs an R6RS Scheme implementation for bootstrapping. It
+can currently be bootstrapped with Chez Scheme. It also depends on
+some packages from Akku. Follow these steps to compile Loko:
+
+@itemize
+@item
+Install @url{https://cisco.github.io/ChezScheme/, Chez Scheme},
+version 9.5 or later, as a bootstrap compiler. You can skip this step
+if you have a pre-built @file{loko} binary (see below).
+
+@item
+Install the package manager @url{https://akkuscm.org, Akku.scm},
+version 1.0.0 or later.
+
+@item
+Run @code{make} to compile Loko.
+
+@item
+Install with @code{make install}.
+
+@item
+(Optional) Build and install the manual with @code{make install-info}.
+@end itemize
+
+Once Loko is bootstrapped you can optionally build it with itself
+using `make selfcompile`.
+
+You can get the pre-compiled binary from the GitLab CI system. Go to
+@url{https://gitlab.com/weinholt/loko/-/tags}, click the download
+drop-down on the right, and select the ``build'' artifact under
+``Download artifacts'' (not one of the links on the top of the
+drop-down).
+
+The binaries tend toward being reproducible. There are some minor
+differences between the results from Chez Scheme and Loko Scheme due
+to different gensym implementations. This is fixable.
+
+@node Running
+@section Running
+
+Loko Scheme runs either under an existing operating system kernel
+(currently only Linux), as a hardware virtual machine or directly on
+bare hardware. The same binary can be loaded on all three
+environments.
+
+@subsection Running under Linux
+
+The @file{loko} binary is a statically linked ELF binary that Linux
+can load directly. It needs to be marked executable (@code{chmod 755
+loko}).
+
+Loko doesn't come with a built-in line editor. It is convenient to use
+rlwrap when running Loko: @code{rlwrap loko}. The rlwrap program adds
+readline on top of any program, providing line editing and history.
+
+Loko uses the environment variable @env{LOKO_LIBRARY_PATH} to find
+libraries. This is a colon-separated list of directories. It uses the
+file extensions @code{.loko.sls} and @code{.sls}. This is
+automatically handled by the package manager Akku.
+
+R6RS top-level programs can be run from the command line with
+@code{loko --program program.sps}.
+
+The @file{loko} binary is also meant to be installed under the name
+@file{scheme-script}. If it is invoked with this name it will load a
+Scheme script, as described in the non-normative R6RS appendix. It is
+often used like this:
+
+@example
+#!/usr/bin/env scheme-script
+(import (rnrs))
+(display "Hello, world!\n")
+@end example
+
+By marking such a file executable the system will hand it over to
+@file{scheme-script}, which will then run it as a Scheme top-level
+program. But the name @file{scheme-script} is usually handled by the
+alternatives system, so it could be another Scheme that runs the
+script.
+
+Such scripts can also be compiled to static binaries that can be run
+directly. @xref{Compilation}.
+
+@subsection Running under KVM (QEMU)
+
+To get a repl on the serial port:
+
+@example
+qemu-system-x86_64 -enable-kvm -kernel loko -m 1024 -serial stdio
+@end example
+
+There is no echo or line editing, but it works alright as an inferior
+Scheme for Emacs. You can also try @code{rlwrap -a}.
+
+If you create a script with this command then you can easily run it as
+an "Inferior Scheme" in e.g. Emacs. There are some additional options
+you can try:
+
+@itemize
+@item
+Add files to @file{/boot} using @code{-initrd filename1,filename2,etc}.
+
+@item
+Set environment variables with e.g.@: @code{-append LOKO_LIBRARY_PATH=/boot}.
+
+@item
+Pass command line arguments in @code{-append} by adding them after @code{--},
+e.g.@: @code{-append 'VAR=abc -- --program foo.sps'}.
+@end itemize
+
+See the @file{samples} directory in the source distribution for more
+examples.
+
+@subsection Running on bare metal
+
+Loko on bare metal does not yet come with an adequate user interface.
+There is rudimentary log output to the text console during boot. This
+can be redirected, @pxref{Debug logs}.
+
+The first user process will be attached to the COM1 serial port
+(115200, 8n1). This is adequate for development until there is
+networking support. The @file{loko} program's first process is a repl,
+but if you compile a program then it will be your top-level program.
+
+The @file{loko} binary should work with any Multiboot boot loader,
+such as GRUB 2. See the menu entry examples below.
+
+@subsubsection Network booting
+
+Network booting is possible if your hardware supports it. It has been
+tested with GRUB 2 and should also be possible with PXELINUX.
+
+You will need to add an entry in the network's DHCP server and you
+need a computer where you can install a TFTP server such as tftpd-hpa.
+
+@itemize
+@item
+After installing the TFTP server, create a network directory with GRUB:
+
+@example
+grub-mknetdir --net-directory /tftpboot
+@end example
+
+The TFTP server might be serving up another directory such as
+@file{/srv/tftp}.
+
+@item
+Create a configuration in @file{/tftpboot/boot/grub/grub.cfg} with an
+entry for Loko, such as this:
+
+@example
+menuentry "Loko Scheme" @{
+  multiboot  /loko loko
+@}
+@end example
+
+You can also include files that will be available in @file{/boot}:
+
+@example
+menuentry "Loko Scheme with foo library" @{
+  multiboot  /loko loko LOKO_LIBRARY_PATH=/boot
+  module     /foo.sls foo.sls
+@}
+@end example
+
+Or start a program in the interpreter:
+
+@example
+menuentry "Hello world" @{
+  multiboot  /loko loko -- --program /boot/hello.sps
+  module     /hello.sps hello.sps
+@}
+@end example
+
+@item
+Copy the Loko binary to the @file{/tftpboot} directory.
+
+@item
+Add an entry in the DHCP server. It can look like this if you're using
+ISC dhcpd:
+
+@example
+host darkstar @{
+  hardware ethernet 00:11:22:33:44:55;
+  filename "boot/grub/i386-pc/core.0";
+  next-server 192.168.0.2;
+@}
+@end example
+
+The hardware address must be changed to match the interface used for
+network booting (the machine that will run Loko). The server address
+is the address of the TFTP server.
+@end itemize
+
+@subsection Running in Docker
+
+Loko can be run in a Docker container. There is sometimes no need to
+provide any other files in the container; Loko Scheme is
+self-sufficient.
+
+These Docker images are already available:
+
+@itemize
+@item
+@samp{weinholt/loko:base} -- Loko Scheme only, a base image.
+
+@item
+@samp{weinholt/loko:latest} -- Loko Scheme with Debian GNU/Linux stable.
+
+@item
+@samp{akkuscm/akku:loko} -- Loko Scheme with Debian GNU/Linux and the
+package manager Akku.
+@end itemize
+
+
+@node Compilation
+@section Compiling a program
+
+Loko can compile R6RS top-level programs:
+
+@example
+loko --compile hello.sps --output hello
+@end example
+
+The above will compiler the R6RS top-level program @file{hello.sps}
+and create the binary @file{hello}, which will run on Linux and bare
+metal.
+
+Libraries are looked up from the @env{LOKO_LIBRARY_PATH} environment
+variable (which is automatically set by the package manager Akku). The
+use of @code{eval} is disabled by default to speed up builds, but can
+be enabled with @code{-feval}:
+
+@example
+loko -feval --compile hello.sps --output hello
+@end example
+
+The supported targets can be changed with @code{-ftarget=TARGET}. The
+default target is @code{pc+linux}. Other targets are @code{linux} for
+Linux only and @code{pc} for only bare metal.
+
+You can also omit the normal Scheme libraries. If you use
+@code{-ffreestanding} then only the assembler based runtime is added
+on top of the libraries that your program uses. This is useful mostly
+when you're working on the compiler. The source distribution has an
+example where this is used, @file{samples/hello/just-hello.sps}.
+
+The command line is very inflexible, so try to stick to the fixed
+argument order for now.
+
+Loko integrates its run-time into the resulting binary and Loko's
+source code needs to be available for compilation to succeed. The
+location is decided by @env{PREFIX} when compiling Loko, but can be
+overridden using the @env{LOKO_SOURCE} environment variable.

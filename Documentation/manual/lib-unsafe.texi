@@ -1,12 +1,17 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Unsafe procedures
 @section Unsafe procedures
 
 The @code{(loko system unsafe)} library provides raw access to kernel
 services, linear memory and I/O bus registers.
 
-@deffn Procedure syscall n arg ...
+@deffn Procedure syscall n arg @dots{}
 Calls the kernel's system call number @var{n} with the arguments
-@var{arg ...}. Returns a fixnum.
+@var{arg @dots{}}. Returns a fixnum.
 
 Example fork on Linux amd64:
 
@@ -16,7 +21,7 @@ Example fork on Linux amd64:
   (exit))                      ; child become a zombie
 @end example
 
-Scheme programs should generally not be written with syscalls directly
+Scheme programs should generally not be written directly with syscalls
 any less than C programs would do the same. There are usually
 interactions with the standard library that should be considered, such
 as flushing of ports to prevent duplicated output.
@@ -27,10 +32,10 @@ Get the linear address of the first byte of @var{bytevector}.
 
 The first byte is guaranteed to have an alignment of eight bytes.
 
-A moving garbage collector is used for normally allocated bytevectors
-(created with @code{make-bytevector}). There is no way to ensure that
-they do not move during GC, so their addresses should not be used to
-perform bus-mastering DMA.
+A moving garbage collector is used for bytevectors created with
+@code{make-bytevector}. There is no way to ensure that they do not
+move during GC, so their addresses should not be used to perform
+bus-mastering DMA.
 
 Returns a fixnum.
 @end deffn
@@ -38,41 +43,67 @@ Returns a fixnum.
 @deffn Procedure get-mem-u8 addr
 @deffnx Procedure get-mem-u16 addr
 @deffnx Procedure get-mem-u32 addr
+@deffnx Procedure get-mem-s61 addr
+Read a u8, u16, u32 or s61, respectively, from linear address
+@var{addr} and return it as a fixnum.
 
-Read a u8, u16 or u32, respectively, from linear address @var{addr}
-and return it as a fixnum. If @var{addr} is unaligned then an
-exception is raised.
+@itemize
+@item
+If @var{addr} is unaligned then an exception is raised.
 
-The @code{get-mem-u32} procedure may return a bignum on targets where
-@code{(<= (fixnum-width) 32)}, but the bus access will be 32 bits
-wide.
-@end deffn
+@item
+On targets where fixnums are not wide enough to hold the result, a
+bignum will be used instead, but the bus access will be the correct
+width.
 
-@deffn Procedure get-mem-s61 addr
-Read and return a fixnum from linear address @var{addr}. If @var{addr}
-is not evenly divisible by 8 then an exception is raised.
+@item
+Calls to these procedures will not be optimized away or reordered by
+the compiler.
 
-This procedure is only available on targets where
-@code{(>= (fixnum-width) 61)}.
+@item
+Each call corresponds to one memory read instruction of the matching
+size. For the signed 61-bit procedure this only applies to targets
+that can issue 64-bit memory bus operations.
+
+@item
+These calls may be issued out of order by the processor or go to the
+cache. This is usually only a problem when the memory area is backed
+by RAM. On AMD64 it is safe to read memory-mapped hardware registers
+with these procedures thanks to MTRR. Other situations may require
+locking instructions or memory barriers.
+@end itemize
+
 @end deffn
 
 @deffn Procedure put-mem-u8 addr n
 @deffnx Procedure put-mem-u16 addr n
 @deffnx Procedure put-mem-u32 addr n
-Write @var{n} as a u8, u16 or u32, respectively, to linear address
-@var{addr}. If @var{addr} is unaligned then an exception is raised.
+@deffnx Procedure put-mem-s61 addr n
+Write @var{n} as a u8, u16, u32 or s61, respectively, to linear
+address @var{addr}.
+
+@itemize
+@item
+If @var{addr} is unaligned then an exception is raised.
+
+@item
+Calls to these procedures will not be optimized away or reordered by
+the compiler.
+
+@item
+Each call corresponds to one memory write instruction of the matching
+size. For the signed 61-bit procedure this only applies to targets
+that can issue 64-bit memory bus operations.
+
+@item
+These calls may be issued out of order or be merged by the processor.
+This is usually only a problem when the memory area is backed by RAM.
+On AMD64 it is safe to read memory-mapped hardware registers with
+these procedures thanks to MTRR. Other situations may require locking
+instructions, manual flushes or memory barriers.
+@end itemize
 
 Returns unspecified values.
-@end deffn
-
-@deffn Procedure put-mem-s61 addr n
-Write the fixnum @var{n} to linear address @var{addr}. If @var{addr}
-is not evenly divisible by 8 then an exception is raised.
-
-Returns unspecified values.
-
-This procedure is only available on targets where
-@code{(>= (fixnum-width) 61)}.
 @end deffn
 
 @deffn Procedure get-i/o-u8 busaddr
@@ -82,8 +113,7 @@ Read a u8, u16 or u32, respectively, from I/O bus address
 @var{busaddr} and return it as a fixnum.
 
 The @code{get-i/o-u32} procedure may return a bignum on targets where
-@code{(<= (fixnum-width) 32)}, but the bus access will be 32 bits
-wide.
+@code{(<= (fixnum-width) 32)}, but the bus access will be 32-bit.
 @end deffn
 
 @deffn Procedure put-i/o-u8 busaddr n

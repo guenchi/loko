@@ -1,3 +1,8 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Standard libraries
 @section Standard libraries
 
@@ -26,7 +31,7 @@ Documented at @url{https://srfi.schemers.org/srfi-170/srfi-170.html}.
 @end itemize
 
 See the package @url{https://akkuscm.org/packages/chez-srfi/,
-chez-srfi} for the majority of other SRFIs.
+chez-srfi} for many other SRFIs.
 
 @c Local Variables:
 @c TeX-master: "loko.texi"

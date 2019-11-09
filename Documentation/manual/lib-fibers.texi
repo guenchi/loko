@@ -1,3 +1,8 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Fibers
 @section Fibers
 
@@ -58,10 +63,10 @@ Return an operation object that represents waiting until absolute time
 @var{a} (in internal time units).
 @end deffn
 
-@deffn Procedure choice-operation op ...
+@deffn Procedure choice-operation op @dots{}
 Returns an operation object that represents a choice between the given
-operations @var{op ...}. If multiple operations can be performed then
-one is selected non-deterministically.
+operations @var{op @dots{}}. If multiple operations can be performed
+then one is selected non-deterministically.
 
 It is not an error to call this procedure with no arguments. It is in
 fact a useful construction when gathering operations.

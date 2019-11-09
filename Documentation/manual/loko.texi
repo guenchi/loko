@@ -14,7 +14,7 @@
 @syncodeindex fn cp
 
 @copying
-This developer's manual is for Loko Scheme @value{VERSION}, an
+This manual is for Loko Scheme @value{VERSION}, an
 optimizing R6RS Scheme compiler.
 
 Copyright @copyright{} 2019 G@"oran Weinholt
@@ -56,20 +56,14 @@ Free Documentation License".
 
 @menu
 * Preface::
-@c * Purpose::
-@c * Audience::
-@c * Scope::
-
-@c * Getting started::
+* Introduction::
+* Using Loko::                      How Loko comes into being.
 @c * Sample programs::
-* Library reference::
-
+* Library reference::               The emptiness inside of Loko.
 * Repair instructions::             How to react when Loko disintegrates.
-@c * FAQ::                             Questions everyone would ask, if they knew they should.
+@c * FAQ::                             Frequently Asked Questions, nothing else.
 @c * Getting help::                    When nothing in this manual was actually helpful.
-
 @c TODO: Also include references to blog articles
-
 * Loko internals::                  What makes Loko go around.
 
 Appendices
@@ -84,16 +78,18 @@ Indices
 @contents
 
 @include preface.texi
+@include introduction.texi
+@include usage.texi
 
 @node Library reference
 @chapter Library reference
 
 @menu
-* Standard libraries::          (rnrs) and (srfi :NNN)
-* Base library::                (loko)
-* Fibers::                      (loko system fibers)
-* Unsafe procedures::           (loko system unsafe)
-* Target libraries::            Libraries that don't work everywhere
+* Standard libraries::          The @code{(rnrs)} and @code{(srfi :NNN)} libraries
+* Base library::                The @code{(loko)} library.
+* Fibers::                      Lightweight concurrency, @code{(loko system fibers)}.
+* Unsafe procedures::           Ways out of the box with @code{(loko system unsafe)}.
+* Target libraries::            Libraries that don't work everywhere.
 @end menu
 
 @include lib-std.texi

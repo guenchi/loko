@@ -1,3 +1,8 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Drivers
 @section Drivers
 

@@ -1,0 +1,34 @@
+@node Introduction
+@chapter Introduction
+
+
+@node Where Loko fits in
+@section Where Loko fits in
+
+Scheme has many implementations. Every known way to implement a
+programming language has probably been tried with Scheme. There are
+Scheme implementations for basically all operating systems and all
+types of machines. Some even say there are more implementations than
+applications. And Loko Scheme is one of those implementations.
+
+Every Scheme implementation has something that makes it unique. This
+is what is peculiar about Loko:
+
+@itemize
+@item
+Loko Scheme runs on bare metal.
+
+@item
+Loko Scheme runs and self-compiles without relying on any other
+language implementation.
+
+@item
+Loko Scheme's runtime is concurrent throughout.
+
+@item
+Loko Scheme is incompatible with C and does not use any libc.
+@end itemize
+
+Due to some of the above, Loko is not suitable for every use case.
+There are plenty of other Scheme implementations available if Loko
+can't work for your application.

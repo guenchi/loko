@@ -1,12 +1,32 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
 @node Tools support
 @section Tools support
 
+This section describes some tools can be used together with Loko
+Scheme when things go wrong.
+
+@menu
+* Disassembly::
+* Debugging::
+* Debug logs::
+* Profiling::
+* Memory checking::
+* Fuzzing::
+@end menu
+
+@node Disassembly
 @subsection Disassembly
 
 Loko can be disassembled using any regular disassembler that supports
-ELF and amd64. There is also a built-in disassembler for procedures,
-@pxref{Base library, disassemble}.
+ELF and amd64, such as the one in GNU binutils and GNU gdb. There is
+also a built-in disassembler for procedures, @pxref{Base library,
+disassemble}.
 
+@node Debugging
 @subsection Debugging
 
 Loko can be debugged with @url{https://www.gnu.org/software/gdb/, GNU
@@ -21,18 +41,18 @@ Traps from the processor are translated into conditions with a
 evaluate @code{(#f)}:
 
 @example
- The condition has 5 components:
+The condition has 5 components:
  1. &assertion &violation &serious
  2. &who: apply
  3. &message: "Tried to call a non-procedural object"
  4. &irritants: (#f)
- 5. &program-counter: 3184533
+ 5. &program-counter: #x309795
 End of condition components.
 @end example
 
-You can translate the program counter value to hex and look up the
-trapping instruction with a disassembler.
+You can look up the trapping instruction with a disassembler.
 
+@node Debug logs
 @subsection Debug logs
 
 The PC port of Loko can have debug logging redirected from the VGA
@@ -51,22 +71,25 @@ with e.g. @code{-debugcon vc}.
 
 @end itemize
 
+@node Profiling
 @subsection Profiling
 
 Loko on Linux can be profiled with
 @url{https://perf.wiki.kernel.org/index.php/Main_Page, perf}.
 
-Some micro benchmarks can be done with the built-in procedure
-@code{time-it*}.
+Some micro benchmarks can be done from inside Loko,
+@pxref{Base library, time-it*}.
 
+@node Memory checking
 @subsection Memory checking
 
-It's possible to run Loko in @code{http://valgrind.org/, Valgrind}.
+It's possible to run Loko in @url{http://valgrind.org/, Valgrind}.
 Valgrind does not support alignment checking, so Loko will print a
 warning about that. Loko also does not use the ``red zone'', so
 Valgrind will think that a lot of what Loko is doing uses
 uninitialized memory. Don't believe it.
 
+@node Fuzzing
 @subsection Fuzzing
 
 Loko can be run with @url{http://lcamtuf.coredump.cx/afl/, AFL}. This
