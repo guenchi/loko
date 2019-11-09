@@ -123,8 +123,8 @@
     (put-i/o-u8 FCR (fxior FCR-TRIGGER-LEVEL-4 FCR-CLEAR-RX FCR-CLEAR-TX FCR-ENABLE))
     (put-i/o-u8 IER 0))
 
-  (define tx-buf (make-u8ring 1024))
-  (define rx-buf (make-u8ring 1024))
+  (define tx-buf (make-u8ring 32))
+  (define rx-buf (make-u8ring 2048))
 
   (uart-init)
   (uart-handle-irq)
