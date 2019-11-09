@@ -11,34 +11,47 @@
   (loko drivers video vbe)
   (loko system unsafe))
 
-(display "Starting VBE...\n")
+(define (print . x) (for-each display x) (newline))
+
+(print "Starting VBE...")
 (define VBE (make·pci·vbe (find probe·pci·vbe? (pci-scan-bus #f))))
 
-(define (vbe-print-modes vbe)
+(define (get-modes vbe)
   (let ((BIOS (vbe-bios vbe))
         (info (vbe-supervga-info vbe)))
-    (for-each
+    (map
      (lambda (mode)
-       (define (print . x) (for-each display x) (newline))
        (let ((i (vesa-get-mode-info BIOS mode)))
          (print #\[ (number->string mode 16) #\] #\space
                 (supervga-mode-XResolution i) #\x (supervga-mode-YResolution i)
                 #\space (supervga-mode-BitsPerPixel i) " bpp "
                 (assv (supervga-mode-MemoryModel i) supervga-memory-models)
                 (if (supervga-mode-linear-framebuffer? i)
-                    " LFB" " no-LFB"))))
+                    " LFB" " no-LFB"))
+         i))
      (supervga-info-VideoModes info))))
 
-(define BIOS (vbe-bios VBE))
-(define info (vbe-supervga-info VBE))
+(write (vbe-supervga-info VBE))
+(newline)
 
 (display "Getting modes\n")
-(vbe-print-modes VBE)
 
 ;; FIXME: Do something smarter when choosing a mode
-(vesa-set-mode BIOS #x192 'lfb #f #f)
+(let* ((modes (get-modes VBE))
+       (mode (find (lambda (info)
+                     (and (eqv? (supervga-mode-XResolution info) 1280)
+                          (eqv? (supervga-mode-YResolution info) 1024)
+                          (eqv? (supervga-mode-BitsPerPixel info) 32)
+                          (eqv? (supervga-mode-MemoryModel info) 6)))
+                   modes)))
+  (when (not mode)
+    (error #f "Did not find a 1280x1024x32 direct color graphics mode"))
+  (print "Switching to mode " (number->string (supervga-mode-Number mode) 16))
+  (print mode)
+  (vesa-set-mode (vbe-bios VBE) (supervga-mode-Number mode) 'lfb #f #f))
 
-(define modeinfo (vesa-get-mode-info BIOS (vesa-get-mode BIOS)))
+(define modeinfo (vesa-get-mode-info (vbe-bios VBE)
+                                     (vesa-get-mode (vbe-bios VBE))))
 
 (define (clear-screen)
   (let* ((base (supervga-mode-PhysBasePtr modeinfo))
@@ -52,22 +65,42 @@
 (define put-pixel
   (let ((PhysBasePtr (supervga-mode-PhysBasePtr modeinfo))
         (LinBytesPerScanLine (supervga-mode-LinBytesPerScanLine modeinfo))
-        (YResolution (supervga-mode-YResolution modeinfo))
-        (pixel-shift
-         (case 32 ;;bpp
-           ((8) 0)
-           ((16) 1)
-           ((24) #f)
-           ((32) 2))))
-    (let ((limit (fx+ PhysBasePtr (* LinBytesPerScanLine YResolution))))
-      (lambda (x y c)
-        (let ((addr (fx+ PhysBasePtr
-                         (fx+ (fx* LinBytesPerScanLine y)
-                              (fxarithmetic-shift-left x pixel-shift)))))
-          (unless (fx<? 0 addr limit)
-            (error 'put-pixel "Out of range" x y))
-          ;; a bit more complicated for 24 bpp
-          (put-mem-u32 addr c))))))
+        (YResolution (supervga-mode-YResolution modeinfo)))
+    (let ((limit (fx- (fx* LinBytesPerScanLine YResolution) 1)))
+      (case (supervga-mode-BitsPerPixel modeinfo)
+        ((8)
+         (lambda (x y c)
+           (let* ((offset (fx+ (fx* LinBytesPerScanLine y) x))
+                  (addr (fx+ PhysBasePtr offset)))
+             (when (fx<=? 0 offset limit)
+               (put-mem-u8 addr c)))))
+        ((15 16)
+         (lambda (x y c)
+           (let* ((offset (fx+ (fx* LinBytesPerScanLine y) (fx* x 2)))
+                  (addr (fx+ PhysBasePtr offset)))
+             (when (fx<=? 0 offset limit)
+               (put-mem-u16 addr c)))))
+        ((24)
+         (lambda (x y c)
+           (let* ((offset (fx+ (fx* LinBytesPerScanLine y) (fx* x 3)))
+                  (addr (fx+ PhysBasePtr offset)))
+             (when (fx<=? 0 offset limit)
+               (cond ((fxodd? addr)
+                      ;; 0 _1_ 2 3
+                      (put-mem-u8 addr (fxbit-field c 0 8))
+                      ;; 0 1 _2 3_
+                      (put-mem-u16 (fx+ addr 1) (fxbit-field c 8 24)))
+                     (else
+                      ;; _0 1_ 2 3
+                      (put-mem-u16 addr (fxbit-field c 0 16))
+                      ;; 0 1 _2_ 3
+                      (put-mem-u8 (fx+ addr 2) (fxbit-field c 16 24))))))))
+        (else
+         (lambda (x y c)
+           (let* ((offset (fx+ (fx* LinBytesPerScanLine y) (fx* x 4)))
+                  (addr (fx+ PhysBasePtr offset)))
+             (when (fx<=? 0 offset limit)
+               (put-mem-u32 addr c)))))))))
 
 ;;http://groups.csail.mit.edu/graphics/classes/6.837/F98/Lecture6/Slide11.html
 (define (circle cx cy radius c)
@@ -138,22 +171,8 @@
 ;;; FIXME: This is just nonsense... include the wireframe stuff and
 ;;; reuse here.
 
-(clear-screen)
 
-(box 0 0 (fx- width 1) (fx- height 1) #x00ff0000)
-
-(box 10 10 (fx- width 11) (fx- height 11) #x0000ff00)
-
-(box 20 20 (fx- width 21) (fx- height 21) #x000000ff)
-
-(circle 100 100 30 #xff0000)
-
-(circle 100 100 20 #x00ff00)
-
-(circle 100 100 10 #x0000ff)
-
-
-(define rgb
+(define color-rgb
   (let ((rm (- (expt 2 (supervga-mode-RedMaskSize modeinfo)) 1))
         (rs (supervga-mode-RedFieldPosition modeinfo))
         (gm (- (expt 2 (supervga-mode-GreenMaskSize modeinfo)) 1))
@@ -161,17 +180,52 @@
         (bm (- (expt 2 (supervga-mode-BlueMaskSize modeinfo)) 1))
         (bs (supervga-mode-BlueFieldPosition modeinfo)))
     (lambda (r g b)
-      (fxior (fxarithmetic-shift-left (fxand r rm) rs)
-             (fxarithmetic-shift-left (fxand g gm) gs)
-             (fxarithmetic-shift-left (fxand b bm) bs)))))
+      (fxior (fxarithmetic-shift-left (round (* r rm)) rs)
+             (fxarithmetic-shift-left (round (* g gm)) gs)
+             (fxarithmetic-shift-left (round (* b bm)) bs)))))
 
-(do ((r 1 (fx+ r 1)))
-    ((fx>=? r (/ 768 2)))
-  (circle (/ 1024 2)
-          (/ 768 2)
-          r
-          (rgb (exact (round (* (/ r (/ 768 2))
-                                256)))
-               (exact (round (* (- 1 (/ r (/ 768 2)))
-                                256)))
-               #x00)))
+(clear-screen)
+
+(box 0 0 (fx- width 2) (fx- height 1) (color-rgb 1 0 0))
+
+(box 10 10 (fx- width 11) (fx- height 11) (color-rgb 0 1 0))
+
+(box 20 20 (fx- width 21) (fx- height 21) (color-rgb 0 0 1))
+
+(circle 100 100 30 (color-rgb 1 0 0))
+
+(circle 100 100 20 (color-rgb 0 1 0))
+
+(circle 100 100 10 (color-rgb 0 0 1))
+
+
+
+(define (hsv->rgb H S V)
+  (let* ((C (* V S))
+         (X (* C (- 1 (abs (- (mod (/ H 60) 2) 1)))))
+         (m (- V C)))
+    (let-values (((R* G* B*)
+                  (cond ((<= H 60) (values C X 0))
+                        ((<= H 120) (values X C 0))
+                        ((<= H 180) (values 0 C X))
+                        ((<= H 240) (values 0 X C))
+                        ((<= H 300) (values X 0 C))
+                        (else (values C 0 X)))))
+      (color-rgb (+ R* m)
+                 (+ G* m)
+                 (+ B* m)))))
+
+(do ((w (fx- width 60))
+     (i 0 (fx+ i 1)))
+    ((fx=? i w))
+  (draw-line (fx+ 30 i) 30 (fx+ 30 i) 50 (hsv->rgb (* 360 (/ i w)) 1 1)))
+
+(let ((c (color-rgb 1 0 0))
+      (black (color-rgb 0 0 0)))
+  (let lp ()
+    (do ((x 100 (fx+ x 1)))
+        ((fx=? x (fx- width 100)))
+      (circle x 200 30 black)
+      (circle (fx+ x 1) 200 30 c)
+      (sleep 1/60))
+    (lp)))

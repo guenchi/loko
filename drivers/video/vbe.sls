@@ -238,19 +238,25 @@
 
 ;;; BIOS emulation
 
+(define DEBUG #f)
+
 (define vga-memory-hook
   (case-lambda
     ((addr size value)
-     (display (list 'c-write-memory (number->string addr 16) size value))
-     (newline)
+     (yield-current-task)
+     (when DEBUG
+       (display (list 'c-write-memory (number->string addr 16) size value))
+       (newline))
      (case size
        ((8) (put-mem-u8 addr value))
        ((16) (and (fxzero? (fxand addr #b1)) (put-mem-u16 addr value)))
        ((32) (and (fxzero? (fxand addr #b11)) (put-mem-u32 addr value)))
        (else #f)))
     ((addr size)
-     (display (list 'c-read-memory addr size))
-     (newline)
+     (yield-current-task)
+     (when DEBUG
+       (display (list 'c-read-memory addr size))
+       (newline))
      (case size
        ((8) (get-mem-u8 addr))
        ((16) (and (fxzero? (fxand addr #b1)) (get-mem-u16 addr)))
@@ -261,11 +267,13 @@
 (define vga-raw-i/o-hook
   (case-lambda
     ((port size)
+     (yield-current-task)
      (case size
        ((8) (get-i/o-u8 port))
        ((16) (get-i/o-u16 port))
        (else (get-i/o-u32 port))))
     ((port size value)
+     (yield-current-task)
      (case size
        ((8) (put-i/o-u8 port value))
        ((16) (put-i/o-u16 port value))
@@ -274,17 +282,21 @@
 (define vga-XXX-i/o-hook
   (case-lambda
     ((port size)
-     (display "I/O read ")
-     (display (list (number->string port 16) size))
-     (newline)
+     (yield-current-task)
+     (when DEBUG
+       (display "I/O read ")
+       (display (list (number->string port 16) size))
+       (newline))
      (case size
        ((8) (get-i/o-u8 port))
        ((16) (get-i/o-u16 port))
        (else (get-i/o-u32 port))))
     ((port size value)
-     (display "I/O write ")
-     (display (list (number->string port 16) size value))
-     (newline)
+     (yield-current-task)
+     (when DEBUG
+       (display "I/O write ")
+       (display (list (number->string port 16) size value))
+       (newline))
      (case size
        ((8) (put-i/o-u8 port value))
        ((16) (put-i/o-u16 port value))
