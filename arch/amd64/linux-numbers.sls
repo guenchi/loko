@@ -102,6 +102,8 @@
     __NR_wait4
     __NR_write
     sizeof-gid_t
+    sizeof-int
+    sizeof-void*
     EPERM
     ENOENT
     ESRCH
@@ -848,6 +850,8 @@
 (define-inlined __NR_wait4 61)
 (define-inlined __NR_write 1)
 (define-inlined sizeof-gid_t 4)
+(define-inlined sizeof-int 4)
+(define-inlined sizeof-void* 8)
 
 ;;; asm/errno.h
 (define-inlined EPERM 1)

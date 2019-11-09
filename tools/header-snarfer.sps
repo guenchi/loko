@@ -108,6 +108,8 @@
     __NR_write
 
     (sizeof gid_t)
+    (sizeof int)
+    (sizeof void*)
 
     (c-include "asm/errno.h")
     EPERM
