@@ -1,0 +1,56 @@
+@c -*-texinfo-*-
+@c Loko Scheme Developer's Manual.
+@c Copyright © 2019 Göran Weinholt
+@c See loko.texi for the license.
+
+@section Loko Scheme website
+
+The @url{https://scheme.fail, Loko Scheme} website has official
+release tarballs and an online copy of the manual.
+
+@section Online communities
+
+There are two chat channels available on IRC. They are on the IRC
+network Freenode and they are @code{#scheme} and @code{#loko}. The
+@code{#scheme} channel is for the whole Scheme community. You will
+need an IRC client to join these channels, but Freenode also offers a
+web-based client.
+
+If you're more of a forum or mailing list user, then there aren't any
+direct options like this yet. But we have Usenet, which has filled
+this need even since before there was an Internet. The community-wide
+Scheme group is called @samp{comp.lang.scheme}. It is accessible via
+any Usenet provider, even free ones like
+@url{http://www.eternal-september.org/, Eternal September}. It is also
+accessible via one of the big search engine companies.
+
+There is also a community-wide Scheme Wiki at
+@url{http://community.schemewiki.org}.
+
+In my opinion it would be better for the Scheme community if it was
+not as fragmented as it is. For that reason there will not be any
+Loko-specific mailing lists.
+
+@section Issue tracker
+
+There is an issue tracker for Loko Scheme at gitlab.com. The URL is
+@url{https://gitlab.com/weinholt/loko/issues}. You can submit issues
+via email by sending them to the @samp{bugs} alias at the Loko Scheme
+website's domain.
+
+@section Package repositories
+
+There are repositories of packages online where you can find many
+useful libraries that work with Loko:
+
+@itemize
+@item
+@url{https://akkuscm.org/, Akku.scm} -- an R6RS/R7RS package manager.
+Akku also translates R7RS libraries to R6RS to try and make them work
+with R6RS implementations.
+
+@item
+@url{http://snow-fort.org/, Snow} -- an R7RS package manager. These
+packages are also included in Akku's repository.
+
+@end itemize
