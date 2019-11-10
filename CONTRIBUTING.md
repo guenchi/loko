@@ -1,29 +1,16 @@
-# The big plead to contribute to Loko Scheme
+## Opening issues
 
-~~Ask not what Loko Scheme can do for you. Ask what YOU can do for Loko Scheme!~~
+No special guidelines out of the ordinary. Nobody will bite you.
 
-Actually, ask what Loko Scheme can do for YOU and figure out how to
-make it do that! Then contribute code that makes Loko work for YOU.
+## Submitting code
 
-My hope is that Loko will be run as an open community project. Think
-something like the Linux kernel project. Not just one person holds the
-copyright on Linux; thousands do.
+Before working on something large, please reach out and discuss it
+first.
 
-You can ask yourself "would the Linus Torvalds of the 1990s accept
-this change?" If in doubt, just ask. But in general you can start
-hacking and make your mark on Loko.
-
-Let us make Loko into the native homeworld of Scheme!
-
-  -- Göran Weinholt  Sat, 07 Sep 2019 11:48:44 +0200
-
-## What is asked of you
-
-There is no need to assign your copyright when you contribute to the
-project. But the code you contribute is assumed to be contributed
-under the same license as the project is already using, as is
-customary for open source and free software projects. Other
-GPL-compatible license are also OK, of course.
+You retain ownership of the code you contribute. The code you
+contribute is assumed to be contributed under the same license as the
+project is already using, as is customary for open source and free
+software projects. Other GPL-compatible licenses are also okay.
 
 When you contribute code, use `git commit --signoff` or add the
 `Signed-off-by:` line yourself. This has the same meaning as in the
@@ -46,11 +33,23 @@ be applied to the rest of Loko as a result of that issue.
 Use one of these options:
 
 1. Open a merge request on GitLab (https://gitlab.com/weinholt/loko).
-   This requires an account, so there is another option:
+   This requires an account, so there are other options:
 
 2. Use `git format-patch` and post it on comp.lang.scheme. If the
    traffic get too much we'll try to make another newsgroup.
 
+3. Format a patch and use email (see below).
+
 For new files, please write a copyright line and an
 `SPDX-License-Identifier` at the top. You can check existing files to
 see how it is done.
+
+## Contact by email
+
+If you don't want to open an account on GitLab or mess around
+with Usenet then you can use email.
+
+Send your bugs and patches to the `bugs` alias at the domain of the
+Loko Scheme website. They will be forwarded to GitLab and will
+initially be marked as confidential. You will get a confirmation when
+the email has been received.
