@@ -61,7 +61,7 @@ Documentation/manual/loko.html: Documentation/manual/*.texi Documentation/manual
 Documentation/manual/loko.pdf: Documentation/manual/*.texi Documentation/manual/version.texi
 	cd Documentation/manual && texi2pdf loko.texi
 
-Documentation/manual/version.texi: Documentation/manual/mkversion.sps loko
+Documentation/manual/version.texi: Documentation/manual/mkversion.sps loko Akku.manifest
 	cd Documentation/manual && ../../.akku/env ../../loko --program mkversion.sps
 
 samples:: loko
