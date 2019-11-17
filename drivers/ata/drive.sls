@@ -10,9 +10,30 @@
     driver·ata·drive)
   (import
     (rnrs (6))
-    (loko system fibers))
+    (loko match)
+    (loko system fibers)
+    (loko drivers ata core)
+    (loko drivers storage))
 
-(define (driver·ata·drive dev identify)
+(define (!? atadev msg)
+  (let ((resp-ch (make-channel)))
+    (put-message (ata-device-channel atadev) (cons resp-ch msg))
+    (get-message resp-ch)))
+
+(define (driver·ata·drive atadev storage)
+  ;; (write (!? atadev (ata-READ-DMA atadev 0 1)))
+  ;; (newline)
+  ;;(write (!? atadev (ata-READ-SECTORS dev 0 1)))
+
   (let lp ()
-    (sleep 1)
+    (match (get-message (storage-device-request-channel storage))
+      [('read resp-ch lba sectors)
+       ;; FIXME: the device might not support DMA?
+       (write (list lba sectors))
+       (newline)
+       (match (!? atadev (ata-READ-DMA atadev lba sectors))
+         [('ok resp data)
+          (put-message resp-ch (list 'ok data))]
+         [((or 'ata-error 'error) resp)
+          (put-message resp-ch (list 'error #f))])])
     (lp))))

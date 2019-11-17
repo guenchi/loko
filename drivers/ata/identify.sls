@@ -28,11 +28,12 @@
     ata-identify:queue-depth
     ata-identify:major-revision
     ata-identify:supported-command-set
-    ata:identify:sector-size)
+    ata-identify:sector-size
+
+    ;; ATAPI-specific
+    ata-identify:atapi-dmadir-required?)
   (import
-    (rnrs (6))
-    (loko match)
-    (loko system fibers))
+    (rnrs (6)))
 
 (define (copy-identify-string source start length)
   (define (bytevector-swab-u16! source source-start target target-start k)
@@ -166,7 +167,7 @@
              (if (fxbit-set? x 1) '(feature:TCQ) '())))))
 
 ;; Returns logical and physical sector sizes.
-(define (ata:identify:sector-size block)
+(define (ata-identify:sector-size block)
   (let ((x (word-ref block 106)))
     (if (not (and (fxbit-set? x 14) (not (fxbit-set? x 15))))
         (values 512 512)
@@ -178,4 +179,8 @@
                    512)))
           (if (fxbit-set? x 13)
               (values logical-size (fx* logical-size multiple))
-              (values logical-size logical-size)))))))
+              (values logical-size logical-size))))))
+
+;; PACKET commands either require or shouldn't use the DMADIR bit
+(define (ata-identify:atapi-dmadir-required? block)
+  (word-bit-set? block 62 15)))

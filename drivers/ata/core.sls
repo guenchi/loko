@@ -16,6 +16,16 @@
     ata-device-controller
     ata-device-channel
     ata-device-identify-block
+    ata-device-logical-sector-size
+
+    ;; Commands
+    ata-FLUSH-CACHE
+    ata-IDENTIFY-DEVICE
+    ata-IDENTIFY-PACKET-DEVICE
+    ata-PACKET/in
+    ata-READ-DMA
+    ata-READ-DMA-EXT
+    ata-READ-SECTORS
 
     ;; Flags in responses
     ata-error-ICRC
@@ -47,7 +57,7 @@
   (sealed #t)
   (fields
    ;; Notifications from the controller driver:
-   ;; ('new-channel . channel)
+   ;; ('new-device . channel)
    notify-channel)
   (protocol
    (lambda (p)
@@ -56,44 +66,42 @@
 
 (define-record-type ata-device
   (sealed #t)
-  (fields class                         ;ata or atapi
-          controller
+  (fields controller
           channel
           identify-block
           logical-sector-size)          ;512 (but can be 520, 528)
   (protocol
    (lambda (p)
      (lambda (controller channel identify-block)
-       (let-values ([(logical _physical) (ata:identify:sector-size identify-block)])
+       (let-values ([(logical _physical) (ata-identify:sector-size identify-block)])
          (p controller channel identify-block logical))))))
 
 ;; Probe an ATA/ATAPI device to see what lurks behinds the surface.
 ;; Either an ATA disk or some SCSI device behind ATAPI.
 (define (probe·ata channel)
-  (let ((resp-ch (make-channel)))
-    (put-message channel (cons resp-ch (ata-IDENTIFY-DEVICE)))
-    (match (get-message resp-ch)
-      [('ok resp data)
-       (cons 'ata data)]
-      [('error #(_error count lba status))
-       ;; Check for the PACKET feature set signature
-       (cond ((and (eqv? (fxbit-field count 0 8) #x01)
-                   (eqv? (fxbit-field lba 0 24) #xEB1401))
-              (put-message channel (cons resp-ch (ata-IDENTIFY-PACKET-DEVICE)))
-              (match (get-message resp-ch)
-                [('ok resp data)
-                 (cons 'atapi data)]
-                [('error err)
-                 (list 'unknown-device count lba)]))
-             (else
-              (if (eqv? status 0)
-                  'no-device
-                  (list 'unknown-device count lba))))])))
-
-(define (!? dev msg)
-  (let ((resp-ch (make-channel)))
-    (put-message (ata-device-channel dev) (cons resp-ch msg))
-    (get-message resp-ch)))
+  (define (!? ch msg)
+    (let ((resp-ch (make-channel)))
+      (put-message ch (cons resp-ch msg))
+      (get-message resp-ch)))
+  (match (!? channel (ata-IDENTIFY-DEVICE))
+    [('ok resp data)
+     (cons 'ata data)]
+    [('ata-error #(_error count lba status) . _)
+     ;; Check for the PACKET feature set signature. The actual
+     ;; signature is more detailed than this, but real hardware
+     ;; exists where this is the only part of the signature.
+     (cond ((eqv? (fxbit-field lba 8 24) #xEB14)
+            (match (!? channel (ata-IDENTIFY-PACKET-DEVICE))
+              [('ok resp data)
+               (cons 'atapi data)]
+              [('error err)
+               (list 'unknown-device count lba)]))
+           (else
+            (if (eqv? status 0)
+                'no-device
+                (list 'unknown-device count lba))))]
+    [('error . _)
+     (list 'unknown-device)]))
 
 ;; Flag definitions
 
@@ -131,6 +139,9 @@
 (define (make-inputs feature sector-count lba device command)
   (vector feature sector-count lba device command))
 
+(define (make-cmd-dev-diag inputs)
+  (list '(dev-diag) inputs))
+
 (define (make-cmd-non-data inputs)
   (list '(non-data) inputs))
 
@@ -146,23 +157,33 @@
 (define (make-cmd-dma-data-out bytevector inputs)
   (list (list 'dma-data-out bytevector) inputs))
 
-(define ata-cmd-flush-cache             #xE7)
-(define ata-cmd-identify-device         #xEC)
-(define ata-cmd-identify-packet-device  #xA1)
-(define ata-cmd-read-sectors            #x20)
-(define ata-cmd-read-dma                #xC8)
-(define ata-cmd-read-dma-ext            #x25)
-(define ata-cmd-set-features            #xEF)
-(define ata-cmd-set-multiple            #xC6)
-(define ata-cmd-write-dma               #xCA)
-(define ata-cmd-write-multiple          #xC3)
-(define ata-cmd-write-sectors           #x30)
+(define (make-cmd-packet-in scsi-cdb data-len inputs)
+  (assert (bytevector? scsi-cdb))
+  (assert (fixnum? data-len))
+  (list (list 'packet-in scsi-cdb data-len) inputs))
+
+(define (make-cmd-packet-out scsi-cdb bytevector inputs)
+  (assert (bytevector? scsi-cdb))
+  (assert (bytevector? bytevector))
+  (list (list 'packet-out scsi-cdb bytevector) inputs))
+
+(define ata-cmd-execute-device-diagnostics #x90)
+(define ata-cmd-flush-cache                #xE7)
+(define ata-cmd-identify-device            #xEC)
+(define ata-cmd-identify-packet-device     #xA1)
+(define ata-cmd-packet                     #xA0)
+(define ata-cmd-read-dma                   #xC8)
+(define ata-cmd-read-dma-ext               #x25)
+(define ata-cmd-read-sectors               #x20)
+(define ata-cmd-set-features               #xEF)
+(define ata-cmd-set-multiple               #xC6)
+(define ata-cmd-write-dma                  #xCA)
+(define ata-cmd-write-multiple             #xC3)
+(define ata-cmd-write-sectors              #x30)
 
 ;;; The general feature set
 
-;; ata-EXECUTE-DEVICE-DIAGNOSTICS
-
-(define (ata-FLUSH-CACHE _dev)
+(define (ata-FLUSH-CACHE)
   (make-cmd-non-data (make-inputs 0 0 0 0 ata-cmd-flush-cache)))
 
 (define (ata-IDENTIFY-DEVICE)
@@ -203,7 +224,13 @@
 
 ;;; Extra commans for the PACKET feature set
 
-;; ata-PACKET
+(define (ata-PACKET/in dev scsi-cdb data-len)
+  ;; XXX: This is DMA-only for now
+  (let ((feature (if (ata-identify:atapi-dmadir-required? (ata-device-identify-block dev))
+                     #b101 #b001)))
+    (make-cmd-packet-in scsi-cdb data-len
+                        (make-inputs feature 0 0 0 ata-cmd-packet))))
+
 ;; ata-DEVICE-RESET
 
 (define (ata-IDENTIFY-PACKET-DEVICE)
@@ -213,15 +240,14 @@
 
 ;; FLUSH CACHE EXT
 
-(define (ata-READ-DMA-EXT dev bufs lba sector-count)
-  (assert (fx<=? 1 sector-count 65536))
+(define (ata-READ-DMA-EXT dev lba sectors)
+  (assert (fx<=? 1 sectors 65536))
   (assert (eqv? lba (fxbit-field lba 0 48)))
-  (assert (for-all pair? bufs))
-  (let ((sector-count (if (eqv? sector-count 65536) 0 sector-count)))
-    (list 'dma-in bufs
-          (make-inputs 0 sector-count lba
-                       (fxarithmetic-shift-left ata-device-LBA 8)
-                       ata-cmd-read-dma-ext))))
+  (let ((sector-count (if (eqv? sectors 65536) 0 sectors)))
+    (make-cmd-dma-data-in (fx* sectors (ata-device-logical-sector-size dev))
+                          (make-inputs 0 sector-count lba
+                                       (fxarithmetic-shift-left ata-device-LBA 8)
+                                       ata-cmd-read-dma-ext))))
 
 ;; READ DMA QUEUED EXT
 ;; READ MULTIPLE EXT

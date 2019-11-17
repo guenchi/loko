@@ -39,11 +39,16 @@
   (define compat-control-1 #x376)
   (define compat-irq-1 15)
   (define (maybe-base BARs i)
-    (cond ((vector-ref BARs i) => pcibar-base)
+    (cond ((vector-ref BARs i) =>
+           (lambda (BAR)
+             (let ((base (pcibar-base BAR)))
+               (if (eqv? base 0)
+                   #f
+                   base))))
           (else #f)))
   (let* ((interface (pcidev-interface dev))
          (BARs (pcidev-BARs dev))
-         (irq (if (eqv? (pcidev-irq dev) 0) #f (pcidev-irq dev)))
+         (irq (if (memv (pcidev-irq dev) '(0 255)) #f (pcidev-irq dev)))
          ;; True if the channel is in compat mode
          (compat-0 (not (fxbit-set? interface 0)))
          (compat-1 (not (fxbit-set? interface 2))))
@@ -63,14 +68,6 @@
                                    (else #f))
                              (or irq (and compat-1 compat-irq-1))
                              channel-2 channel-3)))
-
-        (when DEBUG
-          (display "Primary IDE channel: ")
-          (write primary)
-          (newline)
-          (display "Secondary IDE channel: ")
-          (write secondary)
-          (newline))
         (pci-ide-configure dev)
         ;; Start drivers for the channels. Tell whoever manages the
         ;; controller that these channels exist. The receiver will
@@ -79,19 +76,20 @@
         (when (for-all values primary)
           (spawn-fiber (lambda () (apply driver·ide primary)))
           (put-message (ata-controller-notify-channel controller)
-                       (cons 'new-channel channel-0))
+                       (cons 'new-device channel-0))
           (put-message (ata-controller-notify-channel controller)
-                       (cons 'new-channel channel-1)))
+                       (cons 'new-device channel-1)))
         (when (for-all values secondary)
           (spawn-fiber (lambda () (apply driver·ide secondary)))
           (put-message (ata-controller-notify-channel controller)
-                       (cons 'new-channel channel-2))
+                       (cons 'new-device channel-2))
           (put-message (ata-controller-notify-channel controller)
-                       (cons 'new-channel channel-3)))))))
+                       (cons 'new-device channel-3)))))))
 
 (define (pci-ide-configure dev)
   (pci-put-u16 dev PCI-CFG-COMMAND
-               (fxior (pci-get-u16 dev PCI-CFG-COMMAND)
+               (fxior (fxand (pci-get-u16 dev PCI-CFG-COMMAND)
+                             (fxnot PCI-CMD-INTERRUPT-DISABLE))
                       PCI-CMD-I/O-SPACE
                       #;PCI-CMD-MEM-SPACE
                       PCI-CMD-BUS-MASTER)))
@@ -106,7 +104,7 @@
          (eqv? 0 (fxand bmide-status-simplex-only (get-i/o-u8 reg-bmide-status)))
          #t))
 
-  (define command-timeout 1)
+  (define command-timeout 10)
 
 ;;; Command block registers
 
@@ -148,7 +146,7 @@
   (define reg-bmide-status         (and reg-bus-master-blk (fx+ reg-bus-master-blk 2)))
   (define reg-bmide-prd-table-addr (and reg-bus-master-blk (fx+ reg-bus-master-blk 4)))
 
-  (define bmide-command-write #b1000)   ;sets the write direction
+  (define bmide-command-write #b1000)   ;PCI bus master write
   (define bmide-command-start #b0001)   ;start bus master
 
   (define bmide-status-simplex-only        #b10000000) ;RO
@@ -171,10 +169,21 @@
   (define (reset)
     (put-i/o-u8 reg-ctl-device-control (fxior device-control-nIEN
                                               device-control-SRST))
-    (sleep-100ns 4)
-    (acknowledge-irq irq)
-    (enable-irq irq)
+    (sleep 1/1000)
     (put-i/o-u8 reg-ctl-device-control #x00))
+
+  (define (wait-for-ready)
+    ;; Wait for the channel to be ready. This can take forever if
+    ;; nothing is connected. FIXME: should return a timeout.
+    (let lp ((i 1000))
+      (cond ((eqv? i 0)
+             (sleep 10)
+             (lp 1000))
+            (else
+             (let ((status (get-i/o-u8 reg-cmd-status)))
+               (unless (status-ready? status)
+                 (sleep 10/1000)
+                 (lp (fx- i 1))))))))
 
   ;; Wait for an interrupt. IRQ sharing can mean that we wake up even
   ;; when the operation is not done. Returns #f if the drive is ready
@@ -188,13 +197,17 @@
                                                     (lambda _ 'timeout)))))
              (status (get-i/o-u8 reg-cmd-status)))
         (cond ((eqv? (fxand status ata-status-BSY) 0)
+               ;; (display (list x (get-i/o-u8 reg-bmide-status)))
+               ;; (newline)
                (when (and (eq? x 'timeout) (not (eqv? status 0)))
-                 (raise-continuable
-                    (condition
-                     (make-warning)
-                     (make-who-condition 'driver·ide)
-                     (make-message-condition "The ATA controller IRQ is not working")
-                     (make-irritants-condition (list drive-number)))))
+                 (display (list 'T status)) (newline)
+                 #;
+                 (write ;; raise-continuable
+                  (condition
+                   (make-warning)
+                   (make-who-condition 'driver·ide)
+                   (make-message-condition "The ATA controller IRQ is not working")
+                   (make-irritants-condition (list drive-number)))))
                #f)
               (else
                (if (eq? x 'irq)
@@ -203,24 +216,19 @@
 
   ;; Map ATA-8 ACS inputs to ATA8-APT
   (define (ide-send-command drive-number cmd)
-    (let ((status (get-i/o-u8 reg-cmd-status)))
-      (unless (status-ready? status)
-        (error 'send-command "Controller busy" status)))
+    (wait-for-ready)
     (acknowledge-irq irq)
     (match cmd
       [#(feature count lba device command)
-       (let ((device (fxarithmetic-shift-right device 8)))
-         ;; TODO: Does this need a delay?
-         (let ((select (fxior (if (eqv? drive-number 0) 0 ata-device-DRV)
-                              (fxand device (fxnot ata-device-DRV))
-                              ata-device-obs
-                              (if (eqv? 0 (fxand device ata-device-LBA))
-                                  0
-                                  (fxbit-field lba 24 28)))))
-           (display (list 'drive drive-number select))
-           (newline)
-           (put-i/o-u8 reg-cmd-device select)
-           (sleep-100ns 4)))
+       (let* ((device (fxarithmetic-shift-right device 8))
+              (device (fxior (if (eqv? drive-number 0) 0 ata-device-DRV)
+                             (fxand device (fxnot ata-device-DRV))
+                             ata-device-obs
+                             (if (eqv? 0 (fxand device ata-device-LBA))
+                                 0
+                                 (fxbit-field lba 24 28)))))
+         (put-i/o-u8 reg-cmd-device device)
+         (sleep-100ns 4))
        (put-i/o-u8 reg-cmd-feature (fxbit-field feature 8 16))
        (put-i/o-u8 reg-cmd-feature (fxbit-field feature 0 8))
        (put-i/o-u8 reg-cmd-count (fxbit-field count 8 16))
@@ -274,7 +282,7 @@
           (cond
             ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
              ;; Some kind of error
-             (list 'error (ide-read-response)))
+             (list 'ata-error (ide-read-response)))
 
             ((not (eqv? (fxand status ata-status-DRQ) 0))
              ;; Data is ready to read
@@ -288,7 +296,7 @@
 
             (else
              ;; No drive, probably
-             (list 'error (ide-read-response))))))))
+             (list 'ata-error (ide-read-response))))))))
 
   ;; IDE bus master.
 
@@ -305,7 +313,7 @@
 
   ;; Writes a Physical Region Descriptor (PRD) to the PRD table
   (define (bmide-write-prd idx base-address byte-count eot?)
-    (assert reg-bmide-prd-table-addr)
+    (assert has-bmide?)
     (assert (fx<? -1 idx num-prd))
     (assert (eqv? 0 (fxand base-address 1)))
     (assert (eqv? 0 (fxand byte-count 1)))
@@ -317,7 +325,7 @@
 
   ;; Prepare a DMA transfer by filling in the scatter/gather bufs (PRD)
   (define (bmide-prepare-transfer bufs direction)
-    (assert reg-bmide-prd-table-addr)
+    (assert has-bmide?)
     ;; Fill in the PRD table
     (let lp ((idx 0) (bufs bufs))
       (let ((desc (car bufs)) (bufs (cdr bufs)))
@@ -325,14 +333,10 @@
         (unless (null? bufs)
           (lp (fx+ idx 1) bufs))))
     (put-i/o-u32 reg-bmide-prd-table-addr &prdt)
-    (bmide-clear)
-    (put-i/o-u8 reg-bmide-command
-                (case direction
-                  ((read) 0)
-                  ((write) bmide-command-write))))
+    (bmide-clear))
 
   (define (bmide-perform drive-number bufs direction)
-    (assert reg-bmide-prd-table-addr)
+    (assert has-bmide?)
     (put-i/o-u8 reg-bmide-command
                 (case direction
                   ((read) bmide-command-start)
@@ -341,26 +345,25 @@
     (let lp ()
       (match (wait-irq drive-number)
         [('error 'timeout)
-         ;; Timed out. Stop the bus master operation.
          (put-i/o-u8 reg-bmide-command 0)
          (list 'error 'timeout)]
-        [else
+        [_
          (let ((bmide-status (get-i/o-u8 reg-bmide-status)))
-           (cond ((eqv? 0 (fxand bmide-status-ACT bmide-status))
-                  ;; Bus mastering is still going on. Spurious wakeup.
-                  (lp))
-                 (else
-                  (put-i/o-u8 reg-bmide-command 0)
-                  (let ((status (get-i/o-u8 reg-cmd-status))
-                        (resp (ide-read-response)))
-                    (cond
-                      ((not (eqv? (fxand status ata-status-BSY) 0))
-                       ;; Spurious wakeup
-                       (lp))
-                      ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
-                       (list 'error resp))
-                      (else
-                       (list 'ok resp)))))))])))
+           (cond
+             ((not (eqv? (fxand bmide-status-ACT bmide-status) 0))
+              ;; Bus mastering is still going on. Probably sent a
+              ;; command that didn't transfer anything.
+              (put-i/o-u8 reg-bmide-command 0)
+              (list 'ata-error (ide-read-response) 'bus-master-timeout))
+             (else
+              (put-i/o-u8 reg-bmide-command 0)
+              (let* ((status (get-i/o-u8 reg-cmd-status))
+                     (resp (ide-read-response)))
+                (cond
+                  ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
+                   (list 'ata-error resp))
+                  (else
+                   (list 'ok resp)))))))])))
 
   (define (bmide-clear)
     (when has-bmide?
@@ -369,22 +372,22 @@
                                   bmide-status-drive-0-dma-capable))))
         ;; Clear the RW/C bits, keep the capability bits
         (put-i/o-u8 reg-bmide-status
-                    (fxior status
-                           bmide-status-PRDIS
-                           bmide-status-interrupt
-                           bmide-status-error))
+                    (fxior status bmide-status-PRDIS
+                           bmide-status-interrupt bmide-status-error))
         (put-i/o-u8 reg-bmide-command 0))))
 
   (define (ide-protocol-dma drive-number bufs direction cmd)
+    ;; XXX: The direction is from the point of view of the device
     (assert reg-bmide-prd-table-addr)
     (bmide-prepare-transfer bufs bufs)
     (ide-send-command drive-number cmd)
-    (bmide-perform 0 bufs direction))
+    (bmide-perform drive-number bufs direction))
 
   (define bounce-length 4096)
   (define &buf (dma-allocate bounce-length #xfffff000))
 
-  (reset)
+  (bmide-clear)
+  (enable-irq irq)
 
   ;; TODO: The response should probably be sent in the choice-operation
   (let lp ()
@@ -394,33 +397,79 @@
              (wrap-operation (get-operation channel-0) (lambda (x) (cons 0 x)))
              (wrap-operation (get-operation channel-1) (lambda (x) (cons 1 x)))))
 
-      [(drive-number resp-ch ('pio-data-in data-len) (? vector? cmd))
-       (ide-send-command drive-number cmd)
-       (put-message resp-ch (pio-data-in drive-number data-len))
-       (lp)]
-
       [(drive-number resp-ch ('dma-data-in data-len) (? vector? cmd))
        (cond
          ((not has-bmide?)
           (put-message resp-ch (list 'error 'dma-not-supported)))
-         ((not (fx<? data-len bounce-length))
+         ((not (fx<=? 0 data-len bounce-length))
           (put-message resp-ch (list 'error 'request-too-large)))
          (else
           (let* ((bufs (list (cons &buf data-len)))
                  (result
-                  (match (ide-protocol-dma drive-number bufs 'read cmd)
+                  (match (ide-protocol-dma drive-number bufs 'write cmd)
                     [('ok resp)
                      (list 'ok resp
-                           (map (lambda (buf/len)
-                                  (let ((buf (car buf/len)))
-                                    (let ((ret (make-bytevector (cdr buf/len))))
-                                      (do ((i 0 (fx+ i 4)))
-                                          ((fx=? i (cdr buf/len)))
-                                        (bytevector-u32-native-set! ret i (get-mem-u32 (fx+ buf i))))
-                                      ret)))
-                                bufs))]
+                           (let ((ret (make-bytevector data-len)))
+                             (do ((i 0 (fx+ i 4)))
+                                 ((fx=? i data-len))
+                               (bytevector-u32-native-set! ret i (get-mem-u32 (fx+ &buf i))))
+                             ret))]
                     [x x])))
             (put-message resp-ch result))))
+       (lp)]
+
+      [(drive-number resp-ch ('packet-in cdb data-len) (? vector? cmd))
+       (cond
+         ((not has-bmide?)
+          (put-message resp-ch (list 'error 'dma-not-supported)))
+         ((not (fx<=? 0 data-len bounce-length))
+          (put-message resp-ch (list 'error 'request-too-large)))
+         (else
+          (let ((bufs (list (cons &buf bounce-length))))
+            (bmide-prepare-transfer bufs bufs)
+            ;; Send the ATA command
+            (match cmd
+              [#(feature sector-count lba device command)
+               (let* ((feature (fxior feature #b1)) ;DMA
+                      (cmd (vector feature 0 0 0 command)))
+                 (ide-send-command drive-number cmd))])
+            ;; Poll for BSY to go away
+            (do () ((eqv? 0 (fxand (get-i/o-u8 reg-cmd-status) ata-status-BSY)))
+              (yield-current-task))
+            ;; Poll for DRQ or ERR
+            (do () ((not (eqv? 0 (fxand (get-i/o-u8 reg-cmd-status)
+                                        (fxior ata-status-DRQ ata-status-ERR)))))
+              (yield-current-task))
+            (let ((status (get-i/o-u8 reg-cmd-status)))
+              (cond
+                ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
+                 (put-message resp-ch (list 'ata-error (ide-read-response))))
+                (else
+                 ;; Send the SCSI CDB ("ATAPI Packet")
+                 (let ((atapi-packet (make-bytevector 12 0)))
+                   (bytevector-copy! cdb 0 atapi-packet 0 (fxmin 12 (bytevector-length cdb)))
+                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 0))
+                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 4))
+                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 8)))
+                 ;; And finally start DMA to receive the data to the
+                 ;; bounce buffer
+                 (let* ((result
+                         ;; XXX: direction
+                         (match (bmide-perform drive-number bufs 'write)
+                           [('ok resp)
+                            (list 'ok resp
+                                  (let ((ret (make-bytevector data-len)))
+                                    (do ((i 0 (fx+ i 1)))
+                                        ((fx=? i data-len))
+                                      (bytevector-u8-set! ret i (get-mem-u8 (fx+ &buf i))))
+                                    ret))]
+                           [x x])))
+                   (put-message resp-ch result))))))))
+       (lp)]
+
+      [(drive-number resp-ch ('pio-data-in data-len) (? vector? cmd))
+       (ide-send-command drive-number cmd)
+       (put-message resp-ch (pio-data-in drive-number data-len))
        (lp)]
 
       [(drive-number resp-ch protocol cmd)

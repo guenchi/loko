@@ -13,47 +13,54 @@
     open-storage-device)
   (import
     (rnrs (6))
+    (loko match)
     (loko system fibers))
 
 (define-record-type storage-device
-  (fields request-channel)
+  (sealed #t)
+  (fields request-channel
+          logical-sector-size)
   (protocol
    (lambda (p)
-     (lambda ()
-       (p (make-channel))))))
+     (lambda (logical-sector-size)
+       (p (make-channel)
+          logical-sector-size)))))
 
-(define (open-storage-device storage-device block-length)
+(define (open-storage-device id storage-device)
   (define lba 0)
+  (define logical-sector-size
+    (storage-device-logical-sector-size storage-device))
   (define (read! bytevector start count)
-    (let-values ([(blocks error) (div-and-mod count 512)])
+    (let-values ([(blocks error) (fxdiv-and-mod count logical-sector-size)])
       (unless (eqv? error 0)
         (assertion-violation 'read!
                              "Expected a multiple of the block length" count))
       (do ((i 0 (fx+ i 1)))
           ((fx=? i blocks))
-        (let ((ch (make-channel)))
+        (let ((resp-ch (make-channel)))
           (put-message (storage-device-request-channel storage-device)
-                       (list 'read ch lba 1))
-          (let ((resp (get-message ch)))
-            (assert (eq? (car resp) 'ok))
-            (let ((data (cdr resp)))
-              (unless (eqv? (bytevector-length data) 512)
-                (error 'read! "Bad data length from storage device"
-                       (bytevector-length data)))
-              (bytevector-copy! data 0 bytevector (fx+ start (fx* i block-length))
-                                (bytevector-length data))))))
+                       (list 'read resp-ch lba 1))
+          (match (get-message resp-ch)
+            [('ok data)
+             (unless (eqv? (bytevector-length data) logical-sector-size)
+               (error 'read! "Bad data length from storage device"
+                      (bytevector-length data)))
+             (bytevector-copy! data 0 bytevector
+                               (fx+ start (fx* i logical-sector-size))
+                               (bytevector-length data))]
+            [('error _)
+             (error 'read! "Error from storage device")])))
       (set! lba (fx+ lba blocks))
-      (fx* blocks 512)))
+      (fx* blocks logical-sector-size)))
   (define (get-position)
-    (* lba 512))
+    (fx* lba logical-sector-size))
   (define (set-position! pos)
-    (let-values ([(lba^ error) (div-and-mod pos 512)])
+    (let-values ([(lba^ error) (fxdiv-and-mod pos logical-sector-size)])
       (unless (eqv? error 0)
         (assertion-violation 'set-position!
-                             "Expected a multiple of the block length"
-                             pos block-length))
+                             "Expected a multiple of the logical sector length"
+                             pos))
       (set! lba lba^)))
   (define (close)
     #f)
-  (assert (eqv? block-length 512))
-  (make-custom-binary-input-port "usb" read! get-position set-position! close)))
+  (make-custom-binary-input-port id read! get-position set-position! close)))
