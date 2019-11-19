@@ -21,19 +21,28 @@
     (get-message resp-ch)))
 
 (define (driver·ata·drive atadev storage)
-  ;; (write (!? atadev (ata-READ-DMA atadev 0 1)))
-  ;; (newline)
-  ;;(write (!? atadev (ata-READ-SECTORS dev 0 1)))
-
+  (define sector-size (storage-device-logical-sector-size storage))
   (let lp ()
     (match (get-message (storage-device-request-channel storage))
-      [('read resp-ch lba sectors)
-       ;; FIXME: the device might not support DMA?
-       (write (list lba sectors))
-       (newline)
-       (match (!? atadev (ata-READ-DMA atadev lba sectors))
+      [(resp-ch 'read lba sectors)
+       (match (!? atadev (if (fx<? lba (expt 2 28))
+                             (ata-READ-DMA atadev lba sectors)
+                             (ata-READ-DMA-EXT atadev lba sectors)))
          [('ok resp data)
           (put-message resp-ch (list 'ok data))]
-         [((or 'ata-error 'error) resp)
-          (put-message resp-ch (list 'error #f))])])
+         [((or 'ata-error 'error) . resp)
+          (put-message resp-ch (list 'error #f))])]
+
+      [(resp-ch 'write lba data)
+       (let ((sectors (fxdiv (bytevector-length data) sector-size)))
+         (match (!? atadev (if (fx<? lba (expt 2 28))
+                               (ata-WRITE-DMA atadev lba sectors data)
+                               (ata-WRITE-DMA-EXT atadev lba sectors data)))
+           [('ok resp)
+            (put-message resp-ch (list 'ok))]
+           [((or 'ata-error 'error) . resp)
+            (put-message resp-ch (list 'error #f))]))]
+
+      [(resp-ch . _)
+       (put-message resp-ch (list 'error 'unknown-request))])
     (lp))))

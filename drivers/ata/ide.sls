@@ -174,7 +174,8 @@
 
   (define (wait-for-ready)
     ;; Wait for the channel to be ready. This can take forever if
-    ;; nothing is connected. FIXME: should return a timeout.
+    ;; nothing is connected. FIXME: should give up and report that
+    ;; there's nothing connected.
     (let lp ((i 1000))
       (cond ((eqv? i 0)
              (sleep 10)
@@ -197,8 +198,6 @@
                                                     (lambda _ 'timeout)))))
              (status (get-i/o-u8 reg-cmd-status)))
         (cond ((eqv? (fxand status ata-status-BSY) 0)
-               ;; (display (list x (get-i/o-u8 reg-bmide-status)))
-               ;; (newline)
                (when (and (eq? x 'timeout) (not (eqv? status 0)))
                  (display (list 'T status)) (newline)
                  #;
@@ -344,7 +343,7 @@
                                   bmide-command-start))))
     (let lp ()
       (match (wait-irq drive-number)
-        [('error 'timeout)
+        ['(error timeout)
          (put-i/o-u8 reg-bmide-command 0)
          (list 'error 'timeout)]
         [_
@@ -418,6 +417,22 @@
             (put-message resp-ch result))))
        (lp)]
 
+      [(drive-number resp-ch ('dma-data-out (? bytevector? data)) (? vector? cmd))
+       (cond
+         ((not has-bmide?)
+          (put-message resp-ch (list 'error 'dma-not-supported)))
+         ((not (fx<=? 0 (bytevector-length data) bounce-length))
+          (put-message resp-ch (list 'error 'request-too-large)))
+         (else
+          ;; Copy the data to the bounce buffer
+          (let* ((data-len (bytevector-length data))
+                 (bufs (list (cons &buf data-len))))
+            (do ((i 0 (fx+ i 4)))
+                ((fx=? i data-len))
+              (put-mem-u32 (fx+ &buf i) (bytevector-u32-native-ref data i)))
+            (put-message resp-ch (ide-protocol-dma drive-number bufs 'read cmd)))))
+       (lp)]
+
       [(drive-number resp-ch ('packet-in cdb data-len) (? vector? cmd))
        (cond
          ((not has-bmide?)
@@ -454,7 +469,6 @@
                  ;; And finally start DMA to receive the data to the
                  ;; bounce buffer
                  (let* ((result
-                         ;; XXX: direction
                          (match (bmide-perform drive-number bufs 'write)
                            [('ok resp)
                             (list 'ok resp
@@ -466,6 +480,7 @@
                            [x x])))
                    (put-message resp-ch result))))))))
        (lp)]
+      ;; TODO: packet-out (for writing to the drive) and packet over PIO
 
       [(drive-number resp-ch ('pio-data-in data-len) (? vector? cmd))
        (ide-send-command drive-number cmd)

@@ -1,5 +1,6 @@
 SUBDIRS = \
   etherdump \
+  driveinfo \
   hello \
   lspci \
   lsusb \

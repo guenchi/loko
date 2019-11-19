@@ -16,7 +16,6 @@
     ata-device-controller
     ata-device-channel
     ata-device-identify-block
-    ata-device-logical-sector-size
 
     ;; Commands
     ata-FLUSH-CACHE
@@ -26,6 +25,8 @@
     ata-READ-DMA
     ata-READ-DMA-EXT
     ata-READ-SECTORS
+    ata-WRITE-DMA
+    ata-WRITE-DMA-EXT
 
     ;; Flags in responses
     ata-error-ICRC
@@ -73,7 +74,7 @@
   (protocol
    (lambda (p)
      (lambda (controller channel identify-block)
-       (let-values ([(logical _physical) (ata-identify:sector-size identify-block)])
+       (let-values ([(logical _physical) (ata-identify:ata-sector-size identify-block)])
          (p controller channel identify-block logical))))))
 
 ;; Probe an ATA/ATAPI device to see what lurks behinds the surface.
@@ -178,6 +179,7 @@
 (define ata-cmd-set-features               #xEF)
 (define ata-cmd-set-multiple               #xC6)
 (define ata-cmd-write-dma                  #xCA)
+(define ata-cmd-write-dma-ext              #x35)
 (define ata-cmd-write-multiple             #xC3)
 (define ata-cmd-write-sectors              #x30)
 
@@ -212,7 +214,16 @@
 ;; ata-READ-VERIFY-SECTORS
 ;; ata-SET-FEATURES
 ;; ata-SET-MULTIPLE-MODE
-;; ata-WRITE-DMA
+
+(define (ata-WRITE-DMA dev lba sectors data)
+  (assert (fx<=? 1 sectors 65536))
+  (assert (eqv? lba (fxbit-field lba 0 28)))
+  (let ((sector-count (if (eqv? sectors 65536) 0 sectors)))
+    (make-cmd-dma-data-out data
+                           (make-inputs 0 sector-count lba
+                                        (fxarithmetic-shift-left ata-device-LBA 8)
+                                        ata-cmd-write-dma))))
+
 ;; ata-WRITE-MULTIPLE
 ;; ata-WRITE-SECTORS
 
@@ -255,7 +266,16 @@
 ;; READ SECTOR(S) EXT
 ;; READ VERIFY SECTOR(S) EXT
 ;; SET MAX ADDRESS EXT
-;; WRITE DMA EXT
+
+(define (ata-WRITE-DMA-EXT dev lba sectors data)
+  (assert (fx<=? 1 sectors 65536))
+  (assert (eqv? lba (fxbit-field lba 0 48)))
+  (let ((sector-count (if (eqv? sectors 65536) 0 sectors)))
+    (make-cmd-dma-data-out sector-count data
+                           (make-inputs 0 sector-count lba
+                                        (fxarithmetic-shift-left ata-device-LBA 8)
+                                        ata-cmd-write-dma-ext))))
+
 ;; WRITE DMA FUA EXT
 ;; WRITE DMA QUEUED EXT
 ;; WRITE DMA QUEUED FUA EXT

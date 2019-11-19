@@ -14,24 +14,26 @@
 (library (loko drivers ata identify)
   (export
     ata-identify:ata-device?
+    ata-identify:atapi-device?
     ata-identify:serial-number
     ata-identify:firmware-revision
     ata-identify:model-number
-    ata-identify:total-sectors
-    ata-identify:max-sectors-per-interrupt
-    ata-identify:iordy-supported?
-    ata-identify:can-disable-iordy?
-    ata-identify:lba-supported?
     ata-identify:dma-supported?
-    ata-identify:current-sectors-per-interrupt
     ata-identify:selected-dma
-    ata-identify:queue-depth
     ata-identify:major-revision
     ata-identify:supported-command-set
-    ata-identify:sector-size
+
+    ;; ATA-specific
+    ata-identify:ata-total-sectors
+    ata-identify:ata-lba-supported?
+    ata-identify:ata-max-sectors-per-interrupt
+    ata-identify:ata-current-sectors-per-interrupt
+    ata-identify:ata-sector-size
+    ata-identify:ata-queue-depth
 
     ;; ATAPI-specific
-    ata-identify:atapi-dmadir-required?)
+    ata-identify:atapi-dmadir-required?
+    ata-identify:atapi-packet-length)
   (import
     (rnrs (6)))
 
@@ -61,6 +63,9 @@
 (define (ata-identify:ata-device? block)
   (not (word-bit-set? block 0 15)))
 
+(define (ata-identify:atapi-device? block)
+  (eqv? #b10 (fxbit-field (word-ref block 0) 14 16)))
+
 (define (ata-identify:serial-number block)
   (copy-identify-string block 10 20))
 
@@ -70,7 +75,7 @@
 (define (ata-identify:model-number block)
   (copy-identify-string block 27 40))
 
-(define (ata-identify:total-sectors block)
+(define (ata-identify:ata-total-sectors block)
   (let ((number-sectors-legacy (fxior (fxarithmetic-shift-left (word-ref block 57) 16)
                                       (word-ref block 58)))
         (number-sectors-32 (bitwise-ior (bitwise-arithmetic-shift-left (word-ref block 61) 16)
@@ -90,25 +95,19 @@
           (else 0))))
 
 ;; Sectors per DRQ data block for READ and WRITE MULTIPLE
-(define (ata-identify:max-sectors-per-interrupt block)
+(define (ata-identify:ata-max-sectors-per-interrupt block)
   (let ((words (word-ref block 47)))
     (if (fxbit-set? words 15)
         (fxbit-field words 0 8)
         1)))
 
-(define (ata-identify:iordy-supported? block)
-  (word-bit-set? block 49 11))
-
-(define (ata-identify:can-disable-iordy? block)
-  (word-bit-set? block 49 10))
-
-(define (ata-identify:lba-supported? block)
+(define (ata-identify:ata-lba-supported? block)
   (word-bit-set? block 49 9))
 
 (define (ata-identify:dma-supported? block)
   (word-bit-set? block 49 8))
 
-(define (ata-identify:current-sectors-per-interrupt block)
+(define (ata-identify:ata-current-sectors-per-interrupt block)
    (let ((words (word-ref block 59)))
      (if (fxbit-set? words 8)
          (fxbit-field words 0 8)
@@ -132,7 +131,7 @@
               ((fxbit-set? mdma 8) 'mdma0)
               (else #f)))))
 
-(define (ata-identify:queue-depth block)
+(define (ata-identify:ata-queue-depth block)
   (fx+ 1 (fxbit-field (word-ref block 75) 0 5)))
 
 (define (ata-identify:major-revision block)
@@ -167,7 +166,7 @@
              (if (fxbit-set? x 1) '(feature:TCQ) '())))))
 
 ;; Returns logical and physical sector sizes.
-(define (ata-identify:sector-size block)
+(define (ata-identify:ata-sector-size block)
   (let ((x (word-ref block 106)))
     (if (not (and (fxbit-set? x 14) (not (fxbit-set? x 15))))
         (values 512 512)
@@ -183,4 +182,10 @@
 
 ;; PACKET commands either require or shouldn't use the DMADIR bit
 (define (ata-identify:atapi-dmadir-required? block)
-  (word-bit-set? block 62 15)))
+  (word-bit-set? block 62 15))
+
+(define (ata-identify:atapi-packet-length block)
+  (case (fxbit-field (word-ref block 0) 0 2)
+    ((#b00) 12)
+    ((#b01) 16)
+    (else #f))))

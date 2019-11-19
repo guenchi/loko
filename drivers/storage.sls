@@ -8,7 +8,9 @@
 (library (loko drivers storage)
   (export
     make-storage-device
+    storage-device-name
     storage-device-request-channel
+    storage-device-logical-sector-size
 
     open-storage-device)
   (import
@@ -18,18 +20,20 @@
 
 (define-record-type storage-device
   (sealed #t)
-  (fields request-channel
+  (fields name
+          request-channel
           logical-sector-size)
   (protocol
    (lambda (p)
-     (lambda (logical-sector-size)
-       (p (make-channel)
+     (lambda (name logical-sector-size)
+       (p name (make-channel)
           logical-sector-size)))))
 
-(define (open-storage-device id storage-device)
+(define (open-storage-device storage-device)
   (define lba 0)
   (define logical-sector-size
     (storage-device-logical-sector-size storage-device))
+  (define id (storage-device-name storage-device))
   (define (read! bytevector start count)
     (let-values ([(blocks error) (fxdiv-and-mod count logical-sector-size)])
       (unless (eqv? error 0)
@@ -39,7 +43,7 @@
           ((fx=? i blocks))
         (let ((resp-ch (make-channel)))
           (put-message (storage-device-request-channel storage-device)
-                       (list 'read resp-ch lba 1))
+                       (list resp-ch 'read lba 1))
           (match (get-message resp-ch)
             [('ok data)
              (unless (eqv? (bytevector-length data) logical-sector-size)
@@ -48,7 +52,7 @@
              (bytevector-copy! data 0 bytevector
                                (fx+ start (fx* i logical-sector-size))
                                (bytevector-length data))]
-            [('error _)
+            [('error . _)
              (error 'read! "Error from storage device")])))
       (set! lba (fx+ lba blocks))
       (fx* blocks logical-sector-size)))

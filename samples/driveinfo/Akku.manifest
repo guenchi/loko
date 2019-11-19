@@ -1,0 +1,9 @@
+#!r6rs ; -*- mode: scheme; coding: utf-8 -*-
+(import (akku format manifest))
+
+(akku-package ("loko-diskinfo" "0.0.0-alpha.0")
+  (synopsis "Loko sample that lists drive information")
+  (authors "Göran Weinholt")
+  (license "MIT")
+  (depends ("fs-fatfs" "^0.0.0-alpha.0"))
+)
