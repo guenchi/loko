@@ -461,11 +461,12 @@
                  (put-message resp-ch (list 'ata-error (ide-read-response))))
                 (else
                  ;; Send the SCSI CDB ("ATAPI Packet")
-                 (let ((atapi-packet (make-bytevector 12 0)))
-                   (bytevector-copy! cdb 0 atapi-packet 0 (fxmin 12 (bytevector-length cdb)))
-                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 0))
-                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 4))
-                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref atapi-packet 8)))
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 0))
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 4))
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 8))
+                 (when (eqv? (bytevector-length cdb) 16)
+                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 12)))
+
                  ;; And finally start DMA to receive the data to the
                  ;; bounce buffer
                  (let* ((result
@@ -481,6 +482,48 @@
                    (put-message resp-ch result))))))))
        (lp)]
       ;; TODO: packet-out (for writing to the drive) and packet over PIO
+
+      [(drive-number resp-ch ('packet-non-data cdb) (? vector? cmd))
+       (cond
+         ((not has-bmide?)
+          (put-message resp-ch (list 'error 'dma-not-supported)))
+         (else
+          (let ((bufs (list (cons &buf bounce-length))))
+            ;; Send the ATA command
+            (match cmd
+              [#(feature sector-count lba device command)
+               (let* ((feature (fxior feature #b1)) ;DMA
+                      (cmd (vector feature 0 0 0 command)))
+                 (ide-send-command drive-number cmd))])
+            ;; Poll for BSY to go away
+            (do () ((eqv? 0 (fxand (get-i/o-u8 reg-cmd-status) ata-status-BSY)))
+              (yield-current-task))
+            ;; Poll for DRQ or ERR
+            (do () ((not (eqv? 0 (fxand (get-i/o-u8 reg-cmd-status)
+                                        (fxior ata-status-DRQ ata-status-ERR)))))
+              (yield-current-task))
+            (let ((status (get-i/o-u8 reg-cmd-status)))
+              (cond
+                ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
+                 (put-message resp-ch (list 'ata-error (ide-read-response))))
+                (else
+                 ;; Send the SCSI CDB ("ATAPI Packet")
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 0))
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 4))
+                 (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 8))
+                 (when (eqv? (bytevector-length cdb) 16)
+                   (put-i/o-u32 reg-cmd-data (bytevector-u32-native-ref cdb 12)))
+
+                 ;; Wait for the response status
+                 (wait-irq drive-number)
+                 (let* ((status (get-i/o-u8 reg-cmd-status))
+                        (resp (ide-read-response)))
+                   (cond
+                     ((not (eqv? (fxand status (fxior ata-status-ERR ata-status-DF)) 0))
+                      (put-message resp-ch (list 'ata-error resp)))
+                     (else
+                      (put-message resp-ch (list 'ok resp)))))))))))
+       (lp)]
 
       [(drive-number resp-ch ('pio-data-in data-len) (? vector? cmd))
        (ide-send-command drive-number cmd)

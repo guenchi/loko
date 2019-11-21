@@ -1,4 +1,4 @@
-;; -*- mode: scheme; coding: utf-8 -*-;; -*- mode: scheme; coding: utf-8 -*-
+;; -*- mode: scheme; coding: utf-8 -*-
 ;; Copyright © 2019 Göran Weinholt <goran@weinholt.se>
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 #!r6rs
@@ -27,50 +27,47 @@
 (define SCSI-READ-10 #x28)
 
 (define (driver·ata·atapi atadev scsi-req-ch)
-  (define inq
-    (pack "!uCxxSx" SCSI-INQUIRE 36))
-  (define read-sector16
-    (let ((flags 0)
-          (blocks 1)
-          (LBA 16))
-      (pack "!uCCLxS" SCSI-READ-10 flags LBA blocks)))
   (define packet-length (ata-identify:atapi-packet-length
                          (ata-device-identify-block atadev)))
-
-  ;; FIXME: This driver should convert to 12/16 byte packets; not the
-  ;; transport driver
-
-  (match (!? atadev (ata-PACKET/in atadev inq 36))
-    [('ok resp inq-data)
-     (write (list 'ATAPI inq-data))
-     (newline)
-     (unless (eqv? (bytevector-u8-ref inq-data 0) 5)
-       (error 'driver·ata·atapi "Not a DVD/CD-ROM drive"))]
-    [((or 'ata-error 'error) . x)
-     (write (list 'ATAPI-error x))
-     (newline)])
-
-  (sleep 3)
-
-  (match (!? atadev (ata-PACKET/in atadev read-sector16 2048))
-    [('ok resp sector-data)
-     (write (list 'ATAPI-sector-16: (utf8->string sector-data)))
-     (newline)]
-    [('ata-error resp . _)
-     (write (list 'ATAPI-error resp))
-     (newline)
-     (match resp
-       [#(error count lba status)
-
-        (let ((sense-key (fxbit-field error 4 8)))
-          (write (list 'sense-key sense-key))
-          (newline))]
-
-       [_ #f])]
-    [('error . x)
-     (write (list 'ATAPI-error-x x))
-     (newline)])
-
   (let lp ()
-    (sleep 10)
+    (match (get-message scsi-req-ch)
+
+      [(resp-ch 'in (? bytevector? cdb) data-len)
+       (let ((buf (make-bytevector packet-length 0)))
+         (bytevector-copy! cdb 0 buf 0 (fxmin (bytevector-length cdb)
+                                              packet-length))
+         ;; FIXME: Get the status properly
+         (match (!? atadev (ata-PACKET/in atadev buf data-len))
+           [('ok resp data)
+            (put-message resp-ch (list 'ok #f data))]
+
+           [('ata-error resp . _)
+            (match resp
+              [#(error count lba status)
+               (let ((sense-key (fxbit-field error 4 8)))
+                 (put-message resp-ch (list 'error sense-key (vector error count lba status))))])]
+
+           [('error . x)
+            (put-message resp-ch (list 'error 'TODO))]))]
+
+      [(resp-ch 'non-data (? bytevector? cdb))
+       (let ((buf (make-bytevector packet-length 0)))
+         (bytevector-copy! cdb 0 buf 0 (fxmin (bytevector-length cdb)
+                                              packet-length))
+         ;; FIXME: Get the status properly
+         (match (!? atadev (ata-PACKET/non-data atadev buf))
+           [('ok resp)
+            (put-message resp-ch (list 'ok #f))]
+
+           [('ata-error resp . _)
+            (match resp
+              [#(error count lba status)
+               (let ((sense-key (fxbit-field error 4 8)))
+                 (put-message resp-ch (list 'error sense-key (vector error count lba status))))])]
+
+           [('error . x)
+            (put-message resp-ch (list 'error 'TODO))]))]
+
+      [(resp-ch . x)
+       (put-message resp-ch (list 'error 'bad-request))])
     (lp))))

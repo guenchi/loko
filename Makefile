@@ -99,6 +99,10 @@ install: all
 	$(INSTALL) -m 0644 drivers/ata/ide.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ata
 	$(INSTALL) -m 0644 drivers/ata/identify.sls      $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ata
 
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/scsi
+	$(INSTALL) -m 0644 drivers/scsi/core.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/scsi
+	$(INSTALL) -m 0644 drivers/scsi/block.sls        $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/scsi
+
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video
 	$(INSTALL) -m 0644 drivers/video/bga.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video
 	$(INSTALL) -m 0644 drivers/video/vbe.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/video

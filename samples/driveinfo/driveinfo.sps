@@ -15,6 +15,8 @@
   (loko drivers ata ide)
   (loko drivers ata identify)
   (loko drivers pci)
+  (loko drivers scsi block)
+  (loko drivers scsi core)
   (loko drivers storage)
   (fs fatfs))
 
@@ -64,8 +66,13 @@
            ;; table and show info about the first FAT file system
            (let ((resp-ch (make-channel)))
              (put-message (storage-device-request-channel storage)
-                          (list resp-ch 'read 0 1))
-             (log/info (list 'sector0: (get-message resp-ch))))))])
+                          (list resp-ch 'read
+                                ;; Read sector 0 on normal media and sector 16 on CD/DVD
+                                (if (eqv? (storage-device-logical-sector-size storage) 2048)
+                                    16
+                                    0)
+                                1))
+             (log/info (list 'sector: (get-message resp-ch))))))])
      (lp))))
 
 (define scsi-manager-ch (make-channel))
@@ -77,7 +84,24 @@
         ;; TODO: probe the channel and start an appropriate driver
         (spawn-fiber
          (lambda ()
-           #f))])
+           (match (probe·scsi ch)
+             [((and (or 'SBC 'MMC) class) inq vpd-id)
+              (log/info "SCSI SBC/MMC compatible device")
+              (log/info (list 'INQUIRY inq 'VPD-ID vpd-id))
+              (let* ((scsidev (make-scsi-device ch inq))
+                     (storage (let-values ([(max-lba sector-size)
+                                            (scsi·block·read-capacity scsidev)])
+                                ;; XXX: Maybe this can change later?
+                                (let ((sector-size (or sector-size
+                                                       (case class
+                                                         ((MMC) 2048)
+                                                         (else 512)))))
+                                  (make-storage-device "SCSI logical unit" sector-size)))))
+                (put-message storage-manager-ch (list 'new-storage storage))
+                (driver·scsi·block scsidev storage))]
+             [(_ inq vpd-id)
+              (log/info "No driver for SCSI device")
+              (log/info (list 'INQUIRY inq 'VPD-ID vpd-id))])))])
      (lp))))
 
 (define (ata-manager controller)
@@ -107,7 +131,7 @@
              ;; TODO: Make a new SCSI logical unit and set the ATAPI
              ;; device as the request channel
              (let ((scsi-req-ch (make-channel)))
-               (put-message scsi-manager-ch (cons 'new-device 'TODO))
+               (put-message scsi-manager-ch (cons 'new-device scsi-req-ch))
                ;; XXX: The ATAPI driver currently prints some debug
                ;; stuff and there's a concurrency bug around ports...
                (sleep 5)

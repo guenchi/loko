@@ -163,7 +163,9 @@
              (if (fxbit-set? x 0) '(feature:SMART) '())))
    (let ((x (word-ref block 83)))
      (append (if (fxbit-set? x 10) '(feature:LBA48) '())
-             (if (fxbit-set? x 1) '(feature:TCQ) '())))))
+             (if (fxbit-set? x 1) '(feature:TCQ) '())))
+   (let ((x (word-ref block 119)))
+     (append (if (fxbit-set? x 6) '(feature:sense-data-reporting) '())))))
 
 ;; Returns logical and physical sector sizes.
 (define (ata-identify:ata-sector-size block)

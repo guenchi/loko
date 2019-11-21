@@ -22,6 +22,7 @@
     ata-IDENTIFY-DEVICE
     ata-IDENTIFY-PACKET-DEVICE
     ata-PACKET/in
+    ata-PACKET/non-data
     ata-READ-DMA
     ata-READ-DMA-EXT
     ata-READ-SECTORS
@@ -168,6 +169,10 @@
   (assert (bytevector? bytevector))
   (list (list 'packet-out scsi-cdb bytevector) inputs))
 
+(define (make-cmd-packet-non-data scsi-cdb inputs)
+  (assert (bytevector? scsi-cdb))
+  (list (list 'packet-non-data scsi-cdb) inputs))
+
 (define ata-cmd-execute-device-diagnostics #x90)
 (define ata-cmd-flush-cache                #xE7)
 (define ata-cmd-identify-device            #xEC)
@@ -241,6 +246,10 @@
                      #b101 #b001)))
     (make-cmd-packet-in scsi-cdb data-len
                         (make-inputs feature 0 0 0 ata-cmd-packet))))
+
+(define (ata-PACKET/non-data dev scsi-cdb)
+  (make-cmd-packet-non-data scsi-cdb
+                            (make-inputs 0 0 0 0 ata-cmd-packet)))
 
 ;; ata-DEVICE-RESET
 
