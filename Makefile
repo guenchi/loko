@@ -82,6 +82,7 @@ install: all
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0644 arch/amd64/linux-numbers.sls  $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
 	$(INSTALL) -m 0644 arch/amd64/linux-syscalls.sls $(DESTDIR)$(PREFIX)/share/r6rs/loko/arch/amd64
+
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/keyboard.sls          $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
 	$(INSTALL) -m 0644 drivers/keymaps.sls           $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers
@@ -120,11 +121,19 @@ install: all
 	$(INSTALL) -m 0644 drivers/ps2/mouse.sls         $(DESTDIR)$(PREFIX)/share/r6rs/loko/drivers/ps2
 
 	$(INSTALL) -m 0644 lib/match.sls                 $(DESTDIR)$(PREFIX)/share/r6rs/loko
+
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi
 	$(INSTALL) -m 0644 srfi/170.loko.sls             $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170.loko.sls
 	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170
 	$(INSTALL) -m 0644 srfi/170/posix.loko.sls       $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170
 	$(INSTALL) -m 0644 srfi/170/linux.loko.sls       $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a170/compat.loko.sls
+
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi
+	$(INSTALL) -m 0644 srfi/38.loko.sls              $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a38.loko.sls
+	$(INSTALL) -m 0755 -d                            $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a38
+	$(INSTALL) -m 0644 srfi/38/with-shared-structure.loko.sls \
+	                                                 $(DESTDIR)$(PREFIX)/share/r6rs/srfi/%3a38
+
 # Libraries needed when compiling programs
 	(cd .akku/lib; find * -type d | \
 	  while read fn; do \
