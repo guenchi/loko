@@ -768,6 +768,7 @@
     (i/o-encoding-error?                        ^ r ip)
     (i/o-error-filename                         ^ r ip is fi)
     (i/o-error-port                             ^ r ip is fi)
+    (i/o-error-position                         ^ r ip is fi)
     (i/o-error?                                 ^ r ip is fi)
     (&i/o-file-already-exists                   ^ r ip is fi)
     (i/o-file-already-exists-error?             ^ r ip is fi)
