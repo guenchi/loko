@@ -295,7 +295,21 @@
              (make-i/o-file-already-exists-error filename))
             (else
              (make-i/o-filename-error filename)))))
-  (define (file-exists? filename)
+  (define (linux-delete-file filename)
+    (let ((fn (filename->c-string 'delete-file filename)))
+      (let retry ()
+        (sys_unlinkat AT_FDCWD (bytevector-address fn) 0
+                      (lambda (errno)
+                        (if (eqv? errno EINTR)
+                            (retry)
+                            (raise (condition
+                                    (make-who-condition 'delete-file)
+                                    (make-message-condition "Failed to delete the file")
+                                    (make-irritants-condition (list filename))
+                                    (make-syscall-i/o-error errno filename #f)
+                                    (make-syscall-error 'delete-file errno))))))
+        (values))))
+  (define (linux-file-exists? filename)
     ;; XXX: This follows symlinks.
     (define F_OK 0)
     (let* ((fn (filename->c-string 'file-exists? filename))
@@ -314,7 +328,7 @@
                                       (raise
                                         (condition
                                          (make-who-condition 'file-exists?)
-                                         (make-message-condition "Error while checking if the file exists")
+                                         (make-message-condition "Failed to check if the file exists")
                                          (make-irritants-condition (list filename))
                                          (make-syscall-i/o-error errno filename #f)
                                          (make-syscall-error 'faccessat errno))))))))))
@@ -333,7 +347,7 @@
                                  (retry)
                                  (raise (condition
                                          (make-who-condition who)
-                                         (make-message-condition "Could not open file")
+                                         (make-message-condition "Failed to open the file")
                                          (make-irritants-condition (list filename))
                                          (make-syscall-i/o-error errno filename #f)
                                          (make-syscall-error 'open errno))))))))
@@ -639,7 +653,8 @@
   (port-file-descriptor-set! (current-input-port) STDIN_FILENO)
   (port-file-descriptor-set! (current-output-port) STDOUT_FILENO)
   (port-file-descriptor-set! (current-error-port) STDERR_FILENO)
-  (init-set! 'file-exists? file-exists?)
+  (init-set! 'delete-file linux-delete-file)
+  (init-set! 'file-exists? linux-file-exists?)
   (init-set! 'open-file-input-port open-file-input-port)
   (init-set! 'open-file-output-port open-file-output-port)
   (init-set! 'open-i/o-poller linux-open-i/o-poller)
