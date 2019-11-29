@@ -1874,7 +1874,7 @@
 (define (floor x)
   (define who 'floor)
   (cond
-    ((flonum? x) (fldenominator x))
+    ((flonum? x) (flfloor x))
     ((fixnum? x) x)
     ((int? x) x)
     ((ratnum? x)
