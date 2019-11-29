@@ -41,7 +41,15 @@
     (rnrs lists)
     (rnrs syntax-case)
     (prefix (rnrs) sys:)
+    (rnrs arithmetic fixnums)
     (loko system $primitives))
+
+(define e 2.7182818284590452353602874713526625)
+(define pi 3.1415926535897932384626433832795029)
+(define pi/2 1.5707963267948966192313216916397514)
+(define pi/4 0.78539816339744830961566084581987572)
+(define ln2 0.69314718055994530941723212145817657)
+(define ln10 2.3025850929940456840179914546843642)
 
 (define (flonum? obj) (sys:flonum? obj))
 
@@ -236,9 +244,26 @@
 (define fllog
   (case-lambda
     ((a)
-     (error 'fllog "TODO: Not yet implemented" a))
+     (cond
+       ((not (flonum? a))
+        (assertion-violation 'fllog "Expected a flonum" a))
+       ((fl=? a +inf.0) +inf.0)
+       ((fl=? a 0.0) -inf.0)
+       ((flnegative? a) +nan.0)
+       ((flnan? a) a)
+       ((fl=? a 2.0) ln2)
+       ((fl=? a 10.0) ln10)
+       ((fl<? 0.0 a 2.0)
+        (let ((x (fl- a 1.0)))
+          (do ((x^n x (fl* x^n x))
+               (sign 1.0 (fl- sign))
+               (n 1.0 (fl+ n 1.0))
+               (ret 0.0 (fl+ ret (fl/ (fl* sign x^n) n))))
+              ((fl>=? n 30.0) ret))))
+       (else
+        (fl+ ln2 (fllog (fl/ a 2.0))))))
     ((a b)
-     (error 'fllog "TODO: Not yet implemented" a b))))
+     (fl/ (fllog a) (fllog b)))))
 
 (define (flsin fl)
   (error 'flsin "TODO: Not yet implemented"))

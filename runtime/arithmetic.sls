@@ -1987,9 +1987,6 @@
 (define e 2.7182818284590452353602874713526625)
 (define pi 3.1415926535897932384626433832795029)
 (define pi/2 1.5707963267948966192313216916397514)
-(define pi/4 0.78539816339744830961566084581987572)
-(define ln2 0.69314718055994530941723212145817657)
-(define ln10 2.3025850929940456840179914546843642)
 
 (define (exp x)
   ;; TODO: floats.
@@ -2005,34 +2002,24 @@
 (define log
   (case-lambda
     ((z)
-     ;; TODO: float. Seriously.
      (cond
+       ;; Paraphrasing R6RS: "The value of log z is defined to be the
+       ;; one whose imaginary part lies in the range from −π
+       ;; (inclusive) to π (inclusive). log 0 is undefined."
        ((or (compnum? z) (negative? z))
         (+ (log (magnitude z))
            (* +i (angle z))))
        ((eqv? z 0)
         (assertion-violation 'log "This function is undefined for 0" z))
-       ((eqv? z 1)
-        0)
-       ((eqv? z 2)
-        ln2)
-       ((eqv? z 10)
-        ln10)
-       ((< 0 z 2)
-        ;; It's not even funny.
-        (do ((x (- z 1))
-             (n 1 (fx+ n 1))
-             (ret 0 (+ ret
-                       (/ (* (expt -1 (fx- n 1))
-                             (expt x n))
-                          n))))
-            ((eqv? n 30) (inexact ret))))
+       ((eqv? z -inf.0)
+        (make-polar +inf.0 pi))
        (else
-        (inexact (+ ln2 (log (/ z 2)))))))
+        (fllog (inexact z)))))
     ((z b)
      (/ (log z) (log b)))))
 
 (define (%fac n) (if (<= n 1) 1 (* n (%fac (- n 1)))))
+
 (define (%norm x)
   ;; FIXME: complex.
   (if (and (real? x) (not (and (<= (* -2 pi) x)
