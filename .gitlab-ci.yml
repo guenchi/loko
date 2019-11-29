@@ -51,6 +51,9 @@ test:
     - LOKO_SOURCE=.akku/lib .akku/env ./loko.out --compile tests/test-buddy.sps --output tests/test-buddy
     - tests/test-buddy
     - .akku/env ./loko.out --program tests/test-drivers-ps2-keyboard.sps
+    - (cd tests/r6rs; akku install; .akku/env ../../loko.out --program run.sps)
+    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run.sps --output run)
+    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run-via-eval.sps --output run-via-eval)
 
 build_samples:
   stage: test
