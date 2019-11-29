@@ -895,22 +895,27 @@
          (number? obj))))
 
 (define (rational-valued? obj)
-  ;; #t if obj is = to some rational.
-  (cond ((compnum? obj)
-         (and (rational-valued? (real-part obj))
-              (zero? (imag-part obj))))
-        (else
-         (number? obj))))
+  ;; #t if obj is = to some rational
+  (cond
+    ((or (fixnum? obj) (int? obj) (ratnum? obj)))
+    ((compnum? obj)
+     (and (rational-valued? (real-part obj))
+          (zero? (imag-part obj))))
+    (else
+     (and (flonum? obj)
+          (flfinite? obj)))))
 
 (define (integer-valued? obj)
-  ;; #t if obj is = to some integer. FIXME: buggy.
-  (cond ((compnum? obj)
-         (and (integer-valued? (real-part obj))
-              (zero? (imag-part obj))))
-        ((ratnum? obj)
-         #f)
-        (else
-         (number? obj))))
+  ;; #t if obj is = to some integer
+  (cond
+    ((or (fixnum? obj) (int? obj)))
+    ((compnum? obj)
+     (and (integer-valued? (real-part obj))
+          (zero? (imag-part obj))))
+    ((ratnum? obj) #f)
+    (else
+     (and (flonum? obj)
+          (flinteger? obj)))))
 
 (define (exact? x)
   (cond ((or (fixnum? x) (int? x) (ratnum? x)))
