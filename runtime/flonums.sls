@@ -195,18 +195,34 @@
   (sys:flabs a))
 
 (define (fldiv-and-mod a b)
-  (error 'fldiv-and-mod "TODO: Not yet implemented"))
+  (cond ((flnegative? b)
+         (let ((d (flceiling (fl/ a b))))
+           (let ((m (fl- a (fl* b d))))
+             (values d m))))
+        (else
+         (let ((d (flfloor (fl/ a b))))
+           (let ((m (fl- a (fl* b d))))
+             (values d m))))))
 
 (define (fldiv a b)
-  (let-values (((q _) (fldiv-and-mod a b)))
-    q))
+  (cond ((flnegative? b)
+         (flceiling (fl/ a b)))
+        (else
+         (flfloor (fl/ a b)))))
 
 (define (flmod a b)
   (let-values (((_ r) (fldiv-and-mod a b)))
     r))
 
 (define (fldiv0-and-mod0 a b)
-  (error 'fldiv0-and-mod0 "TODO: Not yet implemented"))
+  (let-values (((d m) (fldiv-and-mod a b)))
+    (if (flnegative? b)
+        (if (fl<? m (fl/ (fl- b) 2.0))
+            (values d m)
+            (values (fl- d 1.0) (fl+ m b)))
+        (if (fl<? m (fl/ b 2.0))
+            (values d m)
+            (values (fl+ d 1.0) (fl- m b))))))
 
 (define (fldiv0 a b)
   (let-values (((q _) (fldiv0-and-mod0 a b)))
