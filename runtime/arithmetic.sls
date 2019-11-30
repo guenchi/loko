@@ -2677,12 +2677,10 @@
           (lp (fx- i 1) (fx- j 1))))))
 
 (define (display-int n p base)
-  ;; Print bignums by splitting them into fixnums. Here I was
-  ;; first going to use a constant power-of-ten to split them,
-  ;; but a basic divide-and-conquer strategy should have better
-  ;; complexity. The numbers are first split almost in half,
-  ;; then the halves are split in half etc, approx lg n times,
-  ;; until everything's a fixnum.
+  ;; Print bignums by splitting them into fixnums. Uses divide &
+  ;; conquer. The numbers are first split almost in half, then the
+  ;; halves are split in half etc, approx lg n times, until
+  ;; everything's a fixnum.
   (define (powers-of-ten n)
     (let lp ((power base) (digits 1) (ret '()))
       (if (> power n)
@@ -2725,14 +2723,26 @@
   (eqv? (int-sign i) -1))
 
 (define (int-inexact int)
-  ;; FIXME: It's unlikely that this is correct
-  (do ((i 0 (fx+ i 1))
-       (pow 0 (+ pow 1))
-       (int* (int-digits int))
-       (ret 0.0 (+ ret (* (expt (inexact (digit-radix)) pow)
-                          (inexact (digit-ref int* i))))))
-      ((fx=? i (int-used int))
-       (if (int-negative? int) (- ret) ret))))
+  (let ((ret (let ((used (int-used int)))
+               (cond
+                 ((eqv? used 0)
+                  0.0)
+                 ((eqv? used 1)
+                  (fixnum->flonum (digit-ref (int-digits int) 0)))
+                 (else
+                  ;; XXX: Single-precision only. Needs more testing.
+                  ;; Could be faster.
+                  (let* ((len (bitwise-length int))
+                         (shift (fx- len (digit-width)))
+                         (a (fixnum->flonum
+                             (bitwise-bit-field (abs int) shift len))))
+                    (do ((a a (fl* 2.0 a))
+                         (shift shift (fx- shift 1)))
+                        ((eqv? shift 0)
+                         a))))))))
+    (if (negative? int)
+        (fl- ret)
+        ret)))
 
 (define (grow! int size)
   ;; XXX:
@@ -2758,7 +2768,7 @@
                    (lp used^)
                    (int-used-set! int used))))))))
 
-(define (copy! to from)               ;XXX: deprecated
+(define (copy! to from)
   (unless (eq? to from)
     (let ((n (int-used from)))
       (int-sign-set! to (int-sign from))
