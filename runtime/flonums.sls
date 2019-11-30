@@ -254,8 +254,17 @@
 
 (define (flround fl) (sys:flround fl))
 
-(define (flexp fl)
-  (error 'flexp "TODO: Not yet implemented"))
+;; e^x
+(define (flexp x)
+  (cond
+    ((eqv? x -inf.0) 0.0)
+    (else
+     (do ((n 1.0 (fl+ n 1.0))
+          (x^n x (fl* x^n x))
+          (n! 1.0 (fl* n! (fl+ n 1.0)))
+          (ret 0.0 (fl+ ret (fl/ x^n n!))))
+         ((fl>=? n 20.0)
+          (fl+ ret 1.0))))))
 
 (define fllog
   (case-lambda
@@ -306,7 +315,7 @@
 (define (flsqrt a)
   (sys:flsqrt a))
 
-(define (flexpt a b)
-  (error 'flexpt "TODO: Not yet implemented"))
+(define (flexpt base exponent)
+  (flexp (fl* exponent (fllog base))))
 
 (define (fixnum->flonum x) (sys:fixnum->flonum x)))
