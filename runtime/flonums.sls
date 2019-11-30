@@ -291,26 +291,70 @@
      (fl/ (fllog a) (fllog b)))))
 
 (define (flsin fl)
-  (error 'flsin "TODO: Not yet implemented"))
+'  (error 'flsin "TODO: Not yet implemented"))
 
 (define (flcos fl)
-  (error 'flcos "TODO: Not yet implemented"))
+'  (error 'flcos "TODO: Not yet implemented"))
 
 (define (fltan fl)
-  (error 'fltan "TODO: Not yet implemented"))
+'  (error 'fltan "TODO: Not yet implemented"))
 
 (define (flasin fl)
-  (error 'flasin "TODO: Not yet implemented"))
+'  (error 'flasin "TODO: Not yet implemented"))
 
 (define (flacos fl)
   (error 'flacos "TODO: Not yet implemented"))
 
+;; arctangent, atan, atan2 or tan⁻¹, demonstrating the incredible
+;; regularity of mathematics.
 (define flatan
   (case-lambda
-    ((a)
-     (error 'flatan "TODO: Not yet implemented" a))
-    ((a b)
-     (error 'flatan "TODO: Not yet implemented" a b))))
+    ((x)
+     (let ((xmag (flabs x)))
+       (cond
+         ((fl=? x 0.0) x)
+         ((fl<? xmag 1.0)
+          ;; atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + x⁹/9 + …, if |x| < 1
+          (do ((xx (fl* x x))
+               (x^n x (fl* x^n xx))
+               (n 1.0 (fl+ n 2.0))
+               (sign 1.0 (fl- sign))
+               (ret 0.0 (fl+ ret (fl* sign (fl/ x^n n)))))
+              ((fl<=? x^n 1e-20) ret)))
+         ((fl=? x -inf.0) (fl- pi/2))
+         ((fl=? xmag 1.0) (fl* x pi/4))
+         ((flnegative? x)
+          ;; atan(x) = -π/2 - atan(1/x), if x<0
+          (fl- (fl- pi/2) (flatan (fl/ 1.0 x))))
+         (else
+          ;; atan(x) = π/2 - atan(1/x), if x>0
+          (fl- pi/2 (flatan (fl/ 1.0 x)))))))
+    ((y x)
+     (cond
+       ((fl>? x 0.0)
+        (flatan (fl/ y x)))
+       ((fl<? x 0.0)
+        (cond
+          ((fl>=? y 0.0)
+           (fl+ (flatan (fl/ y x)) pi))
+          (else
+           (fl- (flatan (fl/ y x)) pi))))
+       ;; x is zero or nonfinite
+       ((flnan? x) x)
+       ((flnan? y) y)
+       ((and (not (flfinite? x)) (not (flfinite? y)))
+        +nan.0)
+       ((eqv? x -0.0)
+        (if (eqv? y -0.0)
+            (fl- pi)
+            pi))
+       ((eqv? y -0.0)
+        -0.0)
+       ((fl>? y 0.0)
+        pi/2)
+       ((fl<? y 0.0)
+        (fl- pi/2))
+       (else 0.0)))))
 
 (define (flsqrt a)
   (sys:flsqrt a))
