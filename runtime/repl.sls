@@ -54,7 +54,9 @@ certain conditions.\n"))
           (lambda (exn)
             ;; TODO: flush output ports?
             (let ((p (current-error-port)))
-              (stack-trace p)
+              ;; TODO: Stack traces are pretty pointless as they are
+              ;; implemented
+              ;; (stack-trace p)
               (print-condition exn p))
             (when (serious-condition? exn)
               (k 'restart)))
