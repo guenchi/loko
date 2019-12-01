@@ -21,7 +21,7 @@
 
 (library (loko runtime symbols)
   (export
-    symbol? symbol->string #;symbol=? string->symbol
+    symbol? symbol->string symbol=? string->symbol
 
     gensym gensym? gensym->unique-string gensym-prefix
     *unbound-hack*
@@ -44,12 +44,30 @@
 
 (define (symbol->string v)
   (unless (symbol? v)
-    (assertion-violation 'symbol->string "This procedure needs a symbol." v))
+    (assertion-violation 'symbol->string "Expected a symbol" v))
   ;; TODO: This is really silly. The returned string can actually be
   ;; immutable. These output ports cons an awful lot.
   (call-with-string-output-port
     (lambda (p)
       (display v p))))
+
+(define symbol=?
+  (case-lambda
+    ((x y)
+     (unless (symbol? x)
+       (assertion-violation 'symbol=? "Expected a symbol" x))
+     (unless (symbol? y)
+       (assertion-violation 'symbol=? "Expected a symbol" y))
+     (eq? x y))
+    ((x . x*)
+     (unless (symbol? x)
+       (assertion-violation 'symbol=? "Expected a symbol" x))
+     (let lp ((x* x*))
+       (or (null? x*)
+           (if (symbol? (car x*))
+               (and (eq? x (car x*))
+                    (lp (cdr x*)))
+               (assertion-violation 'symbol=? "Expected a symbol" (car x*))))))))
 
 ;; FNV-1 hash
 (define bytevector-hash
