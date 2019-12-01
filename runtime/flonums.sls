@@ -394,7 +394,7 @@
         (flatan (fl/ y x)))
        ((fl<? x 0.0)
         (cond
-          ((fl>=? y 0.0)
+          ((or (fl>? y 0.0) (eqv? y 0.0))
            (fl+ (flatan (fl/ y x)) pi))
           (else
            (fl- (flatan (fl/ y x)) pi))))
@@ -404,7 +404,7 @@
        ((and (not (flfinite? x)) (not (flfinite? y)))
         +nan.0)
        ((eqv? x -0.0)
-        (if (eqv? y -0.0)
+        (if (or (flnegative? y) (eqv? y -0.0))
             (fl- pi)
             pi))
        ((eqv? y -0.0)
@@ -419,12 +419,19 @@
   (sys:flsqrt a))
 
 (define (flexpt base exponent)
-  (if (flnegative? base)
-      (if (flinteger? exponent)
-          (if (flodd? exponent)
-              (fl- (flexp (fl* exponent (fllog (flabs base)))))
-              (flexp (fl* exponent (fllog (flabs base)))))
-          +nan.0)                       ;complex
-      (flexp (fl* exponent (fllog base)))))
+  (cond
+    ((fl=? exponent 0.0)
+     ;; This was defined before code reviews became popular
+     1.0)
+    ((flnegative? base)
+     (cond
+       ((flinteger? exponent)
+        (if (flodd? exponent)
+            (fl- (flexp (fl* exponent (fllog (flabs base)))))
+            (flexp (fl* exponent (fllog (flabs base))))))
+       (else
+        +nan.0)))                       ;complex
+    (else
+     (flexp (fl* exponent (fllog base))))))
 
 (define (fixnum->flonum x) (sys:fixnum->flonum x)))

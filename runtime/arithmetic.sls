@@ -152,22 +152,23 @@
 (define (rcompnum-i x) (assert (rcompnum? x)) ($box-ref x 2))
 
 (define (make-rcompnum r i)
-  (assert (and (real? r) (real? i)))
-  (let ((p (lambda (r i)
-             (let ((ret ($make-box 'rcompnum 3)))
-               ($box-set! ret 0 2)
-               ($box-set! ret 1 r)
-               ($box-set! ret 2 i)
-               ret))))
-    ;; FIXME: simplify
-    (cond ((eqv? i 0)
-           r)
-          ((flonum? r)
-           (p r (inexact i)))
-          ((flonum? i)
-           (p (inexact r) i))
-          (else
-           (p r i)))))
+  (cond
+    ((eqv? i 0)
+     r)
+    (else
+     (unless (and (or (fixnum? r) (flonum? r) (int? r) (ratnum? r))
+                  (or (fixnum? i) (flonum? i) (int? i) (ratnum? i)))
+       (error 'make-rcompnum "Internal error: expected two reals" r i))
+     (let ((ret ($make-box 'rcompnum 3)))
+       ($box-set! ret 0 2)
+       ($box-set! ret 1 r)
+       ($box-set! ret 2 i)
+       (cond
+         ((flonum? r)
+          ($box-set! ret 2 (inexact i)))
+         ((flonum? i)
+          ($box-set! ret 1 (inexact r))))
+       ret))))
 
 (define (pcompnum? obj)               ;polar complex number
   (and ($box? obj) (eq? ($box-type obj) 'pcompnum)))
@@ -874,6 +875,12 @@
       (ratnum? obj)
       (compnum? obj)))
 
+(define ($real-number? obj)
+  (or (fixnum? obj)
+      (flonum? obj)
+      (int? obj)
+      (ratnum? obj)))
+
 (define (complex? obj)
   (or (real? obj) (compnum? obj)))
 
@@ -942,8 +949,6 @@
          (assertion-violation 'inexact? "Expected a number" x))))
 
 (define (inexact x)
-  ;; TODO: floating point. This isn't even correct, since inexacts
-  ;; should be marked as such.
   (cond ((fixnum? x)
          (fixnum->flonum x))
         ((flonum? x)
@@ -1029,8 +1034,8 @@
                               (lp (car e) (cdr e)))))))))))))
 
 (define-comparator (= a b)
-  (define (bad-args a b)
-    (assertion-violation '= "Expected numbers" a b))
+  (define (bad-arg x)
+    (assertion-violation '= "Expected a number" x))
   ;; XXX: what about pcompnum and rcompnum with inexact zero imag or
   ;; angle? TODO: inexact complex numbers (with imaginary part zero)
   ;; changes a few assumptions here.
@@ -1043,14 +1048,14 @@
                ((ratnum? b) #f)
                ((rcompnum? b) #f)
                ((pcompnum? b) #f)
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((flonum? a)
          (cond ((flonum? b) (fl=? a b))
                ((or (fixnum? b) (int? b) (ratnum? b))
                 (and (flfinite? a)
                      (fl=? a (inexact b))))
                ((compnum? b) (= b a))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((int? a)
          (cond ((fixnum? b) #f)
                ((flonum? b)
@@ -1060,14 +1065,14 @@
                ((ratnum? b) #f)
                ((rcompnum? b) #f)
                ((pcompnum? b) #f)
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((ratnum? a)
          (cond ((or (fixnum? b) (int? b) (rcompnum? b) (pcompnum? b)) #f)
                ((flonum? b) (= (inexact a) b))
                ((ratnum? b)
                 (and (= (numerator a) (numerator b))
                      (= (denominator a) (denominator b))))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((rcompnum? a)
          (cond ((or (fixnum? b) (int? b)) #f)
                ((or (ratnum? b) (flonum? b))
@@ -1079,7 +1084,7 @@
                ((pcompnum? b)
                 (and (= (real-part a) (real-part b))
                      (= (imag-part a) (imag-part b))))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((pcompnum? a)
          (cond ((or (fixnum? b) (int? b)) #f)
                ((or (ratnum? b) (flonum? b))
@@ -1090,14 +1095,14 @@
                ((pcompnum? b)
                 (and (= (pcompnum-m a) (pcompnum-m b))
                      (= (pcompnum-a a) (pcompnum-a b))))
-               (else (bad-args a b))))
-        (else (bad-args a b))))
+               (else (bad-arg b))))
+        (else (bad-arg a))))
 
 (define (fxsign x) (if (fxnegative? x) -1 1))
 
 (define-comparator (< a b)
-  (define (bad-args a b)
-    (assertion-violation '< "Expected real numbers" a b))
+  (define (bad-arg x)
+    (assertion-violation '< "Expected a real number" x))
   (cond ((fixnum? a)
          (cond ((fixnum? b) (fx<? a b))
                ((flonum? b) (fl<? (fixnum->flonum a) b))
@@ -1108,18 +1113,18 @@
                     (not (fxnegative? a))
                     (fxnegative? a)))
                ((ratnum? b) (< (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((flonum? a)
          (cond ((flonum? b) (fl<? a b))
                ((fixnum? b) (fl<? a (fixnum->flonum b)))
                ((or (int? b) (ratnum? b)) (fl<? a (inexact b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((int? a)
          (cond ((fixnum? b) (int-negative? a))
                ((flonum? b) (< (inexact a) b))
                ((int? b) (cmp< a b))
                ((ratnum? b) (< (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((ratnum? a)
          (cond ((or (fixnum? b) (int? b))
                 (< (numerator a) (* b (denominator a))))
@@ -1127,12 +1132,12 @@
                ((ratnum? b)
                 (< (* (numerator a) (denominator b))
                    (* (numerator b) (denominator a))))
-               (else (bad-args a b))))
-        (else (bad-args a b))))
+               (else (bad-arg b))))
+        (else (bad-arg a))))
 
 (define-comparator (> a b)
-  (define (bad-args a b)
-    (assertion-violation '> "Expected real number" a b))
+  (define (bad-arg x)
+    (assertion-violation '> "Expected a real number" x))
   (cond ((fixnum? a)
          (cond ((fixnum? b) (fx>? a b))
                ((flonum? b) (fl>? (fixnum->flonum a) b))
@@ -1141,18 +1146,18 @@
                     (fxnegative? a)
                     (not (fxnegative? a))))
                ((ratnum? b) (> (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((flonum? a)
          (cond ((flonum? b) (fl>? a b))
                ((fixnum? b) (fl>? a (fixnum->flonum b)))
                ((or (int? b) (ratnum? b)) (> a (inexact b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((int? a)
          (cond ((fixnum? b) (int-positive? a))
                ((flonum? b) (fl>? (inexact a) b))
                ((int? b) (cmp> a b))
                ((ratnum? b) (> (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((ratnum? a)
          (cond ((or (fixnum? b) (int? b))
                 (> (numerator a) (* b (denominator a))))
@@ -1160,12 +1165,12 @@
                ((ratnum? b)
                 (> (* (numerator a) (denominator b))
                    (* (numerator b) (denominator a))))
-               (else (bad-args a b))))
-        (else (bad-args a b))))
+               (else (bad-arg b))))
+        (else (bad-arg a))))
 
 (define-comparator (<= a b)
-  (define (bad-args a b)
-    (assertion-violation '<= "Expected real number" a b))
+  (define (bad-arg x)
+    (assertion-violation '<= "Expected a real number" x))
   (cond ((fixnum? a)
          (cond ((fixnum? b) (fx<=? a b))
                ((flonum? b) (fl<=? (fixnum->flonum a) b))
@@ -1174,18 +1179,18 @@
                     (not (fxnegative? a))
                     (fxnegative? a)))
                ((ratnum? b) (<= (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((flonum? a)
          (cond ((flonum? b) (fl<=? a b))
                ((fixnum? b) (fl<=? a (fixnum->flonum b)))
                ((or (int? b) (ratnum? b)) (fl<=? a (inexact b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((int? a)
          (cond ((fixnum? b) (int-negative? a))
                ((flonum? b) (<= (inexact a) b))
                ((int? b) (cmp<= a b))
                ((ratnum? b) (<= (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((ratnum? a)
          (cond ((or (fixnum? b) (int? b))
                 (<= (numerator a) (* b (denominator a))))
@@ -1193,12 +1198,12 @@
                ((ratnum? b)
                 (<= (* (numerator a) (denominator b))
                     (* (numerator b) (denominator a))))
-               (else (bad-args a b))))
-        (else (bad-args a b))))
+               (else (bad-arg b))))
+        (else (bad-arg a))))
 
 (define-comparator (>= a b)
-  (define (bad-args a b)
-    (assertion-violation '>= "Expected real number" a b))
+  (define (bad-arg x)
+    (assertion-violation '>= "Expected a real number" x))
   (cond ((fixnum? a)
          (cond ((fixnum? b) (fx>=? a b))
                ((flonum? b) (fl>=? (fixnum->flonum a) b))
@@ -1207,17 +1212,17 @@
                     (fxnegative? a)
                     (not (fxnegative? a))))
                ((ratnum? b) (>= (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((flonum? a)
          (cond ((flonum? b) (fl>=? a b))
                ((or (fixnum? b) (int? b) (ratnum? b)) (fl>=? a (inexact b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((int? a)
          (cond ((fixnum? b) (int-positive? a))
                ((flonum? b) (>= (inexact a) b))
                ((int? b) (cmp>= a b))
                ((ratnum? b) (>= (* a (denominator b)) (numerator b)))
-               (else (bad-args a b))))
+               (else (bad-arg b))))
         ((ratnum? a)
          (cond ((or (fixnum? b) (int? b))
                 (>= (numerator a) (* b (denominator a))))
@@ -1225,8 +1230,8 @@
                ((ratnum? b)
                 (>= (* (numerator a) (denominator b))
                     (* (numerator b) (denominator a))))
-               (else (bad-args a b))))
-        (else (bad-args a b))))
+               (else (bad-arg b))))
+        (else (bad-arg a))))
 
 (define (zero? x)
   (cond ((fixnum? x) (fxzero? x))
@@ -1292,29 +1297,59 @@
          (assert (number? x))
          #f)))
 
-;; TODO: should use flmax/flmin
 (define max
   (case-lambda
     ((a b)
-     (if (> a b) a b))
-    ((a) (assert (number? a)) a)
+     (define (err x)
+       (assertion-violation 'max "Expected a real number" x))
+     (cond
+       ((flonum? a)
+        (if ($real-number? b)
+            (let ((b (inexact b)))
+              (flmax a b))
+            (err b)))
+       ((flonum? b)
+        (if ($real-number? a)
+            (let ((a (inexact a)))
+              (flmax a b))
+            (err a)))
+       (else
+        (if (> a b) a b))))
     ((a b c)
-     (if (> a b)
-         (if (> a c) a c)
-         (if (> b c) b c)))
+     (max (max a b) c))
     ((a b c . x)
-     (fold-left max (max a b c) x))))
+     (fold-left max (max a b c) x))
+    ((a)
+     (unless ($real-number? a)
+       (assertion-violation 'max "Expected a real number" a))
+     a)))
 
 (define min
   (case-lambda
     ((a b)
-     (if (> b a) a b))
-    ((a) (assert (number? a)) a)
+     (define (err x)
+       (assertion-violation 'max "Expected a real number" x))
+     (cond
+       ((flonum? a)
+        (if ($real-number? b)
+            (let ((b (inexact b)))
+              (flmin a b))
+            (err b)))
+       ((flonum? b)
+        (if ($real-number? a)
+            (let ((a (inexact a)))
+              (flmin a b))
+            (err a)))
+       (else
+        (if (> b a) a b))))
     ((a b c)
-     (min (min a b)
-          (min b c)))
+     (min (min a b) c))
     ((a b c . x)
-     (fold-left min (min a b c) x))))
+     (fold-left min (min a b c) x))
+    ((a)
+     (unless ($real-number? a)
+       (assertion-violation 'min "Expected a real number" a))
+     a)))
 
 (define +
   (case-lambda
@@ -1351,31 +1386,32 @@
               (else (err a b))))
        ((flonum? a)
         (cond ((flonum? b) (fl+ a b))
-              ((fixnum? b) (+ a (fixnum->flonum b)))
-              ((or (int? b) (ratnum? b) (rcompnum? b) (pcompnum? b))
-               (+ a (inexact b)))
+              ((fixnum? b) (fl+ a (fixnum->flonum b)))
+              ((or (int? b) (ratnum? b))
+               (fl+ a (inexact b)))
+              ((or (rcompnum? b) (pcompnum? b))
+               (+ b a))
               (else (err a b))))
        ((ratnum? a)
         (cond ((rcompnum? b) (+ b a))
               ((pcompnum? b) (+ b a))
-              ;; TODO: flonum
+              ((flonum? b) (fl+ (inexact a) b))
               (else
                (let ((x1 (numerator a)) (y1 (denominator a))
                      (x2 (numerator b)) (y2 (denominator b)))
                  (make-ratnum (+ (* x1 y2) (* x2 y1))
                               (* y1 y2))))))
-       ((rcompnum? a)
-        ;; TODO: flonum
+       ((or (rcompnum? a) (pcompnum? a))
         (make-rcompnum (+ (real-part a) (real-part b))
                        (+ (imag-part a) (imag-part b))))
        (else
         (err a b))))
-    (() 0)
-    ((a) (assert (number? a)) a)
     ((a b c)
      (+ (+ a b) c))
     ((a b c d)
      (+ (+ a b) (+ c d)))
+    (() 0)
+    ((a) (assert (number? a)) a)
     ((a b c d . x)
      (fold-left + (+ a b c d) x))))
 
@@ -1494,12 +1530,12 @@
        ((ratnum? a)
         (cond ((rcompnum? b) (sys:+ a (- b)))
               ((pcompnum? b) (sys:+ a (- b)))
-              ((flonum? b) (- (inexact a) b))
+              ((flonum? b) (fl- (inexact a) b))
               (else
                (make-ratnum (- (* (numerator a) (denominator b))
                                (* (numerator b) (denominator a)))
                             (* (denominator a) (denominator b))))))
-       ((rcompnum? a)
+       ((or (rcompnum? a) (pcompnum? a))
         (make-rcompnum (- (real-part a) (real-part b))
                        (- (imag-part a) (imag-part b))))
        (else (err a b))))
@@ -1865,8 +1901,6 @@
     ((fixnum? x) 1)
     ((int? x) 1)
     ((flonum? x) (denominator (exact x)))
-    ((real? x)
-     (error 'denominator "TODO" x))
     (else
      (assertion-violation 'denominator
                           "Expected a real number" x))))
@@ -1884,8 +1918,6 @@
        (if (negative? a)
            (quotient (+ (- a b) 1) b)
            (quotient a b))))
-    ((real? x)
-     (error who "TODO" x))
     (else
      (assertion-violation who "Expected a real number" x))))
 
@@ -1902,8 +1934,6 @@
        (if (negative? a)
            (quotient a b)
            (quotient (+ a b -1) b))))
-    ((real? x)
-     (error who "TODO" x))
     (else
      (assertion-violation who "Expected a real number" x))))
 
@@ -1918,8 +1948,6 @@
            (b (ratnum-d x)))
        ;; TODO: verify
        (quotient a b)))
-    ((real? x)
-     (error who "TODO" x))
     (else
      (assertion-violation who "Expected a real number" x))))
 
@@ -1946,8 +1974,6 @@
                  ((< r 1/2) (+ d 1))
                  ((even? d) d)
                  (else (+ d 1)))))))
-    ((real? x)
-     (error who "TODO" x))
     (else
      (assertion-violation who "Expected a real number" x))))
 
@@ -1972,11 +1998,16 @@
     (cond ((< y x)
            (simplest-rational y x))
           ((not (< x y))
-           (if (rational? x)
-               x
-               (assertion-violation 'rationalize
-                                    "Expected a real number"
-                                    x e)))
+           (cond ((rational? x)
+                  x)
+                 ((and (flonum? x) (not (flfinite? x)))
+                  (if (and (flonum? e) (or (flnan? e) (fl=? x e)))
+                      +nan.0
+                      x))
+                 (else
+                  (assertion-violation 'rationalize
+                                       "Expected a real number"
+                                       x e))))
           ((positive? x)
            (simplest-rational-internal x y))
           ((negative? y)
@@ -1989,20 +2020,20 @@
   (simplest-rational (- x e) (+ x e)))
 
 ;; Constants with 35 digits, more than needed.
-(define e 2.7182818284590452353602874713526625)
 (define pi 3.1415926535897932384626433832795029)
 (define pi/2 1.5707963267948966192313216916397514)
 
 (define (exp x)
-  ;; TODO: floats.
   (cond
+    ((eqv? x 0) 1)
+    ((flonum? x) (flexp x))
     ((compnum? x)
+     ;; XXX: don't use inexact always here
      (let ((x (inexact (real-part x)))
            (y (inexact (imag-part x))))
        (* (exp x)
           (+ (cos y) (* +i (sin y)))))) ;(exp (* +i y))
-    (else
-     (inexact (expt e x)))))
+    (else (flexp (inexact x)))))
 
 (define log
   (case-lambda
@@ -2023,74 +2054,88 @@
     ((z b)
      (/ (log z) (log b)))))
 
-(define (%fac n) (if (<= n 1) 1 (* n (%fac (- n 1)))))
+(define (sin z)
+  (cond ((eqv? z 0)
+         0)
+        ((flonum? z)
+         (flsin z))
+        ((or (fixnum? z)
+             (int? z)
+             (ratnum? z))
+         (flsin (inexact z)))
+        ((compnum? z)
+         (/ (- (exp (* +i z))
+               (exp (* -i z)))
+            +2i))
+        (else
+         (assertion-violation 'sin "Expected a number" z))))
 
-(define (%norm x)
-  ;; FIXME: complex.
-  (if (and (real? x) (not (and (<= (* -2 pi) x)
-                               (< x (* 2 pi)))))
-      (mod0 x (* 2 pi))
-      x))
-
-(define (sin x)
-  ;; TODO: float.
-  (do ((x (%norm x))
-       (n 0 (fx+ n 1))
-       (ret 0 (+ ret (/ (* (expt -1 n)
-                           (expt x (+ (* 2 n) 1)))
-                        (%fac (+ (* 2 n) 1))))))
-      ((eqv? n 15) (inexact ret))))
-
-(define (cos x)
-  ;; TODO: float.
-  (do ((x (%norm x))
-       (n 0 (fx+ n 1))
-       (ret 0 (+ ret (/ (* (expt -1 n)
-                           (expt x (* 2 n)))
-                        (%fac (* 2 n))))))
-      ((eqv? n 15) (inexact ret))))
+(define (cos z)
+  (cond ((eqv? z 0)
+         1)
+        ((flonum? z)
+         (flcos z))
+        ((or (fixnum? z)
+             (int? z)
+             (ratnum? z))
+         (flcos (inexact z)))
+        ((compnum? z)
+         (/ (+ (exp (* +i z))
+               (exp (* -i z)))
+            2))
+        (else
+         (assertion-violation 'cos "Expected a number" z))))
 
 (define (tan z)
-  (/ (sin z) (cos z)))
+  (if (flonum? z)
+      (fltan z)
+      (/ (sin z) (cos z))))
 
 (define (asin z)
-  (* -i (log (+ (* +i z)
-                (sqrt (- 1 (expt z 2)))))))
+  (if (flonum? z)
+      (flasin z)
+      (* -i (log (+ (* +i z)
+                    (sqrt (- 1 (expt z 2))))))))
 
 (define (acos z)
-  (- pi/2 (asin z)))
+  (if (flonum? z)
+      (flacos z)
+      (- pi/2 (asin z))))
 
 (define atan
   (case-lambda
     ((z)
-     (do ((n 0 (fx+ n 1))
-          (ret 0 (+ ret
-                    (* (/ (* (expt 2
-                                   (* 2 n))
-                             (expt (%fac n)
-                                   2))
-                          (%fac (+ (* 2 n) 1)))
-                       (/ (expt z
-                                (+ (* 2 n) 1))
-                          (expt (+ 1 (* z z))
-                                (+ n 1)))))))
-         ((eqv? n 30)
-          (inexact ret)))
-     #;(/ (- (log (+ 1 (* +i z)))
-             (log (- 1 (* +i z))))
-          +2i))
+     (cond
+       ((flonum? z)
+        (flatan z))
+       ((or (fixnum? z) (int? z) (ratnum? z))
+        (flatan (inexact z)))
+       ((or (eqv? z -i) (eqv? z +i))
+        ;; XXX: It could be anything or nothing?
+        -inf.0)
+       (else
+        (* 1/2+i (log (/ (+ +i z)
+                         (- +i z)))))))
     ((y x)
-     ;; The important part here is to get the right quadrant.
-     (* 2 (atan (/ y (+ (sqrt (+ (* x x) (* y y)))
-                        x)))))))
+     (cond
+       ((eqv? y 0)
+        (cond
+          ((eqv? x 0)
+           (assertion-violation 'atan "Undefined" y x))
+          ((or (negative? x) (eqv? x -0.0))
+           pi)
+          (else
+           0.0)))
+       (else
+        (flatan (inexact y) (inexact x)))))))
 
 (define (sqrt z)
-  (if (flonum? z)
-      (flsqrt z)
-      (let ((ret (expt z 1/2)))
-        (if (eqv? (denominator ret) 1)
-            ret
-            (sqrt (inexact z))))))
+  (cond ((and (flonum? z) (fl>=? z 0.0))
+         (flsqrt z))
+        ((eqv? z -inf.0)
+         0+inf.0i)
+        (else
+         (expt z 1/2))))
 
 (define (exact-integer-sqrt k)
   (define who 'exact-integer-sqrt)
@@ -2114,66 +2159,76 @@
                (bitwise-arithmetic-shift-right bit 2)
                (bitwise-arithmetic-shift-right ret 1))))))
 
+;; Exponentiation. This shy operation does not even need a symbol in
+;; the mathematical notation.
 (define (expt base exponent)
-  ;; TODO: floats. The time it takes to compute some of this is
-  ;; completely ridiculous.
   (cond ((and (eqv? base 2) (fixnum? exponent) (fx>=? exponent 0))
          (if (fx<? exponent (fx- (fixnum-width) 1))
              (fxarithmetic-shift-left 1 exponent)
              (bnsimplify! (bignum-expt2 exponent 1))))
-        ;; TODO: square for (eq? exponent 2)?
+        ;; TODO: square for (eqv? exponent 2)?
         ((eqv? exponent 0) 1)
-        ((eqv? base 0) 0)
-        ((compnum? exponent)
-         (exp (* exponent (log base))))
-        ((negative? exponent)
-         (expt (/ base) (- exponent)))
+        ((eqv? exponent 0.0) 1.0)
+        ((or (eqv? base 0) (and (flonum? base) (fl=? base 0.0)))
+         (cond
+           ((flonum? exponent)
+            (flexpt 0.0 exponent))
+           ((and (compnum? exponent) (exact? exponent)
+                 (eqv? 0 (real-part exponent)))
+            (assertion-violation 'expt "Undefined" base exponent))
+           ((exact? exponent)
+            0)
+           (else 0.0)))
         ((pcompnum? base)
          (make-pcompnum (expt (pcompnum-m base) exponent)
                         (* (pcompnum-a base) exponent)))
         ((compnum? exponent)
          (exp (* exponent (log base))))
+        ;; real non-zero base
+        ((ratnum? exponent)
+         (cond ((not (negative? base))
+                (flexpt (inexact base) (inexact exponent)))
+               ((and (eqv? base -1) (eqv? exponent 1/2))
+                +i)
+               (else
+                (exp (* exponent (log base))))))
+        ((flonum? base)
+         (flexpt base (inexact exponent)))
+        ((flonum? exponent)
+         (flexpt (inexact base) exponent))
+        #;
+        ((negative? exponent)
+         (expt (/ base) (- exponent)))
         #;
         ((ratnum? base)
          (/ (expt (numerator base) exponent)
             (expt (denominator base) exponent)))
-        ((ratnum? exponent)
-         (cond ((and (= (numerator exponent) 1)
-                     (not (negative? base)))
-                (let ((n (denominator exponent)))
-                  ;; I'm gonna be asking myself what the heck I was
-                  ;; thinking writing this. Actually, I already am.
-                  (let-values (((x _) (exact-integer-sqrt
-                                       (max 1 (exact (round base))))))
-                    (let lp ((k 0) (x x))
-                      (if (eqv? k 11)
-                          x
-                          (lp (fx+ k 1)
-                              (* (/ 1 n)
-                                 (+ (* (- n 1) x)
-                                    (inexact (/ base (expt x (- n 1))))))))))))
-               (else
-                (exp (* exponent (log base))))))
-        ;; FIXME: (expt -1 1/2)
-        ((flonum? exponent)
-         (error 'expt "TODO: flonum exponents" base exponent))
+        ((and (number? base) (or (fixnum? exponent) (int? exponent)))
+         (let-values ([(base exponent)
+                       (if (negative? exponent)
+                           (values (/ base) (- exponent))
+                           (values base exponent))])
+           (let lp ((base base) (exponent exponent) (result 1))
+             (if (zero? exponent)
+                 result
+                 (lp (* base base)
+                     (bitwise-arithmetic-shift-right exponent 1)
+                     (if (bitwise-bit-set? exponent 0)
+                         (* result base)
+                         result))))))
         (else
-         (assert (and (number? base) (number? exponent)))
-         (assert (and (exact? exponent) (integer? exponent)))
-         (let lp ((base base) (exponent exponent) (result 1))
-           (if (zero? exponent)
-               result
-               (lp (* base base)
-                   (bitwise-arithmetic-shift-right exponent 1)
-                   (if (bitwise-bit-set? exponent 0)
-                       (* result base)
-                       result)))))))
+         (assertion-violation 'expt "Expected numbers" base exponent))))
 
 (define (make-rectangular r i)
   (assert (and (real? r) (real? i)))
   (make-rcompnum r i))
 
 (define (make-polar m a)
+  (define (%norm x)
+    ;; FIXME: complex.
+    (if (not (and (<= (* -2 pi) x) (< x (* 2 pi))))
+        (mod0 x (* 2 pi))
+        x))
   (assert (and (real? m) (real? a)))
   (make-pcompnum m (%norm a)))
 
@@ -2212,7 +2267,11 @@
          (pcompnum-a z))
         ((rcompnum? z)
          (atan (imag-part z) (real-part z)))
-        ((number? z)
+        ((flonum? z)
+         (if (flnegative? z)
+             pi
+             0.0))
+        ((or (fixnum? z) (int? z) (ratnum? z))
          (if (negative? z)
              pi
              0))
