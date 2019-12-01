@@ -44,12 +44,14 @@
     (rnrs arithmetic fixnums)
     (loko system $primitives))
 
-(define e 2.7182818284590452353602874713526625)
-(define pi 3.1415926535897932384626433832795029)
-(define pi/2 1.5707963267948966192313216916397514)
-(define pi/4 0.78539816339744830961566084581987572)
-(define ln2 0.69314718055994530941723212145817657)
-(define ln10 2.3025850929940456840179914546843642)
+;; More digits than can be used
+(define e      2.7182818284590452354)
+(define ln2    0.69314718055994530942)
+(define ln10   2.30258509299404568402)
+(define pi     3.14159265358979323846)
+(define pi/2   1.57079632679489661923)
+(define pi/4   0.78539816339744830962)
+(define /sqrt2 0.70710678118654752440)
 
 (define (flonum? obj) (sys:flonum? obj))
 
@@ -290,20 +292,67 @@
     ((a b)
      (fl/ (fllog a) (fllog b)))))
 
-(define (flsin fl)
-'  (error 'flsin "TODO: Not yet implemented"))
+;; TODO: the transcendental functions are better computed using
+;; Chebyshev polynomials.
 
-(define (flcos fl)
-'  (error 'flcos "TODO: Not yet implemented"))
+(define (%flfac n)
+  ;; XXX: This has no precision left at n=35
+  (let lp ((n n) (ret 1.0))
+    (if (fl<=? n 1.0)
+        ret
+        (lp (fl- n 1.0) (fl* (inexact n) ret)))))
 
-(define (fltan fl)
-'  (error 'fltan "TODO: Not yet implemented"))
+(define (%flnorm x)
+  ;; XXX: This loses precision. There are papers about how to do a
+  ;; better job.
+  (flmod0 x (fl* 2.0 pi)))
 
-(define (flasin fl)
-'  (error 'flasin "TODO: Not yet implemented"))
+(define (flsin x)
+  (let* ((x (%flnorm x))
+         (xx (fl* x x)))
+    (do ((x^n x (fl* x^n xx))
+         (n 1.0 (fl+ n 2.0))
+         (sign 1.0 (fl- sign))
+         (ret 0.0 (fl+ ret (fl/ (fl* sign x^n)
+                                (%flfac n)))))
+        ((fl>=? n 15.0) ret))))
 
-(define (flacos fl)
-  (error 'flacos "TODO: Not yet implemented"))
+(define (flcos x)
+  (let* ((x (%flnorm x))
+         (xx (fl* x x)))
+    (do ((x^n 1.0 (fl* x^n xx))
+         (n 0.0 (fl+ n 2.0))
+         (sign 1.0 (fl- sign))
+         (ret 0.0 (fl+ ret (fl/ (fl* sign x^n)
+                                (%flfac n)))))
+        ((fl>=? n 15.0) ret))))
+
+(define (fltan x)
+  (fl/ (flsin x) (flcos x)))
+
+(define (flasin x)
+  (cond
+    ((fl=? x 0.0) x)
+    ((fl<? (flabs x) /sqrt2)
+     (do ((xx (fl* x x))
+          (x^n x (fl* x^n xx))
+          (n 1.0 (fl+ n 2.0))
+          (num 1.0 (fl* num n))
+          (den 1.0 (fl* den (fl+ n 1.0)))
+          (ret 0.0 (fl+ ret (fl* (fl/ num den) (fl/ x^n n)))))
+         ((fl>=? n 35.0) ret)))
+    ((fl<? 0.0 x 1.0)
+     (fl- pi/2 (flasin (flsqrt (fl- 1.0 (fl* x x))))))
+    ((fl<? -1.0 x 0.0)
+     (fl+ (fl- pi/2) (flasin (flsqrt (fl- 1.0 (fl* x x))))))
+    ((fl=? x 1.0)
+     pi/2)
+    ((fl=? x -1.0)
+     (fl- pi/2))
+    (else +nan.0)))
+
+(define (flacos x)
+  (fl- pi/2 (flasin x)))
 
 ;; arctangent, atan, atan2 or tan⁻¹, demonstrating the incredible
 ;; regularity of mathematics.
