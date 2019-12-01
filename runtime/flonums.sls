@@ -265,14 +265,18 @@
 ;; e^x
 (define (flexp x)
   (cond
-    ((eqv? x -inf.0) 0.0)
+    ((not (flfinite? x))
+     (cond
+       ((eqv? x -inf.0) 0.0)
+       ((eqv? x +inf.0) +inf.0)
+       (else x)))
+    ((fl<=? (flabs x) 1.0)
+     (do ((n 40 (fx- n 1))
+          (ret 1.0 (fl+ 1.0 (fl* x (fl/ ret (fixnum->flonum n))))))
+         ((eqv? n 0) ret)))
     (else
-     (do ((n 1.0 (fl+ n 1.0))
-          (x^n x (fl* x^n x))
-          (n! 1.0 (fl* n! (fl+ n 1.0)))
-          (ret 0.0 (fl+ ret (fl/ x^n n!))))
-         ((fl>=? n 20.0)
-          (fl+ ret 1.0))))))
+     (let ((e (flexp (fl/ x 2.0))))
+       (fl* e e)))))
 
 (define fllog
   (case-lambda
@@ -415,6 +419,12 @@
   (sys:flsqrt a))
 
 (define (flexpt base exponent)
-  (flexp (fl* exponent (fllog base))))
+  (if (flnegative? base)
+      (if (flinteger? exponent)
+          (if (flodd? exponent)
+              (fl- (flexp (fl* exponent (fllog (flabs base)))))
+              (flexp (fl* exponent (fllog (flabs base)))))
+          +nan.0)                       ;complex
+      (flexp (fl* exponent (fllog base)))))
 
 (define (fixnum->flonum x) (sys:fixnum->flonum x)))
