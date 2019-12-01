@@ -47,7 +47,7 @@
     bytevector-ieee-double-native-ref bytevector-ieee-double-ref
     bytevector-ieee-single-native-set! bytevector-ieee-single-set!
     bytevector-ieee-double-native-set! bytevector-ieee-double-set!
-    string->utf8 ;;string->utf16 string->utf32
+    string->utf8 string->utf16 string->utf32
     utf8->string utf16->string utf32->string
 
     bytevector-address)
@@ -656,7 +656,55 @@
     (lambda (p) (put-string p x))
     (native-transcoder)))
 
-;; (TODO: string->utf16 string->utf32)
+(define string->utf16
+  (case-lambda
+    ((x)
+     (string->utf16 x (endianness big)))
+    ((x endian)
+     (unless (memq endian '(big little))
+       (assertion-violation 'string->utf16 "Unsupported endianness" x endian))
+     (let* ((len (do ((i (fx- (string-length x) 1) (fx- i 1))
+                      (slen 0 (if (fx<? (char->integer (string-ref x i)) #x10000)
+                                  (fx+ slen 2) (fx+ slen 4))))
+                     ((eqv? i -1) slen)))
+            (ret (make-bytevector len)))
+       (let lp ((si 0) (bi 0))
+         (unless (fx=? bi len)
+           (let ((cp (char->integer (string-ref x si))))
+             (cond
+               ((fx<? cp #x10000)
+                (bytevector-u16-set! ret bi cp endian)
+                (lp (fx+ si 1) (fx+ bi 2)))
+               (else
+                (let ((cp^ (fx- cp #x10000)))
+                  (let ((high (fx+ #xD800 (fxarithmetic-shift-right cp^ 10)))
+                        (low (fx+ #xDC00 (fxbit-field cp^ 0 10))))
+                    (bytevector-u16-set! ret bi high endian)
+                    (bytevector-u16-set! ret (fx+ bi 2) low endian)))
+                (lp (fx+ si 1) (fx+ bi 4)))))))
+       ret))))
+
+(define string->utf32
+  (case-lambda
+    ((x)
+     (string->utf32 x (endianness big)))
+    ((x endian)
+     (let* ((len (string-length x))
+            (ret (make-bytevector (fx* 4 len))))
+       (case endian
+         ((big)
+          (do ((i 0 (fx+ i 1)))
+              ((fx=? i len))
+            (bytevector-u32-set! ret (fx* i 4) (char->integer (string-ref x i))
+                                 (endianness big))))
+         ((little)
+          (do ((i 0 (fx+ i 1)))
+              ((fx=? i len))
+            (bytevector-u32-set! ret (fx* i 4) (char->integer (string-ref x i))
+                                 (endianness little))))
+         (else
+          (assertion-violation 'string->utf32 "Unsupported endianness" x endian)))
+       ret))))
 
 (define (utf8->string x)
   (call-with-string-output-port
@@ -771,9 +819,10 @@
                            (cond ((fx=? bom #xFEFF) (endianness big))
                                  ((fx=? bom #xFFFE) (endianness little))
                                  (else #f)))))
-                (endian (if endianness-mandatory? endian (or BOM endian))))
-           (let lp ((i (if BOM 2 0))
-                    (rem (if BOM (fx- (bytevector-length bv) 2) (bytevector-length bv))))
+                (endian (if endianness-mandatory? endian (or BOM endian)))
+                (skip (if (and BOM (not endianness-mandatory?)) 2 0)))
+           (let lp ((i skip)
+                    (rem (fx- (bytevector-length bv) skip)))
              (cond
                ((eqv? rem 0))
                ((eqv? rem 1) (put #\xFFFD))
@@ -797,9 +846,9 @@
                               (i^^ (fx+ i^ 2))
                               (rem^^ (fx- rem^ 2)))
                           (cond ((fx<=? #xD800 w1 #xDFFF)
-                                 (let ((w (fxior (fxarithmetic-shift-left (fx- w0 #xD800) 10)
-                                                 (fxbit-field (fx- w1 #xDC00) 0 10)
-                                                 #x10000)))
+                                 (let ((w (fx+ (fxior (fxarithmetic-shift-left (fx- w0 #xD800) 10)
+                                                      (fxbit-field (fx- w1 #xDC00) 0 10))
+                                               #x10000)))
                                    (cond ((fx>? w #x10FFFF)
                                           (put #\xFFFD)
                                           (lp i^ rem^))
@@ -828,9 +877,10 @@
                            (cond ((eqv? bom #x0000FEFF) (endianness big))
                                  ((eqv? bom #xFFFE0000) (endianness little))
                                  (else #f)))))
-                (endian (if endianness-mandatory? endian (or BOM endian))))
-           (let lp ((i (if BOM 4 0))
-                    (rem (if BOM (fx- (bytevector-length bv) 4) (bytevector-length bv))))
+                (endian (if endianness-mandatory? endian (or BOM endian)))
+                (skip (if (and BOM (not endianness-mandatory?)) 4 0)))
+           (let lp ((i skip)
+                    (rem (fx- (bytevector-length bv) skip)))
              (cond
                ((eqv? rem 0))
                ((fx<? rem 4)
