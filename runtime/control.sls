@@ -87,9 +87,12 @@
     (xs (cons magic xs))))
 (define (call-with-values producer consumer)
   (let ((x (producer)))
-    (if (and (pair? x) (eq? magic (car x)))
-        (apply consumer (cdr x))
-        (consumer x))))
+    (cond ((and (pair? x) (eq? magic (car x)))
+           (apply consumer (cdr x)))
+          (($void? x)
+           (consumer))
+          (else
+           (consumer x)))))
 
 ;;; Continuations, dynamic-wind, exceptions.
 
