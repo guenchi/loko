@@ -377,17 +377,14 @@
 
 (define (bytevector-u16-ref bv idx endian)
   (define (wrong)
-    (assertion-violation 'bytevector-s16-ref
+    (assertion-violation 'bytevector-u16-ref
                          "Unsupported endianness"
                          bv idx endian))
   (if (opencoded? ref u16)
       (case endian
-        ((little)
-         (sys:bytevector-u16-ref bv idx (endianness little)))
-        ((big)
-         (sys:bytevector-u16-ref bv idx (endianness big)))
-        (else
-         (wrong)))
+        ((little) (sys:bytevector-u16-ref bv idx (endianness little)))
+        ((big) (sys:bytevector-u16-ref bv idx (endianness big)))
+        (else (wrong)))
       (let ((b2 (bytevector-u8-ref bv (fx+ idx 1)))
             (b1 (bytevector-u8-ref bv idx)))
         (case endian
