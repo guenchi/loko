@@ -623,7 +623,7 @@
 (define (bytevector-ieee-single-ref bv idx endian)
   (let ((tmp (make-bytevector 4)))
     (bytevector-u32-native-set! tmp 0 (bytevector-u32-ref bv idx endian))
-    (bytevector-ieee-single-native-ref bv 0)))
+    (bytevector-ieee-single-native-ref tmp 0)))
 
 (define (bytevector-ieee-double-native-ref bv idx)
   (sys:bytevector-ieee-double-native-ref bv idx))
@@ -631,7 +631,7 @@
 (define (bytevector-ieee-double-ref bv idx endian)
   (let ((tmp (make-bytevector 8)))
     (bytevector-u64-native-set! tmp 0 (bytevector-u64-ref bv idx endian))
-    (bytevector-ieee-double-native-ref bv 0)))
+    (bytevector-ieee-double-native-ref tmp 0)))
 
 (define (bytevector-ieee-single-native-set! bv idx v)
   (sys:bytevector-ieee-single-native-set! bv idx v))
