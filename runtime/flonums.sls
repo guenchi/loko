@@ -158,7 +158,9 @@
     ((a b c)
      (sys:fl+ (sys:fl+ a b) c))
     ((a b c . x*)
-     (fold-left fl+ (fl+ a b c) x*))))
+     (fold-left fl+ (fl+ a b c) x*))
+    (()
+     0.0)))
 
 (define fl*
   (case-lambda
@@ -169,7 +171,9 @@
     ((a b c)
      (sys:fl* (sys:fl* a b) c))
     ((a b c . x*)
-     (fold-left fl* (fl* a b c) x*))))
+     (fold-left fl* (fl* a b c) x*))
+    (()
+     1.0)))
 
 (define fl-
   (case-lambda
@@ -237,7 +241,9 @@
 (define (flnumerator a)
   (assert (flonum? a))
   (if (flfinite? a)
-      (inexact (numerator (exact a)))
+      (if (fl=? a 0.0)
+          a
+          (inexact (numerator (exact a))))
       a))
 
 (define (fldenominator a)
