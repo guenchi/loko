@@ -890,8 +890,9 @@
                       (i^ (fx+ i 4))
                       (rem^ (fx- rem 4)))
                   (cond
-                    ((fx<=? #xD800 w0 #xDFFF)
-                     ;; Surrogate pair
+                    ((or (fx<=? #xD800 w0 #xDFFF)
+                         (fx>? w0 #x10FFFF))
+                     ;; Surrogate pair or out of range
                      (put #\xFFFD)
                      (lp i^ rem^))
                     (else
