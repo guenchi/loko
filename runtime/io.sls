@@ -570,7 +570,8 @@
   (let lp ((n n) (i i))
     (if (eqv? i 0)
         (if (or (fx<? n lower-limit)
-                (fx<=? #xD800 n #xDFFF))
+                (fx<=? #xD800 n #xDFFF)
+                (fx>? n #x10FFFF))
             #\xFFFD
             (integer->char n))
         (let ((b (lookahead-u8 p)))
