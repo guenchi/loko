@@ -149,7 +149,7 @@
 (define make-file-options (enum-set-constructor file-options-set))
 
 (define (buffer-mode? obj)
-  (memq obj '(none line block)))
+  (and (memq obj '(none line block)) #t))
 
 (define (latin-1-codec) 'latin-1-codec)
 
