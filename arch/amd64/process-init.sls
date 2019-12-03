@@ -397,18 +397,28 @@
             (transcoded-port p maybe-transcoder)
             p))))
   (define (open-file-output-port filename file-options buffer-mode maybe-transcoder)
-    ;; TODO: what of file-options needs to be used?
     (define who 'open-file-input-port)
     (define no-create (enum-set-member? 'no-create file-options))
     (define no-fail (enum-set-member? 'no-fail file-options))
     (define no-truncate (enum-set-member? 'no-truncate file-options))
+    (define create (not no-create))
+    (define fail (not no-fail))
+    (define truncate (not no-truncate))
     (assert (buffer-mode? buffer-mode))
     (let* ((fn (filename->c-string 'open-file-output-port filename))
            (fd (let retry ()
                  (sys_open (bytevector-address fn)
-                           (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY O_NONBLOCK
-                                        (if no-create 0 O_CREAT)
-                                        (if (and no-fail (not no-truncate)) O_TRUNC 0))
+                           (bitwise-ior
+                            (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY O_NONBLOCK)
+                            (if (and fail create)
+                                (fxior O_CREAT O_EXCL)
+                                (if truncate
+                                    (if (and no-fail create)
+                                        (fxior O_TRUNC O_CREAT)
+                                        O_TRUNC)
+                                    (if (and no-fail create)
+                                        O_CREAT
+                                        0))))
                            #o644
                            (lambda (errno)
                              (if (eqv? errno EAGAIN)
@@ -416,7 +426,8 @@
                                  (raise (condition
                                          (make-who-condition who)
                                          (make-message-condition "Could not open file")
-                                         (make-irritants-condition (list filename))
+                                         (make-irritants-condition
+                                          (list filename file-options buffer-mode maybe-transcoder))
                                          (make-syscall-i/o-error errno filename #f)
                                          (make-syscall-error 'open errno))))))))
            (position 0))
