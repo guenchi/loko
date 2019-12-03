@@ -285,7 +285,7 @@
 
 (define-condition-type* &i/o-encoding &i/o-port
   make-i/o-encoding-error i/o-encoding-error?
-  (char i/o-encoding-error-char))
+  (cobj i/o-encoding-error-char))
 
 ;; Flonums
 

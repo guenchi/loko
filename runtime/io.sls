@@ -713,7 +713,7 @@
           (let lp ()
             (let ((c (get-char p)))
               (unless (or (eof-object? c)
-                          (char=? c #\linefeed))
+                          (eqv? c #\linefeed))
                 (put-char o c)
                 (lp))))))))
 
@@ -1176,6 +1176,49 @@
        (string? (syntax->datum #'v))
        (string->utf8 (syntax->datum #'v))))))
 
+(define (display-char-escape c p)
+  (display "\\x" p)
+  (display (number->string (char->integer c) 16) p)
+  (put-char p #\;))
+
+(define (write-symbol name p)
+  ;; TODO: make tables and handle latin-1 ports
+  (define (char-initial? c)
+    (or (char<=? #\a c #\z)
+        (char<=? #\A c #\Z)
+        (memv c '(#\! #\$ #\% #\& #\* #\/ #\: #\< #\= #\> #\? #\^ #\_ #\~))
+        (and (fx>? (char->integer c) 127)
+             (memq (char-general-category c)
+                   '(Lu Ll Lt Lm Lo Mn Nl No Pd Pc Po Sc Sm Sk So Co)))))
+  (define (char-subsequent? c)
+    (or (char<=? #\a c #\z)
+        (char<=? #\A c #\Z)
+        (char<=? #\0 c #\9)
+        (memv c '(#\! #\$ #\% #\& #\* #\/ #\: #\< #\= #\> #\? #\^ #\_ #\~
+                  #\+ #\- #\. #\@))
+        (and (fx>? (char->integer c) 127)
+             (memq (char-general-category c)
+                   '(Lu Ll Lt Lm Lo Mn Nl No Pd Pc Po Sc Sm Sk So Co
+                        Nd Mc Me)))))
+  (cond ((eqv? 0 (string-length name))
+         (display "||" p))                  ;not in R6RS
+        ((member name '("+" "-" "..."))
+         (display name p))
+        (else
+         (let ((c0 (string-ref name 0)))
+           (if (or (char-initial? c0)
+                   (and (eqv? c0 #\-)
+                        (fx>=? (string-length name) 2)
+                        (eqv? (string-ref name 1) #\>)))
+               (put-char p c0)
+               (display-char-escape c0 p)))
+         (do ((i 1 (fx+ i 1)))
+             ((fx=? i (string-length name)))
+           (let ((c (string-ref name i)))
+             (if (not (char-subsequent? c))
+                 (display-char-escape c p)
+                 (put-char p c)))))))
+
 (define (display* v p write?)
   (define (display-hex i p)
     ;; Displays 24-bit integers in hexadecimal notation
@@ -1250,15 +1293,24 @@
     (($immsym? v)
      (let ((alphabet     (%bytevector "abcdefghijklmnopqrstuvwxyz-/<=>"))
            (end-alphabet (%bytevector "acdefghklmnopqrstvxy!*+-/08<=>?")))
-       (let lp ((s ($immsym->fixnum v)))
-         (unless (eqv? s 0)
-           (let* ((s* (fxarithmetic-shift-right s 5))
-                  (c (fx- (fxand s #b11111) 1)))
-             (cond ((eqv? s* 0)
-                    (put-char p (integer->char (bytevector-u8-ref end-alphabet c))))
-                   (else
-                    (put-char p (integer->char (bytevector-u8-ref alphabet c)))
-                    (lp s*))))))))
+       (let ((s ($immsym->fixnum v)))
+         (let ((s (fxarithmetic-shift-right s 5))
+               (c (fx- (fxand s #b11111) 1)))
+           ;; The first character might need to be escaped
+           (let ((ch (integer->char (bytevector-u8-ref (if (eqv? s 0) end-alphabet alphabet) c))))
+             (if (and write? (memv ch '(#\- #\+ #\0 #\8)))
+                 (display-char-escape ch p)
+                 (put-char p ch)))
+           ;; Output the first of the characters, if there are any
+           (let lp ((s s))
+             (unless (eqv? s 0)
+               (let ((s (fxarithmetic-shift-right s 5))
+                     (c (fx- (fxand s #b11111) 1)))
+                 (cond ((eqv? s 0)
+                        (put-char p (integer->char (bytevector-u8-ref end-alphabet c))))
+                       (else
+                        (put-char p (integer->char (bytevector-u8-ref alphabet c)))
+                        (lp s))))))))))
     ((string? v)
      (if write? (put-char p #\"))
      (do ((len (string-length v))
@@ -1359,7 +1411,7 @@
     (($box? v)
      (let ((t ($box-type v)))
        (cond ((symbol? t)
-              ;; FIXME: This case is obsolete
+              ;; FIXME: This case should be phased out
               (display "#<" p)
               (display ($box-type v) p)
               (when (eq? ($box-type v) 'rtd)
@@ -1367,6 +1419,7 @@
                 (write ($box-ref v 2) p))
               (display ">" p))
              ((and ($box-header? t) (eqv? ($box-header-type t) #x03))
+              ;; Symbol
               (let ((is-gensym (not (eqv? ($box-header-length t) 1)))
                     (symbol-name ($box-ref v 0)))
                 ;; FIXME: this doesn't support write syntax.
@@ -1385,8 +1438,12 @@
                       (else
                        (when (not symbol-name)
                          ($gensym-generate-names! v))
-                       (let ((symbol-name ($box-ref v 0)))
-                         (display (utf8->string symbol-name) p))))))
+                       (let* ((symbol-name ($box-ref v 0))
+                              ;; FIXME: This is a wasteful conversion
+                              (name (utf8->string symbol-name)))
+                         (if write?
+                             (write-symbol name p)
+                             (display name p)))))))
              ((record-type-descriptor? t)
               (let ((writer (record-writer t)))
                 (writer v p write)))
