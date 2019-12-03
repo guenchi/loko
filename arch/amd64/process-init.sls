@@ -453,8 +453,9 @@
           status))
       (define (get-position)
         position)
-      #;(define (set-position! off)
-          #f)
+      (define (set-position! off)
+        (sys_lseek fd off SEEK_SET)
+        (set! position off))
       (define (close)
         (sys_close fd (lambda (errno)
                         (unless (eqv? errno EINTR)
@@ -464,7 +465,7 @@
                             (make-syscall-i/o-error errno filename #f)
                             (make-syscall-error 'close errno))))))
       (let ((p (make-custom-binary-output-port
-                filename write! get-position #f close)))
+                filename write! get-position set-position! close)))
         ($port-buffer-mode-set! p buffer-mode)
         (port-file-descriptor-set! p fd)
         (if maybe-transcoder
