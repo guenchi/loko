@@ -45,9 +45,9 @@
   (fields type v))
 
 (define (make-enumeration symbol-list)
-  (define who 'make-enumeration)
   (unless (for-all symbol? symbol-list)
-    (assertion-violation who "Expected a list of symbols" symbol-list))
+    (assertion-violation 'make-enumeration
+                         "Expected a list of symbols" symbol-list))
   (let ((ht (make-eq-hashtable)))
     (do ((s* symbol-list (cdr s*))
          (i 0 (fx+ i 1)))
@@ -85,7 +85,7 @@
         (v (enum-set-v enum-set)))
     (do ((s* (enum-type-symbols t) (cdr s*))
          (b 1 (bitwise-arithmetic-shift-left b 1))
-         (ret '() (if (zero? (bitwise-and b v))
+         (ret '() (if (eqv? 0 (bitwise-and b v))
                       ret
                       (cons (car s*) ret))))
         ((null? s*) (reverse ret)))))
@@ -99,19 +99,18 @@
             (else #f)))))
 
 (define (enum-set-subset? enum-set1 enum-set2)
-  (define who 'enum-set-subset?)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2))
         (v2 (enum-set-v enum-set2)))
     (if (eq? t1 t2)
-        (zero? (bitwise-and v1 (bitwise-not v2)))
-        (enum-set-subset? enum-set1
-                          (enum-set-projection enum-set2
-                                               enum-set1)))))
+        (eqv? 0 (bitwise-and v1 (bitwise-not v2)))
+        (and (for-all (lambda (sym) (memq sym (enum-type-symbols t2)))
+                      (enum-type-symbols t1))
+             (for-all (lambda (sym) (enum-set-member? sym enum-set2))
+                      (enum-set->list enum-set1))))))
 
 (define (enum-set=? enum-set1 enum-set2)
-  (define who 'enum-set=?)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2))
@@ -123,47 +122,42 @@
              (enum-set-subset? enum-set2 enum-set1)))))
 
 (define (enum-set-union enum-set1 enum-set2)
-  (define who 'enum-set-union)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2))
         (v2 (enum-set-v enum-set2)))
     (if (eq? t1 t2)
         (make-enum-set t1 (bitwise-ior v1 v2))
-        (error who "Expected enum-sets of the same type"
+        (error 'enum-set-union "Expected enum-sets of the same type"
                enum-set1 enum-set2))))
 
 (define (enum-set-intersection enum-set1 enum-set2)
-  (define who 'enum-set-intersection)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2))
         (v2 (enum-set-v enum-set2)))
     (if (eq? t1 t2)
         (make-enum-set t1 (bitwise-and v1 v2))
-        (error who "Expected enum-sets of the same type"
+        (error 'enum-set-intersection "Expected enum-sets of the same type"
                enum-set1 enum-set2))))
 
 (define (enum-set-difference enum-set1 enum-set2)
-  (define who 'enum-set-difference)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2))
         (v2 (enum-set-v enum-set2)))
     (if (eq? t1 t2)
         (make-enum-set t1 (bitwise-and v1 (bitwise-not v2)))
-        (error who "Expected enum-sets of the same type"
+        (error 'enum-set-difference "Expected enum-sets of the same type"
                enum-set1 enum-set2))))
 
 (define (enum-set-complement enum-set)
-  (define who 'enum-set-complement)
   (let ((t (enum-set-type enum-set))
         (v (enum-set-v enum-set)))
     (let ((s* (enum-type-symbols t)))
       (make-enum-set t (bitwise-xor v (- (expt 2 (length s*)) 1))))))
 
 (define (enum-set-projection enum-set1 enum-set2)
-  (define who 'enum-set-projection)
   (let ((t1 (enum-set-type enum-set1))
         (v1 (enum-set-v enum-set1))
         (t2 (enum-set-type enum-set2)))
@@ -172,7 +166,7 @@
         (let ((ht (enum-type-ht t2)))
           (do ((s* (enum-type-symbols t1) (cdr s*))
                (b 1 (bitwise-arithmetic-shift-left b 1))
-               (v 0 (cond ((zero? (bitwise-and v1 b)) v)
+               (v 0 (cond ((eqv? 0 (bitwise-and v1 b)) v)
                           ((hashtable-ref ht (car s*) #f)
                            => (lambda (b) (bitwise-ior v (expt 2 b))))
                           (else v))))
