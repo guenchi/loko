@@ -333,15 +333,34 @@
                                          (make-syscall-i/o-error errno filename #f)
                                          (make-syscall-error 'faccessat errno))))))))))
       (eqv? 0 status)))
-  (define (open-file-input-port filename file-options buffer-mode maybe-transcoder)
-    ;; TODO: what of file-options needs to be used?
-    (define who 'open-file-input-port)
-    (assert (buffer-mode? buffer-mode))
+  (define (linux-open-file filename file-options buffer-mode who)
+    (define no-create (enum-set-member? 'no-create file-options))
+    (define no-fail (enum-set-member? 'no-fail file-options))
+    (define no-truncate (enum-set-member? 'no-truncate file-options))
+    (define create (not no-create))
+    (define fail (not no-fail))
+    (define truncate (not no-truncate))
     (let* ((fn (filename->c-string 'open-file-input-port filename))
+           (flags (case who
+                    ((open-file-output-port open-file-input/output-port)
+                     (if (and fail create)
+                         (fxior O_CREAT O_EXCL)
+                         (if truncate
+                             (if (and no-fail create)
+                                 (fxior O_TRUNC O_CREAT)
+                                 O_TRUNC)
+                             (if (and no-fail create)
+                                 O_CREAT
+                                 0))))
+                    (else 0)))
+           (access-mode (case who
+                          ((open-file-output-port) O_WRONLY)
+                          ((open-file-input-port) O_RDONLY)
+                          ((open-file-input/output-port) O_RDWR)))
            (fd (let retry ()
                  (sys_open (bytevector-address fn)
-                           (bitwise-ior O_NOCTTY O_LARGEFILE O_NONBLOCK)
-                           0
+                           (fxior flags access-mode (fxior O_NOCTTY O_LARGEFILE O_NONBLOCK))
+                           #o644
                            (lambda (errno)
                              (if (eqv? errno EINTR)
                                  (retry)
@@ -371,71 +390,12 @@
                                            (handle-read-error errno))))))))
           (set! position (+ position status))
           status))
-      ;; TODO! pwrite/pread
-      (define (get-position)
-        position)
-      (define (set-position! off)
-        (sys_lseek fd off SEEK_SET)
-        (set! position off))
-      (define (close)
-        ;; TODO: Obviously closing should be done in some automated
-        ;; manner as well. And closing can block, so it should be
-        ;; done in another thread. Linux always closes the fd even
-        ;; if this fails with EINTR.
-        (sys_close fd (lambda (errno)
-                        (unless (eqv? errno EINTR)
-                          (raise
-                            (make-who-condition 'close-port)
-                            (make-message-condition "Error while closing the file")
-                            (make-syscall-i/o-error errno filename #f)
-                            (make-syscall-error 'close errno))))))
-      (let ((p (make-custom-binary-input-port
-                filename read! get-position set-position! close)))
-        ($port-buffer-mode-set! p buffer-mode)
-        (port-file-descriptor-set! p fd)
-        (if maybe-transcoder
-            (transcoded-port p maybe-transcoder)
-            p))))
-  (define (open-file-output-port filename file-options buffer-mode maybe-transcoder)
-    (define who 'open-file-input-port)
-    (define no-create (enum-set-member? 'no-create file-options))
-    (define no-fail (enum-set-member? 'no-fail file-options))
-    (define no-truncate (enum-set-member? 'no-truncate file-options))
-    (define create (not no-create))
-    (define fail (not no-fail))
-    (define truncate (not no-truncate))
-    (assert (buffer-mode? buffer-mode))
-    (let* ((fn (filename->c-string 'open-file-output-port filename))
-           (fd (let retry ()
-                 (sys_open (bytevector-address fn)
-                           (bitwise-ior
-                            (bitwise-ior O_NOCTTY O_LARGEFILE O_WRONLY O_NONBLOCK)
-                            (if (and fail create)
-                                (fxior O_CREAT O_EXCL)
-                                (if truncate
-                                    (if (and no-fail create)
-                                        (fxior O_TRUNC O_CREAT)
-                                        O_TRUNC)
-                                    (if (and no-fail create)
-                                        O_CREAT
-                                        0))))
-                           #o644
-                           (lambda (errno)
-                             (if (eqv? errno EAGAIN)
-                                 (retry)
-                                 (raise (condition
-                                         (make-who-condition who)
-                                         (make-message-condition "Could not open file")
-                                         (make-irritants-condition
-                                          (list filename file-options buffer-mode maybe-transcoder))
-                                         (make-syscall-i/o-error errno filename #f)
-                                         (make-syscall-error 'open errno))))))))
-           (position 0))
       (define (handle-write-error errno)
         (raise
           (condition
            (make-syscall-i/o-error errno filename #f)
            (make-syscall-error 'write errno))))
+      ;; TODO! pwrite/pread
       (define (write! bv start count)
         (assert (fx<=? (fx+ start count) (bytevector-length bv)))
         (let ((status
@@ -457,6 +417,10 @@
         (sys_lseek fd off SEEK_SET)
         (set! position off))
       (define (close)
+        ;; TODO: Obviously closing should be done in some automated
+        ;; manner as well. And closing can block, so it should be done
+        ;; in another thread. XXX: Linux always closes the fd even if
+        ;; this fails with EINTR.
         (sys_close fd (lambda (errno)
                         (unless (eqv? errno EINTR)
                           (raise
@@ -464,13 +428,19 @@
                             (make-message-condition "Error while closing the file")
                             (make-syscall-i/o-error errno filename #f)
                             (make-syscall-error 'close errno))))))
-      (let ((p (make-custom-binary-output-port
-                filename write! get-position set-position! close)))
+      (let ((p (case who
+                 ((open-file-input-port)
+                  (make-custom-binary-input-port filename read!
+                                                 get-position set-position! close))
+                 ((open-file-output-port)
+                  (make-custom-binary-output-port filename write!
+                                                  get-position set-position! close))
+                 (else
+                  (make-custom-binary-input/output-port filename read! write!
+                                                        get-position set-position! close)))))
         ($port-buffer-mode-set! p buffer-mode)
         (port-file-descriptor-set! p fd)
-        (if maybe-transcoder
-            (transcoded-port p maybe-transcoder)
-            p))))
+        p)))
   (define (linux-open-i/o-poller)
     (define (poll-type->events poll-type)
       ;; TODO: EPOLLPRI     ;out of band data
@@ -667,8 +637,7 @@
   (port-file-descriptor-set! (current-error-port) STDERR_FILENO)
   (init-set! 'delete-file linux-delete-file)
   (init-set! 'file-exists? linux-file-exists?)
-  (init-set! 'open-file-input-port open-file-input-port)
-  (init-set! 'open-file-output-port open-file-output-port)
+  (init-set! 'open-file linux-open-file)
   (init-set! 'open-i/o-poller linux-open-i/o-poller)
   (init-set! 'set-file-mode linux-set-file-mode)
   (time-init-set! 'cumulative-process-time

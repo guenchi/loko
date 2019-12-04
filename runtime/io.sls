@@ -79,8 +79,7 @@
     standard-error-port current-output-port current-error-port
     make-custom-binary-output-port make-custom-textual-output-port
     put-u8 put-bytevector put-char put-string put-datum
-    ;; make-custom-binary-input/output-port
-    ;; make-custom-textual-input/output-port
+    make-custom-binary-input/output-port make-custom-textual-input/output-port
     call-with-input-file call-with-output-file with-input-from-file
     with-output-to-file open-input-file open-output-file
     close-input-port close-output-port read-char peek-char
@@ -1092,8 +1091,14 @@
 ;;; Input/output ports
 
 ;; open-file-input/output-port is defined elsewhere.
-;; make-custom-binary-input/output-port
-;; make-custom-textual-input/output-port
+
+(define (make-custom-binary-input/output-port filename read! write!
+                                              get-position set-position! close)
+  (error 'make-custom-binary-input/output-port "Not implemented"))
+
+(define (make-custom-textual-input/output-port filename read! write!
+                                               get-position set-position! close)
+  (error 'make-custom-textual-input/output-port "Not implemented"))
 
 ;;; Simple I/O
 

@@ -74,54 +74,61 @@
      ;; FIXME: run winders
      (*exit* status))))
 
-(define *open-file-input-port*
-  (lambda (filename y z w)
+(define *open-file*
+  (lambda (filename file-options buffer-mode who)
     (raise
       (condition
-       (make-i/o-error)
-       (make-who-condition 'open-file-input-port)
-       (make-message-condition "No open-file-input-port procedure has been installed")
-       (make-irritants-condition filename)))))
+       (make-i/o-filename-error filename)
+       (make-who-condition who)
+       (make-message-condition "No file opener has been installed")
+       (make-irritants-condition (list filename file-options buffer-mode))))))
 (define open-file-input-port
   (case-lambda
-    ((x)
-     (open-file-input-port x (file-options)))
-    ((x y)
-     (open-file-input-port x y (buffer-mode block)))
-    ((x y z)
-     (open-file-input-port x y z #f))
-    ((x y z w)
-     (*open-file-input-port* x y z w))))
+    ((fn)
+     (open-file-input-port fn (file-options)))
+    ((fn fo)
+     (open-file-input-port fn fo (buffer-mode block)))
+    ((fn fo bm)
+     (open-file-input-port fn fo bm #f))
+    ((filename file-options buffer-mode maybe-transcoder)
+     (define who 'open-file-input-port)
+     (assert (buffer-mode? buffer-mode))
+     (let ((p (*open-file* filename file-options buffer-mode who)))
+       (if maybe-transcoder
+           (transcoded-port p maybe-transcoder)
+           p)))))
 
-(define *open-file-output-port*
-  (lambda x
-    (apply error 'open-file-output-port
-           "No open-file-output-port has been installed" x)))
 (define open-file-output-port
   (case-lambda
-    ((x)
-     (open-file-output-port x (file-options)))
-    ((x y)
-     (open-file-output-port x y (buffer-mode block)))
-    ((x y z)
-     (open-file-output-port x y z #f))
-    ((x y z w)
-     (*open-file-output-port* x y z w))))
+    ((fn)
+     (open-file-output-port fn (file-options)))
+    ((fn fo)
+     (open-file-output-port fn fo (buffer-mode block)))
+    ((fn fo bm)
+     (open-file-output-port fn fo bm #f))
+    ((filename file-options buffer-mode maybe-transcoder)
+     (define who 'open-file-output-port)
+     (assert (buffer-mode? buffer-mode))
+     (let ((p (*open-file* filename file-options buffer-mode who)))
+       (if maybe-transcoder
+           (transcoded-port p maybe-transcoder)
+           p)))))
 
-(define *open-file-input/output-port*
-  (lambda x
-    (apply error 'open-file-input/output-port
-           "No open-file-input/output-port has been installed" x)))
 (define open-file-input/output-port
   (case-lambda
-    ((x)
-     (open-file-input/output-port x (file-options)))
-    ((x y)
-     (open-file-input/output-port x y (buffer-mode block)))
-    ((x y z)
-     (open-file-input/output-port x y z #f))
-    ((x y z w)
-     (*open-file-input/output-port* x y z w))))
+    ((fn)
+     (open-file-input/output-port fn (file-options)))
+    ((fn fo)
+     (open-file-input/output-port fn fo (buffer-mode block)))
+    ((fn fo bm)
+     (open-file-input/output-port fn fo bm #f))
+    ((filename file-options buffer-mode maybe-transcoder)
+     (define who 'open-file-input/output-port)
+     (assert (buffer-mode? buffer-mode))
+     (let ((p (*open-file* filename file-options buffer-mode who)))
+       (if maybe-transcoder
+           (transcoded-port p maybe-transcoder)
+           p)))))
 
 (define *open-i/o-poller*
   (lambda x
@@ -179,8 +186,7 @@
     ((exit) (set! *exit* value))
     ((file-exists?) (set! *file-exists?* value))
     ((delete-file) (set! *delete-file* value))
-    ((open-file-input-port) (set! *open-file-input-port* value))
-    ((open-file-output-port) (set! *open-file-output-port* value))
+    ((open-file) (set! *open-file* value))
     ((open-i/o-poller) (set! *open-i/o-poller* value))
     ((init) (set! *init* value))
     ((machine-type) (set! *machine-type* value))
