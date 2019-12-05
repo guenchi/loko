@@ -214,12 +214,13 @@
           (mutable closer)
           (mutable extractor)
           (mutable file-descriptor)
+          (mutable direction)           ;last buffer direction
           (mutable buffer)
           (mutable buffer-r)
           (mutable buffer-w)
-          (mutable buffer-pos)        ;position before last read
+          (mutable buffer-pos)          ;position before last read
           (mutable buffer-char)
-          (mutable buffer-mode))       ;XXX: can be in flags
+          (mutable buffer-mode))        ;XXX: could be in flags
   (sealed #t) (opaque #t) #;(nongenerative))
 
 (define ($port-buffer-mode-set! port mode)
@@ -235,6 +236,29 @@
      (if (string? (port-buffer port))
          (port-buffer-set! port (make-string 1 0))
          (port-buffer-set! port (make-bytevector 1 0))))))
+
+(define (port-ensure-direction! port direction)
+  (let ((current-dir (port-direction port)))
+    (unless (eq? (port-direction port) direction)
+      (case current-dir
+        ((output)
+         (assert (output-port? port))
+         (flush-output-port port))
+        ((input)
+         (assert (input-port? port))
+         (when (port-has-set-port-position!? port)
+           ;; The previous operation was a write. We should try to
+           ;; position the port to the same position that the program
+           ;; was reading from.
+           ((port-set-positioner port)
+            (fx+ (port-buffer-pos port)
+                 (port-buffer-r port))))
+         ;; Invalidate the input buffer
+         (port-buffer-r-set! port 0)
+         (port-buffer-w-set! port 0)
+         (port-buffer-char-set! port #f)
+         (set-cdr! (port-tc-state port) #f)))
+      (port-direction-set! port direction))))
 
 (define (textual-port? p)
   (and (port? p) (eqv? (fxand (port-flags p) #b100) #b100)))
@@ -278,6 +302,7 @@
                          (port-closer p)
                          #f
                          (port-file-descriptor p)
+                         (port-direction p)
                          (port-buffer p)
                          (port-buffer-r p)
                          (port-buffer-w p)
@@ -300,9 +325,8 @@
   (and (port-get-positioner p) #t))
 
 (define (port-position p)
-  ;; TODO: and input-output-ports?
   (if (port-has-port-position? p)
-      (if (input-port? p)
+      (if (eq? 'input (port-direction p))
           (+ (port-buffer-r p) (port-buffer-pos p))
           (+ (port-buffer-w p) (port-buffer-pos p)))
       (assertion-violation 'port-position
@@ -410,14 +434,14 @@
   (assert (string? id))
   (make-port (string-copy id) #f (cons #f #f) #b10
              #f read! get-position set-position! close #f #f
-             (make-bytevector 4096) 0 0 0 #f
+             'input (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-input-port id read! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f (cons #f #f) #b110
              #f read! get-position set-position! close #f #f
-             (make-string 512) 0 0 0 #f
+             'input (make-string 512) 0 0 0 #f
              'block))
 
 ;;; Binary input
@@ -438,6 +462,7 @@
     (() (sys:lookahead-u8 (current-input-port)))
     ((p)
      (assert (input-port? p))
+     (port-ensure-direction! p 'input)
      (let ((b (port-buffer p))
            (r (port-buffer-r p))
            (w (port-buffer-w p)))
@@ -489,6 +514,7 @@
     (assertion-violation 'get-bytevector-n!
                          "Expected an exact, non-negative start and count"
                          port buf start count))
+  (port-ensure-direction! port 'input)
   (let ((end (fx+ start count)))
     (unless (fx>=? (bytevector-length buf) end)
       (assertion-violation 'get-bytevector-n!
@@ -513,6 +539,7 @@
       (eof-object)
       (call-with-bytevector-output-port
         (lambda (out)
+          (port-ensure-direction! p 'input)
           (let ((b (port-buffer p))
                 (r (port-buffer-r p))
                 (w (port-buffer-w p)))
@@ -599,6 +626,7 @@
 (define (lookahead-char p)
   (define tc (port-transcoder p))
   (assert (and (input-port? p) (textual-port? p)))
+  (port-ensure-direction! p 'input)
   (cond
     ((port-buffer-char p))
     ((cdr (port-tc-state p)) =>
@@ -947,14 +975,14 @@
   (assert (string? id))
   (make-port (string-copy id) #f (cons #f #f) #b01
              write! #f get-position set-position! close #f #f
-             (make-bytevector 4096) 0 0 0 #f
+             'output (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-output-port id write! get-position set-position! close)
   (assert (string? id))
   (make-port (string-copy id) #f (cons #f #f) #b101
              write! #f get-position set-position! close #f #f
-             (make-string 4096) 0 0 0 #f
+             'output (make-string 4096) 0 0 0 #f
              'block))
 
 ;;; SRFI 6-style string ports
@@ -974,6 +1002,7 @@
 
 (define (put-u8 p u8)
   (cond ((output-port? p)
+         (port-ensure-direction! p 'output)
          (let ((b (port-buffer p))
                (w (port-buffer-w p)))
            ;; There is always room for at least one byte.
@@ -995,6 +1024,7 @@
     ((p bv start)
      (put-bytevector p bv start (fx- (bytevector-length bv) start)))
     ((p bv start count)
+     (port-ensure-direction! p 'output)
      (let ((end (fx+ start count))
            (buf (port-buffer p))
            (mode (port-buffer-mode p)))
@@ -1076,6 +1106,7 @@
   (assert (and (output-port? p) (textual-port? p)))
   (unless (char? c)
     (assertion-violation 'put-char "Expected a character" p c))
+  (port-ensure-direction! p 'output)
   (cond (tc
          (case (transcoder-codec tc)
            ((utf-8-codec)
@@ -1207,13 +1238,21 @@
 
 ;; open-file-input/output-port is defined elsewhere.
 
-(define (make-custom-binary-input/output-port filename read! write!
+(define (make-custom-binary-input/output-port id read! write!
                                               get-position set-position! close)
-  (error 'make-custom-binary-input/output-port "Not implemented"))
+  (assert (string? id))
+  (make-port (string-copy id) #f (cons #f #f) #b11
+             write! read! get-position set-position! close #f #f
+             'output (make-bytevector 4096) 0 0 0 #f
+             'block))
 
-(define (make-custom-textual-input/output-port filename read! write!
+(define (make-custom-textual-input/output-port id read! write!
                                                get-position set-position! close)
-  (error 'make-custom-textual-input/output-port "Not implemented"))
+  (assert (string? id))
+  (make-port (string-copy id) #f (cons #f #f) #b111
+             write! read! get-position set-position! close #f #f
+             'output (make-string 512) 0 0 0 #f
+             'block))
 
 ;;; Simple I/O
 
