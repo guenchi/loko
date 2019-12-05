@@ -1418,7 +1418,8 @@
                (c (fx- (fxand s #b11111) 1)))
            ;; The first character might need to be escaped
            (let ((ch (integer->char (bytevector-u8-ref (if (eqv? s 0) end-alphabet alphabet) c))))
-             (if (and write? (memv ch '(#\- #\+ #\0 #\8)))
+             (if (and write? (or (memv ch '(#\0 #\8))
+                                 (and (not (eqv? s 0)) (memv ch '(#\- #\+)))))
                  (display-char-escape ch p)
                  (put-char p ch)))
            ;; Output the first of the characters, if there are any
