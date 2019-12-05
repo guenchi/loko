@@ -127,6 +127,7 @@
             close-input-port close-output-port read-char peek-char read
             write-char newline display write)
     (only (rnrs mutable-strings) string-set!)
+    (rnrs mutable-pairs)
     (prefix (rnrs io ports) sys:)
     (only (loko runtime arithmetic) $display-number)
     (only (loko runtime symbols) $gensym-generate-names!)
@@ -156,7 +157,7 @@
 
 (define (utf-16-codec) 'utf-16-codec)
 
-(define (native-eol-style) 'lf)
+(define (native-eol-style) 'lf)         ;Unix-style
 
 (define-record-type transcoder
   (fields codec eol-style error-handling-mode)
@@ -170,14 +171,14 @@
          ((c e h)
           ;; codec eol-style handling-mode
           (assert (memq c '(utf-8-codec latin-1-codec utf-16-codec)))
-          (assert (memq e '(lf crlf none cr nel crnel ls)))
+          (assert (memq e '(none lf crlf cr nel crnel ls)))
           (assert (memq h '(replace ignore raise)))
           (p c e h))))
      make-transcoder)))
 
 (define %native-transcoder
   (make-transcoder (utf-8-codec)
-                   (native-eol-style)
+                   (eol-style none)
                    (error-handling-mode replace)))
 
 (define (native-transcoder)
@@ -198,7 +199,7 @@
 
 ;; XXX: Needs to be reworked
 (define-record-type port
-  (fields id transcoder
+  (fields id transcoder tc-state
           ;; Flags bits:
           ;; 0     1 = output port
           ;; 1     1 = input port (combined ports exist)
@@ -206,14 +207,13 @@
           ;; 3     .-
           ;; 4     |  eol style (0-7)
           ;; 5     `-
-          (mutable flags)
+          flags
           (mutable sink) (mutable source)
           (mutable get-positioner)
           (mutable set-positioner)
           (mutable closer)
           (mutable extractor)
           (mutable file-descriptor)
-          ;; maybe needs a string-buffer, too
           (mutable buffer)
           (mutable buffer-r)
           (mutable buffer-w)
@@ -242,9 +242,15 @@
 (define (binary-port? p)
   (and (port? p) (eqv? (fxand (port-flags p) #b100) 0)))
 
+(define (input-port? p)
+  (and (port? p) (eqv? #b10 (fxand (port-flags p) #b10))))
+
+(define (output-port? p)
+  (and (port? p) (eqv? #b01 (fxand (port-flags p) #b01))))
+
 (define (port-eol-style p)
   (vector-ref '#(none lf crlf cr nel crnel ls #f)
-              (fxbit-field (port-flags p) 3 5)))
+              (fxbit-field (port-flags p) 3 6)))
 
 (define (transcoded-port p tc)
   (unless (and (binary-port? p) (port-buffer p))
@@ -254,7 +260,7 @@
     (assertion-violation 'transcoded-port
                          "Expected a transcoder as the second argument" p tc))
   (let* ((eol-flags (case (transcoder-eol-style tc)
-                      ((none) 0)      ;XXX: needed or not?
+                      ((none) 0)
                       ((lf) 1)
                       ((crlf) 2)
                       ((cr) 3)
@@ -262,9 +268,10 @@
                       ((crnel) 5)
                       ((ls) 6)
                       (else 0)))
-         (ret (make-port (port-id p) tc (fxior #b100
-                                               (fxarithmetic-shift-left eol-flags 3)
-                                               (port-flags p))
+         (ret (make-port (port-id p) tc (cons #f #f)
+                         (fxior #b100
+                                (fxarithmetic-shift-left eol-flags 3)
+                                (port-flags p))
                          (port-sink p) (port-source p)
                          (port-get-positioner p)
                          (port-set-positioner p)
@@ -338,7 +345,7 @@
       (port-buffer-w-set! p 0)
       (when closer
         (closer))))
-  (if #f #f))
+  (values))
 
 (define (call-with-port port proc)
   (assert (port? port))
@@ -348,11 +355,9 @@
 
 ;;; Input ports
 
-(define (input-port? p)
-  (and (port? p) (fx=? #b10 (fxand (port-flags p) #b10))))
-
 (define (port-eof? p)
   (assert (input-port? p))
+  ;; FIXME: what if error-mode is raise?
   (if (textual-port? p)
       (eof-object? (lookahead-char p))
       (eof-object? (lookahead-u8 p))))
@@ -403,14 +408,14 @@
 
 (define (make-custom-binary-input-port id read! get-position set-position! close)
   (assert (string? id))
-  (make-port (string-copy id) #f #b10
+  (make-port (string-copy id) #f (cons #f #f) #b10
              #f read! get-position set-position! close #f #f
              (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-input-port id read! get-position set-position! close)
   (assert (string? id))
-  (make-port (string-copy id) #f #b110
+  (make-port (string-copy id) #f (cons #f #f) #b110
              #f read! get-position set-position! close #f #f
              (make-string 512) 0 0 0 #f
              'block))
@@ -504,7 +509,7 @@
                (lp (fx+ i 1)))))))))
 
 (define (get-bytevector-some p)
-  (if (port-eof? p)                   ;XXX: Hmm.
+  (if (port-eof? p)
       (eof-object)
       (call-with-bytevector-output-port
         (lambda (out)
@@ -565,13 +570,21 @@
     (port-buffer-char-set! p #f)
     c))
 
+(define (error-decoding p message)
+  (raise
+    (condition
+     (make-who-condition 'put-char)
+     (make-i/o-decoding-error p)
+     (make-message-condition message)
+     (make-irritants-condition (list p)))))
+
 (define (%read-utf8 n i lower-limit p)
   (let lp ((n n) (i i))
     (if (eqv? i 0)
         (if (or (fx<? n lower-limit)
                 (fx<=? #xD800 n #xDFFF)
                 (fx>? n #x10FFFF))
-            #\xFFFD
+            'invalid
             (integer->char n))
         (let ((b (lookahead-u8 p)))
           (cond ((and (fixnum? b)
@@ -581,80 +594,148 @@
                  (lp (fxior (fxarithmetic-shift-left n 6)
                             (fxand b #b111111))
                      (fx- i 1)))
-                (else
-                 #\xFFFD))))))
+                (else 'invalid))))))
 
 (define (lookahead-char p)
+  (define tc (port-transcoder p))
   (assert (and (input-port? p) (textual-port? p)))
-  (cond ((port-buffer-char p))
-        ((port-transcoder p)
-         ;; TODO: parse different linefeeds
-         (case (transcoder-codec (port-transcoder p))
-           ((utf-8-codec)
-            ;; TODO: different error-handling-modes
-            (let ((b (get-u8 p)))
-              (if (eof-object? b)
-                  (eof-object)
-                  (let* ((c (cond
-                              ((fx<? b #x80)
-                               (integer->char b))
-                              ((eqv? (fxand b #b11100000) #b11000000)
-                               (%read-utf8 (fxand b #b00011111) 1 #x80 p))
-                              ((eqv? (fxand b #b11110000) #b11100000)
-                               (%read-utf8 (fxand b #b00001111) 2 #x800 p))
-                              ((eqv? (fxand b #b11111000) #b11110000)
-                               (%read-utf8 (fxand b #b00000111) 3 #x10000 p))
-                              (else
-                               #\xFFFD)))
-                         ;; FIXME
-                         (c (if (eqv? c #\return)
-                                #\linefeed
-                                c)))
+  (cond
+    ((port-buffer-char p))
+    ((cdr (port-tc-state p)) =>
+     (lambda (ch)
+       (set-cdr! (port-tc-state p) #f)
+       (port-buffer-char-set! p ch)
+       ch))
+    (tc
+     (let ((c (case (transcoder-codec tc)
+                ((utf-8-codec)
+                 (let ((b (get-u8 p)))
+                   (cond
+                     ((eof-object? b) b)
+                     ((fx<? b #x80)
+                      (integer->char b))
+                     ((eqv? (fxand b #b11100000) #b11000000)
+                      (%read-utf8 (fxand b #b00011111) 1 #x80 p))
+                     ((eqv? (fxand b #b11110000) #b11100000)
+                      (%read-utf8 (fxand b #b00001111) 2 #x800 p))
+                     ((eqv? (fxand b #b11111000) #b11110000)
+                      (%read-utf8 (fxand b #b00000111) 3 #x10000 p))
+                     (else 'invalid))))
+                ((latin-1-codec)
+                 (let ((u8 (get-u8 p)))
+                   (if (eof-object? u8)
+                       (eof-object)
+                       (integer->char u8))))
+                ((utf-16-codec)
+                 (let lp ()
+                   (let ((b0 (get-u8 p)) (b1 (get-u8 p))
+                         (endian (car (port-tc-state p))))
+                     (cond
+                       ((eof-object? b0) (eof-object))
+                       ((eof-object? b1) 'invalid)
+                       (else
+                        (let* ((endian (or endian
+                                           (cond ((and (eqv? b0 #xff) (eqv? b1 #xfe))
+                                                  (set-car! (port-tc-state p) 'little)
+                                                  'bom)
+                                                 ((and (eqv? b0 #xfe) (eqv? b1 #xff))
+                                                  (set-car! (port-tc-state p) 'big)
+                                                  'bom)
+                                                 (else ;RFC 2718
+                                                  (set-car! (port-tc-state p) 'big)
+                                                  'big))))
+                               (w0 (case endian
+                                     ((big)
+                                      (fxior (fxarithmetic-shift-left b0 8) b1))
+                                     ((little)
+                                      (fxior (fxarithmetic-shift-left b1 8) b0))
+                                     (else 'bom))))
+                          (cond
+                            ((eq? w0 'bom) ;ignore the BOM
+                             (lp))
+                            ((fx<=? #xD800 w0 #xDFFF)
+                             (let ((b2 (get-u8 p)) (b3 (get-u8 p)))
+                               (cond
+                                 ((or (eof-object? b2) (eof-object? b3))
+                                  'invalid)
+                                 (else
+                                  (let ((w1 (if (eq? endian 'big)
+                                                (fxior (fxarithmetic-shift-left b2 8) b3)
+                                                (fxior (fxarithmetic-shift-left b3 8) b2))))
+                                    (if (fx<=? #xD800 w1 #xDFFF)
+                                        (let ((w (fx+ (fxior (fxarithmetic-shift-left
+                                                              (fx- w0 #xD800) 10)
+                                                             (fxbit-field (fx- w1 #xDC00) 0 10))
+                                                      #x10000)))
+                                          (if (fx>? w #x10FFFF)
+                                              'invalid
+                                              (integer->char w)))
+                                        'invalid))))))
+                            (else
+                             (integer->char w0)))))))))
+                (else
+                 (error 'lookahead-char "Unimplemented input codec"
+                        (transcoder-codec tc))))))
+       (case c
+         ((invalid)
+          (cond
+            ((eq? (transcoder-error-handling-mode tc) 'raise)
+             (error-decoding p "Invalid UTF-8 sequence"))
+            ((eq? (transcoder-error-handling-mode tc) 'ignore)
+             (lookahead-char p))
+            (else #\xFFFD)))
+         (else
+          (case (transcoder-eol-style tc)
+            ((none)
+             (port-buffer-char-set! p c)
+             c)
+            (else
+             (cond ((or (eqv? c #\x0085) (eqv? c #\x2028))
+                    (port-buffer-char-set! p #\linefeed)
+                    #\linefeed)
+                   ((eqv? c #\return)
+                    (let ((peek-ch (lookahead-char p)))
+                      (unless (or (eqv? peek-ch #\linefeed)
+                                  (eqv? peek-ch #\x0085)
+                                  (eof-object? peek-ch))
+                        ;; Ooops, it was just one #\return. Put the
+                        ;; peeked char in the cdr of the tc-state, so
+                        ;; that the next read operation will return it.
+                        (set-cdr! (port-tc-state p) peek-ch))
+                      (port-buffer-char-set! p #\linefeed)
+                      #\linefeed))
+                   (else
                     (port-buffer-char-set! p c)
-                    c))))
-           ((latin-1-codec)
-            (let ((u8 (get-u8 p)))
-              (if (eof-object? u8)
-                  (eof-object)
-                  (let ((c (integer->char u8)))
-                    (port-buffer-char-set! p c)
-                    c))))
-           (else
-            (error 'lookahead-char "Unimplemented input codec"
-                   (transcoder-codec (port-transcoder p))))))
-        ((string? (port-buffer p))
-         (let ((b (port-buffer p))
-               (r (port-buffer-r p))
-               (w (port-buffer-w p)))
-           ;; XXX: duplicated in lookahead-u8
-           (cond ((fx=? r w)
-                  (let* ((pos (cond ((port-get-positioner p) => (lambda (x) (x)))
-                                    (else #f)))
-                         (source (port-source p))
-                         (req (string-length b))
-                         (chars (source b 0 req)))
-                    (assert (fx<=? 0 chars req))
-                    (cond ((eqv? chars 0)
-                           (eof-object))
-                          (else
-                           (port-buffer-pos-set! p pos)
-                           (port-buffer-r-set! p 1)
-                           (port-buffer-w-set! p chars)
-                           (let* ((c (string-ref b 0))
-                                  ;; FIXME
-                                  (c (if (eqv? c #\return) #\linefeed c)))
-                             (port-buffer-char-set! p c)
-                             c)))))
-                 (else
-                  (let* ((c (string-ref b r))
-                         ;; FIXME
-                         (c (if (eqv? c #\return) #\linefeed c)))
-                    (port-buffer-r-set! p (fx+ r 1))
-                    (port-buffer-char-set! p c)
-                    c)))))
-        (else
-         ;; XXX: can report bad &who
-         (assertion-violation 'lookahead-char "The port is closed" p))))
+                    c))))))))
+    ((string? (port-buffer p))
+     (let ((b (port-buffer p))
+           (r (port-buffer-r p))
+           (w (port-buffer-w p)))
+       ;; XXX: duplicated in lookahead-u8
+       (cond ((fx=? r w)
+              (let* ((pos (cond ((port-get-positioner p) => (lambda (x) (x)))
+                                (else #f)))
+                     (source (port-source p))
+                     (req (string-length b))
+                     (chars (source b 0 req)))
+                (assert (fx<=? 0 chars req))
+                (cond ((eqv? chars 0)
+                       (eof-object))
+                      (else
+                       (port-buffer-pos-set! p pos)
+                       (port-buffer-r-set! p 1)
+                       (port-buffer-w-set! p chars)
+                       (let ((c (string-ref b 0)))
+                         (port-buffer-char-set! p c)
+                         c)))))
+             (else
+              (let ((c (string-ref b r)))
+                (port-buffer-r-set! p (fx+ r 1))
+                (port-buffer-char-set! p c)
+                c)))))
+    (else
+     ;; XXX: can report bad &who
+     (assertion-violation 'lookahead-char "The port is closed" p))))
 
 (define (get-string-n port n)
   (let ((buf (make-string n)))
@@ -717,9 +798,6 @@
                 (lp))))))))
 
 ;;; Output ports
-
-(define (output-port? p)
-  (and (port? p) (eqv? #b01 (fxand (port-flags p) #b01))))
 
 (define (%sync-position p)
   (cond ((port-get-positioner p) =>
@@ -867,14 +945,14 @@
 
 (define (make-custom-binary-output-port id write! get-position set-position! close)
   (assert (string? id))
-  (make-port (string-copy id) #f #b01
+  (make-port (string-copy id) #f (cons #f #f) #b01
              write! #f get-position set-position! close #f #f
              (make-bytevector 4096) 0 0 0 #f
              'block))
 
 (define (make-custom-textual-output-port id write! get-position set-position! close)
   (assert (string? id))
-  (make-port (string-copy id) #f #b101
+  (make-port (string-copy id) #f (cons #f #f) #b101
              write! #f get-position set-position! close #f #f
              (make-string 4096) 0 0 0 #f
              'block))
@@ -917,7 +995,7 @@
     ((p bv start)
      (put-bytevector p bv start (fx- (bytevector-length bv) start)))
     ((p bv start count)
-     (let ((end (+ start count))
+     (let ((end (fx+ start count))
            (buf (port-buffer p))
            (mode (port-buffer-mode p)))
        (trace "put-bytevector " p " bv=" bv " start=" start " count=" count
@@ -994,16 +1072,16 @@
 (define (put-char p c)
   ;; XXX: This should likely be reworked to do the UTF-8 encoding
   ;; later, so that it can be inlined.
-  (assert (output-port? p))
+  (define tc (port-transcoder p))
+  (assert (and (output-port? p) (textual-port? p)))
   (unless (char? c)
     (assertion-violation 'put-char "Expected a character" p c))
-  (cond ((port-transcoder p)
-         (case (transcoder-codec (port-transcoder p))
+  (cond (tc
+         (case (transcoder-codec tc)
            ((utf-8-codec)
-            ;; XXX: output different linefeeds
             (cond ((eqv? c #\linefeed)
                    (case (port-eol-style p)
-                     ((lf none)
+                     ((none lf)
                       (%put-utf8 p #\linefeed))
                      ((crlf)
                       (%put-utf8 p #\return)
@@ -1025,7 +1103,7 @@
            ((latin-1-codec)
             (cond ((eqv? c #\linefeed)
                    (case (port-eol-style p)
-                     ((lf none)
+                     ((none lf)
                       (put-u8 p (char->integer #\linefeed)))
                      ((crlf)
                       (put-u8 p (char->integer #\return))
@@ -1044,18 +1122,56 @@
                      (flush-output-port p)))
                   (else
                    (let ((b (char->integer c)))
-                     (if (fx<=? b #xff)
-                         (put-u8 p b)
-                         (put-u8 p (char->integer #\?)))))))
+                     (cond ((fx<=? b #xff)
+                            (put-u8 p b))
+                           ((eq? (transcoder-error-handling-mode tc) 'raise)
+                            (raise
+                              (condition
+                               (make-who-condition 'put-char)
+                               (make-i/o-encoding-error p c)
+                               (make-message-condition "Outside of latin-1")
+                               (make-irritants-condition (list p c)))))
+                           ((eq? (transcoder-error-handling-mode tc) 'ignore)
+                            (values))
+                           (else
+                            (put-u8 p (char->integer #\?))))))))
+           ((utf-16-codec)
+            (unless (car (port-tc-state p))
+              ;; Output a BOM (UTF-16BE)
+              (put-u8 p #xfe)
+              (put-u8 p #xff)
+              (set-car! (port-tc-state p) 'big))
+            (let ((cp (char->integer c)))
+              (cond
+                ((fx<? cp #x10000)
+                 (case (car (port-tc-state p))
+                   ((big)
+                    (put-u8 p (fxbit-field cp 8 16))
+                    (put-u8 p (fxbit-field cp 0 8)))
+                   (else      ;XXX: input/output ports can be UTF-16LE
+                    (put-u8 p (fxbit-field cp 0 8))
+                    (put-u8 p (fxbit-field cp 8 16)))))
+                (else
+                 (let ((cp^ (fx- cp #x10000)))
+                   (let ((high (fx+ #xD800 (fxarithmetic-shift-right cp^ 10)))
+                         (low (fx+ #xDC00 (fxbit-field cp^ 0 10))))
+                     (case (car (port-tc-state p))
+                       ((big)
+                        (put-u8 p (fxbit-field high 8 16))
+                        (put-u8 p (fxbit-field high 0 8))
+                        (put-u8 p (fxbit-field low 8 16))
+                        (put-u8 p (fxbit-field low 0 8)))
+                       (else
+                        (put-u8 p (fxbit-field high 0 8))
+                        (put-u8 p (fxbit-field high 8 16))
+                        (put-u8 p (fxbit-field low 0 8))
+                        (put-u8 p (fxbit-field low 8 16)))))))))
+            (when (and (eqv? c #\linefeed) (eq? (port-buffer-mode p) 'line))
+              (flush-output-port p)))
            (else
             (error 'put-char "Unimplemented output codec"
-                   (transcoder-codec (port-transcoder p))))))
+                   (transcoder-codec tc)))))
         ((string? (port-buffer p))
-         (when (eqv? c #\linefeed)
-           ;; FIXME
-           (case (port-eol-style p)
-             ((crlf)
-              (put-char p #\return))))
          (let ((b (port-buffer p))
                (w (port-buffer-w p)))
            ;; There is always room for at least one char.
@@ -1068,7 +1184,6 @@
                             (eqv? (port-buffer-mode p) 'line)))
                (flush-output-port p)))))
         (else
-         (assert (textual-port? p))
          (assertion-violation 'put-char "The port is closed" p c))))
 
 (define put-string
@@ -1079,7 +1194,7 @@
      (put-string p bv start (fx- (string-length bv) start)))
     ((p bv start count)
      ;; TODO: optimize
-     (let ((end (+ start count)))
+     (let ((end (fx+ start count)))
        (assert (fx<=? 0 start end (string-length bv)))
        (do ((i start (fx+ i 1)))
            ((fx=? i end))
@@ -1427,7 +1542,6 @@
               ;; Symbol
               (let ((is-gensym (not (eqv? ($box-header-length t) 1)))
                     (symbol-name ($box-ref v 0)))
-                ;; FIXME: this doesn't support write syntax.
                 (cond ((and write? is-gensym)
                        ;; Gensym write syntax
                        (let ((unique-string ($box-ref v 1)))
