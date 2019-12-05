@@ -1296,9 +1296,22 @@
        (string? (syntax->datum #'v))
        (string->utf8 (syntax->datum #'v))))))
 
+(define (display-hex24 i p)
+  ;; Displays 24-bit integers in hexadecimal notation
+  (define chars (%bytevector "0123456789ABCDEF"))
+  (when (eqv? i 0) (put-char p #\0))
+  (let lp ((s 24) (lz #t))
+    (unless (fx<? s 0)
+      (let* ((nibble (fxand (fxarithmetic-shift-right i s) #xf))
+             (lz (and lz (eqv? nibble 0))))
+        (when (not lz)
+          (put-char p (integer->char (bytevector-u8-ref chars nibble))))
+        (lp (fx- s 4) lz)))))
+
 (define (display-char-escape c p)
-  (display "\\x" p)
-  (display (number->string (char->integer c) 16) p)
+  (put-char p #\\)
+  (put-char p #\x)
+  (display-hex24 (char->integer c) p)
   (put-char p #\;))
 
 (define (write-symbol name p)
@@ -1340,17 +1353,6 @@
                  (put-char p c)))))))
 
 (define (display* v p write?)
-  (define (display-hex i p)
-    ;; Displays 24-bit integers in hexadecimal notation
-    (define chars (%bytevector "0123456789ABCDEF"))
-    (when (eqv? i 0) (put-char p #\0))
-    (let lp ((s 24) (lz #t))
-      (unless (fx<? s 0)
-        (let* ((nibble (fxand (fxarithmetic-shift-right i s) #xf))
-               (lz (and lz (eqv? nibble 0))))
-          (when (not lz)
-            (put-char p (integer->char (bytevector-u8-ref chars nibble))))
-          (lp (fx- s 4) lz)))))
   (define (char-unprintable? c)
     ;; TODO: unicode
     ;; some are unprintable as chars, some in strings too.
@@ -1383,7 +1385,7 @@
                      => (lambda (str) (put-string p str)))
                     ((char-unprintable? v)
                      (put-char p #\x)
-                     (display-hex i p))
+                     (display-hex24 i p))
                     (else
                      (put-char p v)))))
            (else
@@ -1422,7 +1424,7 @@
                                  (and (not (eqv? s 0)) (memv ch '(#\- #\+)))))
                  (display-char-escape ch p)
                  (put-char p ch)))
-           ;; Output the first of the characters, if there are any
+           ;; Output the rest of the characters, if there are any
            (let lp ((s s))
              (unless (eqv? s 0)
                (let ((s (fxarithmetic-shift-right s 5))
@@ -1445,7 +1447,7 @@
                 (put-char p #\\)
                 (put-char p (integer->char (bytevector-u8-ref string-escapes v))))
                ((and write? (char-unprintable? c))
-                (put-char p #\\) (put-char p #\x) (display-hex v p) (put-char p #\;))
+                (display-char-escape c p))
                (else
                 (put-char p c)))))
      (if write? (put-char p #\")))
