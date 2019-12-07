@@ -23,12 +23,14 @@
   (export
     symbol? symbol->string symbol=? string->symbol
 
+    symbol-hash
+
     gensym gensym? gensym->unique-string gensym-prefix
     *unbound-hack*
     symbol-value set-symbol-value!
     $gensym-generate-names!)
   (import
-    (except (rnrs) symbol? symbol->string symbol=? string->symbol)
+    (except (rnrs) symbol? symbol->string symbol=? string->symbol symbol-hash)
     (prefix (rnrs) sys:)
     (loko runtime context)
     (loko system $primitives))
@@ -133,6 +135,15 @@
             ($box-set! sym 0 bv)
             (hashtable-set! *interned* bv sym)
             sym)))))
+
+(define (symbol-hash s)
+  (cond (($immsym? s)
+         ($immsym->fixnum s))
+        (else
+         (when (not ($box-ref s 0))
+           ($gensym-generate-names! s))
+         (let ((symbol-name ($box-ref s 0)))
+           (bytevector-hash symbol-name)))))
 
 ;;; gensyms
 ;; TODO: collect all the gensym related stuff here

@@ -48,7 +48,7 @@
     (rename (hashtable-cmp hashtable-equivalence-function))
     hashtable-hash-function hashtable-mutable?
     ;; Hash functions
-    string-hash #;string-ci-hash)
+    string-hash string-ci-hash)
   (import
     (except (rnrs)
             make-eq-hashtable make-eqv-hashtable make-hashtable
@@ -470,6 +470,7 @@
               ((eqv? b 0) d))))
       ((eqv? i -1) d)))
 
-;; TODO: string-ci-hash
+(define (string-ci-hash s)
+  (string-hash (string-upcase s)))
 
 )

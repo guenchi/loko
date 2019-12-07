@@ -27,11 +27,10 @@
     string-for-each string-copy
     string-fill! string-set!
 
-    string-ci=? ;; string-ci<? string-ci>? string-ci<=? string-ci>=?
-    string-upcase string-downcase ;; string-foldcase string-titlecase
-    ;; string-normalize-nfd string-normalize-nfkd
-    string-normalize-nfc ;; string-normalize-nfkc
-    )
+    string-ci=? string-ci<? string-ci>? string-ci<=? string-ci>=?
+    string-upcase string-downcase string-foldcase string-titlecase
+    string-normalize-nfd string-normalize-nfkd
+    string-normalize-nfc string-normalize-nfkc)
   (import
     (except (rnrs)
             string? make-string string string-length string-ref
@@ -216,8 +215,6 @@
 
 ;; (rnrs unicode)
 
-;;; TODO: real implementations
-
 (define string-ci=?
   (case-lambda
     ((x1 x2)
@@ -234,6 +231,62 @@
                 (and (string-ci=? x1 (car x*))
                      (lp (cdr x*)))))))))
 
+(define string-ci<?
+  (case-lambda
+    ((x1 x2)
+     (if (eq? x1 x2)
+         #f
+         (let lp ((i 0))
+           (cond ((fx=? i (string-length x2)) #f)
+                 ((fx=? i (string-length x1)) #t)
+                 (else
+                  (let ((c1 (string-ref x1 i))
+                        (c2 (string-ref x2 i)))
+                    (cond ((char-ci>? c1 c2) #f)
+                          ((char-ci<? c1 c2) #t)
+                          (else (lp (fx+ i 1))))))))))
+    ((x1 x2 . x*)
+     (and (string-ci<? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string-ci<? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string-ci>?
+  (case-lambda
+    ((x1 x2)
+     (string-ci<? x2 x1))
+    ((x1 x2 . x*)
+     (and (string-ci>? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string-ci>? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string-ci<=?
+  (case-lambda
+    ((x1 x2)
+     (not (string-ci>? x1 x2)))
+    ((x1 x2 . x*)
+     (and (string-ci<=? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string-ci<=? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+(define string-ci>=?
+  (case-lambda
+    ((x1 x2)
+     (not (string-ci<? x1 x2)))
+    ((x1 x2 . x*)
+     (and (string-ci>=? x1 x2)
+          (let lp ((x x2) (x* x*))
+            (or (null? x*)
+                (and (string-ci>=? x (car x*))
+                     (lp (car x*) (cdr x*)))))))))
+
+;;; TODO: real implementations
+
 (define (string-upcase str)
   (call-with-string-output-port
     (lambda (p)
@@ -248,5 +301,37 @@
                          (put-char p (char-downcase c)))
                        str))))
 
+(define (string-foldcase str)
+  (call-with-string-output-port
+    (lambda (p)
+      (string-for-each (lambda (c)
+                         (put-char p (char-foldcase c)))
+                       str))))
+
+(define (string-titlecase str)
+  (call-with-string-output-port
+    (lambda (p)
+      (let lp ((i 0) (at-break #t))
+        (unless (eqv? i (string-length str))
+          (let ((c (string-ref str i)))
+            (cond ((char-whitespace? c)
+                   (put-char p c)
+                   (lp (fx+ i 1) #t))
+                  (at-break
+                   (put-char p (char-upcase c))
+                   (lp (fx+ i 1) #f))
+                  (else
+                   (put-char p (char-downcase c))
+                   (lp (fx+ i 1) #f)))))))))
+
+(define (string-normalize-nfd str)
+  str)
+
+(define (string-normalize-nfkd str)
+  str)
+
 (define (string-normalize-nfc str)
+  str)
+
+(define (string-normalize-nfkc str)
   str))
