@@ -46,7 +46,11 @@
 (run-arithmetic-fixnums-tests)
 (run-arithmetic-flonums-tests)
 (run-arithmetic-bitwise-tests)
-(run-syntax-case-tests)
+;; This test suite is not possible to compile. It uses syntax objects
+;; as expressions. That is about as likely to compile as if you were
+;; to include a procedure object in the operator position, but I don't
+;; know which section of R6RS specifies this. /weinholt
+;; (run-syntax-case-tests)
 (run-hashtables-tests)
 (run-enums-tests)
 (run-eval-tests)
