@@ -185,7 +185,7 @@
       [(eq? x y) k]
       [(pair? x)
        (and (pair? y)
-            (if (<= k 0)
+            (if (fx<=? k 0)
                 k
                 (let ([k (pre? (car x) (car y) (fx- k 1))])
                   (and k (pre? (cdr x) (cdr y) k)))))]

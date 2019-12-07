@@ -53,11 +53,13 @@
      (irr (impvio "The result of (fx- (least-fixnum)) is not a fixnum")
           (least-fixnum)))
     ([('add . _) ((? OVERFLOW?) . _) . _]
-     (impvio "A result of fx+ was not representable as a fixnum"))
+     (impvio "Overflow in fx+"))
     ([('sub . _) ((? OVERFLOW?) . _) . _]
-     (impvio "A result of fx- was not representable as a fixnum"))
+     (impvio "Overflow in fx-"))
     ([('imul . _) ((? OVERFLOW?) . _) . _]
-     (impvio "A result of fx* was not responsible as a fixnum"))
+     (impvio "Overflow in fx*"))
+    ([('shl . _) ((? OVERFLOW?) . _) . _]
+     (impvio "Overflow in fxarithmetic-shift-left or (fx* 2 ...)"))
     ;; Type checks
     ([_ ... ('test _ #b111) ((? EQ?) . _)]
      (assvio "Type error: expected a fixnum"))
