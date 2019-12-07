@@ -54,8 +54,10 @@ test:
     - (cd tests/r6rs; akku install; .akku/env ../../loko.out --program run.sps)
     - cp loko.out loko
     - make install
-    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run.sps --output run.bin; ./run.bin)
-    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run-via-eval.sps --output run-via-eval)
+    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run.sps --output run.bin)
+    - tests/r6rs/run.bin
+    - (cd tests/r6rs; akku install; .akku/env ../../loko.out -feval --compile run-via-eval.sps --output run-via-eval.bin)
+    - tests/r6rs/run-via-eval.bin
 
 build_samples:
   stage: test
