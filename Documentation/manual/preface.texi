@@ -74,6 +74,10 @@ by Tom St Denis.
 The @code{list?} procedure uses Olin Shiver's version of Robert W.@:
 Floyd's cycle-finding algorithm.
 
+The @code{equal?} procedure is from the paper @emph{Efficient
+Nondestructive Equality Checking for Trees and Graphs} by Michael D.@:
+Adams and R.@: Kent Dybvig.
+
 Some intricate parts of the records implementation are from the
 reference implementation of SRFI-76 by Michael Sperber.
 
