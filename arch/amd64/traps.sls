@@ -56,6 +56,8 @@
      (impvio "A result of fx+ was not representable as a fixnum"))
     ([('sub . _) ((? OVERFLOW?) . _) . _]
      (impvio "A result of fx- was not representable as a fixnum"))
+    ([('imul . _) ((? OVERFLOW?) . _) . _]
+     (impvio "A result of fx* was not responsible as a fixnum"))
     ;; Type checks
     ([_ ... ('test _ #b111) ((? EQ?) . _)]
      (assvio "Type error: expected a fixnum"))
@@ -77,7 +79,7 @@
     ;; #x87FFF8 = immediate #x10FFFF
     ([('cmp reg #x87FFF8) ((? BOUND?) . _) . _]
      (assvio "The given integer is not a Unicode scalar value"))
-    (else #f)))
+    (_ #f)))
 
 (define (recover-memory-condition live-data inst rip category closure)
   ;; The given instruction has caused #AC/#GP/#SS. Try to find out
@@ -132,7 +134,7 @@
            (make-message-condition "Tried to call a non-procedural object")
            (make-irritants-condition (list closure))
            (make-program-counter-condition rip))))
-    (else #f)))
+    (_ #f)))
 
 ;; See invoke-error in (loko arch amd64 lib).
 (define (raise-trap category closure rip irritants)
@@ -190,7 +192,7 @@
   (define (translate-DE inst)
     (match inst
       (('idiv . _) "Division by zero")
-      (else #f)))
+      (_ #f)))
   (define (translate-explicit-trap)
     ;; An explicitly inserted trap instruction has been found
     ;; (currently UD2, maybe INT1 or INT3 in the future).
