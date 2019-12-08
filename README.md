@@ -9,14 +9,10 @@ system development. It is written purely in Scheme and some assembler.
 
 ## Current status
 
-It works surprisingly well.
+It works surprisingly well, failing just a handful of the tests from
+Racket's R6RS test suite.
 
-* R6RS Scheme is present and accounted for, with only a few small
-  parts missing.
-* Memory management is limited. The Linux target uses at most 1 GB.
-* There is no test suite.
-
- [chez-srfi]: https://akkuscm.org/packages/chez-srfi/
+Memory management is limited. Processes can use at most 1 GB of RAM.
 
 The packages in [Akku](https://akkuscm.org) should be working, but
 Loko is still very new and needs to be battle tested.
