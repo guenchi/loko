@@ -205,9 +205,11 @@
     (cond ((find-module filename) #t)
           ((member filename '("/" "/boot")) #t)
           (else #f)))
-  (define (open-file-input-port filename file-options buffer-mode maybe-transcoder)
+  (define (pc-open-file filename file-options buffer-mode who)
     (define who 'open-file-input-port)
     (cond
+      ((memq who '(open-file-output-port open-file-input/output-port))
+       (error who "Not implemented" filename file-options buffer-mode))
       ((find-module filename) =>
        (lambda (mod)
          (let ((base (caddr mod)) (size (cadddr mod)) (position 0))
@@ -229,9 +231,7 @@
            (let ((p (make-custom-binary-input-port
                      filename read! get-position set-position! close)))
              ($port-buffer-mode-set! p buffer-mode)
-             (if maybe-transcoder
-                 (transcoded-port p maybe-transcoder)
-                 p)))))
+             p))))
       (else
        (raise (condition
                (make-who-condition who)
@@ -239,7 +239,7 @@
                (make-message-condition "Could not open boot module")
                (make-irritants-condition (list filename)))))))
   (init-set! 'file-exists? file-exists?)
-  (init-set! 'open-file-input-port open-file-input-port))
+  (init-set! 'open-file pc-open-file))
 
 (define (pc-open-i/o-poller)
   (define pc-poll
